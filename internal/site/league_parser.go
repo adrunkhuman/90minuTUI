@@ -1,6 +1,7 @@
 package site
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -8,6 +9,7 @@ import (
 )
 
 var spaceRe = regexp.MustCompile(`\s+`)
+var minuteAtEndRe = regexp.MustCompile(`(\d{1,3})\s*$`)
 
 func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	page := &LeaguePage{URL: url}
@@ -32,32 +34,121 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 		return nil
 	}
 
-	lines := make([]string, 0, 16)
-	seen := map[string]struct{}{}
-
-	doc.Find("table.main[width='600'] tr").Each(func(_ int, row *goquery.Selection) {
-		text := normalizeWhitespace(row.Text())
-		if text == "" {
-			return
-		}
-
-		if _, exists := seen[text]; exists {
-			return
-		}
-		seen[text] = struct{}{}
-
-		lines = append(lines, text)
-	})
-
-	if len(lines) == 0 {
+	table := doc.Find("table.main[width='480']").First()
+	if table.Length() == 0 {
 		return &MatchPage{Title: title, URL: url}
 	}
 
-	if len(lines) > 18 {
-		lines = lines[:18]
+	page := &MatchPage{Title: title, URL: url}
+
+	page.Competition = normalizeWhitespace(table.Find("tr").First().Find("b").First().Text())
+	metaCell := table.Find("tr").Eq(1).Find("td[colspan='3']").First()
+	page.Meta = normalizeWhitespace(metaCell.Text())
+
+	page.Weather = normalizeWhitespace(table.Find("img[src*='pog_termo']").Parent().Text())
+
+	table.Find("tr").Each(func(_ int, row *goquery.Selection) {
+		tds := row.Find("td")
+		if tds.Length() != 3 {
+			return
+		}
+
+		left := normalizeWhitespace(tds.Eq(0).Text())
+		middle := normalizeWhitespace(tds.Eq(1).Text())
+		right := normalizeWhitespace(tds.Eq(2).Text())
+
+		if page.Score == "" && left != "" && right != "" && strings.Contains(middle, "-") {
+			page.HomeTeam = left
+			page.AwayTeam = right
+			page.Score = middle
+			return
+		}
+
+		if left == "" && right != "" && strings.Contains(middle, "-") {
+			page.Scorers = append(page.Scorers, right)
+		}
+	})
+
+	table.Find("tr[bgcolor]").Each(func(_ int, row *goquery.Selection) {
+		tds := row.Find("td")
+		if tds.Length() != 3 {
+			return
+		}
+
+		if player := parsePlayerCell(tds.Eq(0)); player != nil {
+			page.HomeLineup = append(page.HomeLineup, *player)
+		}
+		if player := parsePlayerCell(tds.Eq(2)); player != nil {
+			page.AwayLineup = append(page.AwayLineup, *player)
+		}
+	})
+
+	table.Find("tr td[colspan='3']").Each(func(_ int, td *goquery.Selection) {
+		text := normalizeWhitespace(td.Text())
+		if !strings.Contains(strings.ToLower(text), "przeczytaj news") {
+			return
+		}
+
+		page.NewsTitle = normalizeWhitespace(td.Find("a").First().Text())
+		page.NewsURL = strings.TrimSpace(td.Find("a").First().AttrOr("href", ""))
+	})
+
+	return page
+}
+
+func parsePlayerCell(cell *goquery.Selection) *PlayerLine {
+	raw := normalizeWhitespace(cell.Text())
+	if raw == "" {
+		return nil
 	}
 
-	return &MatchPage{Title: title, URL: url, Lines: lines}
+	anchors := make([]string, 0, 3)
+	cell.Find("a").Each(func(_ int, a *goquery.Selection) {
+		name := normalizeWhitespace(a.Text())
+		if name != "" {
+			anchors = append(anchors, name)
+		}
+	})
+
+	name := raw
+	if len(anchors) > 0 {
+		name = anchors[0]
+	}
+
+	events := make([]string, 0, 3)
+	if cell.Find("img[src*='yel.gif']").Length() > 0 {
+		events = append(events, "YC")
+	}
+	if cell.Find("img[src*='red.gif'], img[src*='red2.gif']").Length() > 0 {
+		events = append(events, "RC")
+	}
+
+	if cell.Find("img[src*='sub.gif']").Length() > 0 && len(anchors) > 1 {
+		replacement := anchors[len(anchors)-1]
+		minute := substitutionMinute(raw, replacement)
+		if minute != "" {
+			events = append(events, fmt.Sprintf("%s' -> %s", minute, replacement))
+		} else {
+			events = append(events, fmt.Sprintf("sub -> %s", replacement))
+		}
+	}
+
+	return &PlayerLine{Name: name, Events: events, RawText: raw}
+}
+
+func substitutionMinute(raw, replacement string) string {
+	idx := strings.Index(raw, replacement)
+	if idx <= 0 {
+		return ""
+	}
+
+	prefix := normalizeWhitespace(raw[:idx])
+	matches := minuteAtEndRe.FindStringSubmatch(prefix)
+	if len(matches) < 2 {
+		return ""
+	}
+
+	return matches[1]
 }
 
 func parseRounds(doc *goquery.Document) []Round {

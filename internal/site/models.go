@@ -31,7 +31,23 @@ type LeaguePage struct {
 }
 
 type MatchPage struct {
-	Title string
-	URL   string
-	Lines []string
+	Title       string
+	URL         string
+	Competition string
+	Meta        string
+	Weather     string
+	HomeTeam    string
+	AwayTeam    string
+	Score       string
+	Scorers     []string
+	HomeLineup  []PlayerLine
+	AwayLineup  []PlayerLine
+	NewsTitle   string
+	NewsURL     string
+}
+
+type PlayerLine struct {
+	Name    string
+	Events  []string
+	RawText string
 }

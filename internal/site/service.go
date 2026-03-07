@@ -66,6 +66,9 @@ func (s *Service) LoadMatch(ctx context.Context, matchURL string) (*MatchPage, e
 	if match == nil {
 		return nil, fmt.Errorf("match parse: no details found")
 	}
+	if match.NewsURL != "" {
+		match.NewsURL = s.client.Resolve(match.NewsURL)
+	}
 
 	return match, nil
 }

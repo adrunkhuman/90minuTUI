@@ -286,12 +286,70 @@ func (m Model) rightPaneView(width int) string {
 
 	if m.matchView && m.match != nil {
 		var b strings.Builder
-		b.WriteString(title.Render(m.match.Title))
+		heading := m.match.Title
+		if m.match.HomeTeam != "" && m.match.AwayTeam != "" && m.match.Score != "" {
+			heading = fmt.Sprintf("%s %s %s", m.match.HomeTeam, m.match.Score, m.match.AwayTeam)
+		}
+
+		b.WriteString(title.Render(heading))
 		b.WriteString("\n")
-		b.WriteString(m.match.URL)
-		b.WriteString("\n\n")
-		for _, line := range m.match.Lines {
-			b.WriteString(line)
+		if m.match.Competition != "" {
+			b.WriteString(m.match.Competition)
+			b.WriteString("\n")
+		}
+		if m.match.Meta != "" {
+			b.WriteString(m.match.Meta)
+			b.WriteString("\n")
+		}
+		if m.match.Weather != "" {
+			b.WriteString("Pogoda: ")
+			b.WriteString(m.match.Weather)
+			b.WriteString("\n")
+		}
+
+		if len(m.match.Scorers) > 0 {
+			b.WriteString("\n")
+			b.WriteString(title.Render("Goals"))
+			b.WriteString("\n")
+			for _, scorer := range m.match.Scorers {
+				b.WriteString("- ")
+				b.WriteString(scorer)
+				b.WriteString("\n")
+			}
+		}
+
+		if len(m.match.HomeLineup) > 0 || len(m.match.AwayLineup) > 0 {
+			b.WriteString("\n")
+			b.WriteString(title.Render("Lineups"))
+			b.WriteString("\n")
+			maxPlayers := len(m.match.HomeLineup)
+			if len(m.match.AwayLineup) > maxPlayers {
+				maxPlayers = len(m.match.AwayLineup)
+			}
+
+			for i := 0; i < maxPlayers; i++ {
+				if i < len(m.match.HomeLineup) {
+					b.WriteString("H: ")
+					b.WriteString(renderPlayerLine(m.match.HomeLineup[i]))
+					b.WriteString("\n")
+				}
+				if i < len(m.match.AwayLineup) {
+					b.WriteString("A: ")
+					b.WriteString(renderPlayerLine(m.match.AwayLineup[i]))
+					b.WriteString("\n")
+				}
+			}
+		}
+
+		if m.match.NewsTitle != "" {
+			b.WriteString("\n")
+			b.WriteString(title.Render("Related news"))
+			b.WriteString("\n")
+			b.WriteString(m.match.NewsTitle)
+			if m.match.NewsURL != "" {
+				b.WriteString(" | ")
+				b.WriteString(m.match.NewsURL)
+			}
 			b.WriteString("\n")
 		}
 		b.WriteString("\n(esc to go back)")
@@ -558,4 +616,14 @@ func clamp(v, minV, maxV int) int {
 		return maxV
 	}
 	return v
+}
+
+func renderPlayerLine(player site.PlayerLine) string {
+	line := player.Name
+	if len(player.Events) == 0 {
+		return line
+	}
+
+	line += " [" + strings.Join(player.Events, ", ") + "]"
+	return line
 }
