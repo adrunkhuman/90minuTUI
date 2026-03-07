@@ -14,6 +14,7 @@ import (
 
 type fixtureManifest struct {
 	GeneratedAt string         `json:"generated_at"`
+	Source      string         `json:"source"`
 	Fixtures    []fixtureEntry `json:"fixtures"`
 }
 

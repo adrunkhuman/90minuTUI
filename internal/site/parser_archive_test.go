@@ -21,6 +21,9 @@ func TestArchiveFixturesCoverage(t *testing.T) {
 	if !containsFixtureName(archives, "archive_2020_21") {
 		t.Fatalf("expected archive fixture for 2020/21 season")
 	}
+	if m.Source != "http://www.90minut.pl/archsezon.php" {
+		t.Fatalf("unexpected manifest source: %q", m.Source)
+	}
 	if want := manifestStamp(m.Fixtures); m.GeneratedAt != want {
 		t.Fatalf("manifest generated_at mismatch: got %q want %q", m.GeneratedAt, want)
 	}
