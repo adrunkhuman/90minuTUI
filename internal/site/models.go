@@ -25,7 +25,13 @@ type Round struct {
 }
 
 type LeaguePage struct {
-	Title       string
-	URL         string
-	LatestRound Round
+	Title  string
+	URL    string
+	Rounds []Round
+}
+
+type MatchPage struct {
+	Title string
+	URL   string
+	Lines []string
 }

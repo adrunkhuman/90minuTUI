@@ -22,8 +22,42 @@ func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 		return nil
 	}
 
-	page.LatestRound = rounds[len(rounds)-1]
+	page.Rounds = rounds
 	return page
+}
+
+func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
+	title := normalizeWhitespace(doc.Find("title").First().Text())
+	if title == "" {
+		return nil
+	}
+
+	lines := make([]string, 0, 16)
+	seen := map[string]struct{}{}
+
+	doc.Find("table.main[width='600'] tr").Each(func(_ int, row *goquery.Selection) {
+		text := normalizeWhitespace(row.Text())
+		if text == "" {
+			return
+		}
+
+		if _, exists := seen[text]; exists {
+			return
+		}
+		seen[text] = struct{}{}
+
+		lines = append(lines, text)
+	})
+
+	if len(lines) == 0 {
+		return &MatchPage{Title: title, URL: url}
+	}
+
+	if len(lines) > 18 {
+		lines = lines[:18]
+	}
+
+	return &MatchPage{Title: title, URL: url, Lines: lines}
 }
 
 func parseRounds(doc *goquery.Document) []Round {

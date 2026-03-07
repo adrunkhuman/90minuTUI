@@ -47,7 +47,27 @@ func (s *Service) LoadLeague(ctx context.Context, leagueURL string) (*LeaguePage
 		return nil, fmt.Errorf("league parse: no round fixtures found")
 	}
 
+	for i := range league.Rounds {
+		for j := range league.Rounds[i].Fixtures {
+			league.Rounds[i].Fixtures[j].MatchURL = s.client.Resolve(league.Rounds[i].Fixtures[j].MatchURL)
+		}
+	}
+
 	return league, nil
+}
+
+func (s *Service) LoadMatch(ctx context.Context, matchURL string) (*MatchPage, error) {
+	doc, err := s.client.Document(ctx, matchURL)
+	if err != nil {
+		return nil, err
+	}
+
+	match := parseMatchPage(doc, s.client.Resolve(matchURL))
+	if match == nil {
+		return nil, fmt.Errorf("match parse: no details found")
+	}
+
+	return match, nil
 }
 
 func parseSeasons(doc *goquery.Document, c *Client) ([]Season, int) {

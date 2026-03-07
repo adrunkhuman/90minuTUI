@@ -17,6 +17,7 @@ type focusArea int
 const (
 	focusSeasons focusArea = iota
 	focusCompetitions
+	focusFixtures
 )
 
 type archiveLoadedMsg struct {
@@ -38,6 +39,12 @@ type leagueLoadedMsg struct {
 	err            error
 }
 
+type matchLoadedMsg struct {
+	matchURL string
+	match    *site.MatchPage
+	err      error
+}
+
 type Model struct {
 	service *site.Service
 
@@ -54,15 +61,16 @@ type Model struct {
 	competitions      []site.Competition
 	competitionCursor int
 
-	league *site.LeaguePage
+	league        *site.LeaguePage
+	roundCursor   int
+	fixtureCursor int
+
+	matchView bool
+	match     *site.MatchPage
 }
 
 func NewModel(svc *site.Service) Model {
-	return Model{
-		service: svc,
-		focus:   focusCompetitions,
-		loading: true,
-	}
+	return Model{service: svc, focus: focusCompetitions, loading: true}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -97,15 +105,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			m.moveCursor(1)
 			return m, nil
+		case "left", "h":
+			m.shiftRound(-1)
+			return m, nil
+		case "right", "l":
+			m.shiftRound(1)
+			return m, nil
 		case "enter":
 			return m, m.handleEnter()
+		case "esc", "backspace":
+			if m.matchView {
+				m.matchView = false
+				m.match = nil
+				m.err = ""
+			}
+			return m, nil
 		case "r":
 			m.loading = true
 			m.err = ""
+			m.matchView = false
+			m.match = nil
 			if len(m.seasons) == 0 {
 				return m, m.loadArchiveCmd("http://www.90minut.pl/archsezon.php")
 			}
-			return m, m.loadSeasonCompetitionsCmd(m.seasons[m.seasonCursor].URL, m.seasonCursor)
+			if m.focus == focusSeasons {
+				return m, m.loadSeasonCompetitionsCmd(m.seasons[m.seasonCursor].URL, m.seasonCursor)
+			}
+			if len(m.competitions) == 0 {
+				m.loading = false
+				return m, nil
+			}
+			return m, m.loadLeagueCmd(m.competitions[m.competitionCursor].URL, m.competitionCursor)
 		}
 
 	case archiveLoadedMsg:
@@ -143,6 +173,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.competitions = msg.competitions
 		m.competitionCursor = m.preferredCompetitionIndex()
 		m.league = nil
+		m.matchView = false
+		m.match = nil
 
 		if len(m.competitions) == 0 {
 			return m, nil
@@ -164,7 +196,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.err = ""
+		m.matchView = false
+		m.match = nil
 		m.league = msg.league
+		m.roundCursor = clamp(len(msg.league.Rounds)-1, 0, len(msg.league.Rounds)-1)
+		m.fixtureCursor = 0
+		m.focus = focusFixtures
+		return m, nil
+
+	case matchLoadedMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err.Error()
+			m.matchView = false
+			m.match = nil
+			return m, nil
+		}
+
+		current := m.currentFixture()
+		if current == nil || current.MatchURL != msg.matchURL {
+			return m, nil
+		}
+
+		m.err = ""
+		m.matchView = true
+		m.match = msg.match
 		return m, nil
 	}
 
@@ -183,17 +239,14 @@ func (m Model) View() string {
 	right := m.rightPaneView(rightWidth)
 
 	if m.loading {
-		right = right + "\n\nLoading..."
+		right += "\n\nLoading..."
 	}
-
 	if m.err != "" {
-		right = right + "\n\nError: " + m.err
+		right += "\n\nError: " + m.err
 	}
 
-	help := "tab: switch focus  enter: load  j/k: move  r: reload  q: quit"
-
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-	return body + "\n\n" + help
+	help := "tab: focus  enter: load/open  j/k: move  h/l: round  esc: back  r: reload  q: quit"
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, right) + "\n\n" + help
 }
 
 func (m Model) leftPaneView(width int) string {
@@ -207,7 +260,6 @@ func (m Model) leftPaneView(width int) string {
 		b.WriteString(" " + focusStyle.Render("[focus]"))
 	}
 	b.WriteString("\n")
-
 	for _, line := range renderSeasonsWindow(m.seasons, m.seasonCursor) {
 		b.WriteString(line)
 		b.WriteString("\n")
@@ -219,7 +271,6 @@ func (m Model) leftPaneView(width int) string {
 		b.WriteString(" " + focusStyle.Render("[focus]"))
 	}
 	b.WriteString("\n")
-
 	for _, line := range renderCompetitionWindow(m.competitions, m.competitionCursor) {
 		b.WriteString(line)
 		b.WriteString("\n")
@@ -231,9 +282,29 @@ func (m Model) leftPaneView(width int) string {
 func (m Model) rightPaneView(width int) string {
 	base := lipgloss.NewStyle().Width(width).Padding(0, 1)
 	title := lipgloss.NewStyle().Bold(true)
+	focusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 
-	if m.league == nil {
+	if m.matchView && m.match != nil {
+		var b strings.Builder
+		b.WriteString(title.Render(m.match.Title))
+		b.WriteString("\n")
+		b.WriteString(m.match.URL)
+		b.WriteString("\n\n")
+		for _, line := range m.match.Lines {
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n(esc to go back)")
+		return base.Render(strings.TrimRight(b.String(), "\n"))
+	}
+
+	if m.league == nil || len(m.league.Rounds) == 0 {
 		return base.Render("No league loaded yet")
+	}
+
+	round := m.currentRound()
+	if round == nil {
+		return base.Render("No fixtures in selected round")
 	}
 
 	var b strings.Builder
@@ -241,11 +312,19 @@ func (m Model) rightPaneView(width int) string {
 	b.WriteString("\n")
 	b.WriteString(strings.TrimSpace(m.league.URL))
 	b.WriteString("\n\n")
-	b.WriteString(title.Render("Latest round: " + m.league.LatestRound.Name))
+	b.WriteString(title.Render(fmt.Sprintf("Round %d/%d: %s", m.roundCursor+1, len(m.league.Rounds), round.Name)))
+	if m.focus == focusFixtures {
+		b.WriteString(" " + focusStyle.Render("[focus]"))
+	}
 	b.WriteString("\n")
 
-	for _, f := range m.league.LatestRound.Fixtures {
-		line := fmt.Sprintf("%s %s %s", f.Home, f.Score, f.Away)
+	for i, f := range round.Fixtures {
+		prefix := "  "
+		if i == m.fixtureCursor {
+			prefix = "> "
+		}
+
+		line := fmt.Sprintf("%s%s %s %s", prefix, f.Home, f.Score, f.Away)
 		if f.WhenInfo != "" {
 			line += " | " + f.WhenInfo
 		}
@@ -257,8 +336,16 @@ func (m Model) rightPaneView(width int) string {
 }
 
 func (m *Model) toggleFocus() {
-	if m.focus == focusSeasons {
-		m.focus = focusCompetitions
+	order := []focusArea{focusSeasons, focusCompetitions}
+	if m.league != nil && len(m.league.Rounds) > 0 {
+		order = append(order, focusFixtures)
+	}
+
+	for i := range order {
+		if order[i] != m.focus {
+			continue
+		}
+		m.focus = order[(i+1)%len(order)]
 		return
 	}
 
@@ -266,45 +353,99 @@ func (m *Model) toggleFocus() {
 }
 
 func (m *Model) moveCursor(delta int) {
-	if m.focus == focusSeasons {
-		m.seasonCursor = clamp(m.seasonCursor+delta, 0, len(m.seasons)-1)
+	if m.matchView {
 		return
 	}
 
-	m.competitionCursor = clamp(m.competitionCursor+delta, 0, len(m.competitions)-1)
+	switch m.focus {
+	case focusSeasons:
+		m.seasonCursor = clamp(m.seasonCursor+delta, 0, len(m.seasons)-1)
+	case focusCompetitions:
+		m.competitionCursor = clamp(m.competitionCursor+delta, 0, len(m.competitions)-1)
+	case focusFixtures:
+		round := m.currentRound()
+		if round == nil {
+			return
+		}
+		m.fixtureCursor = clamp(m.fixtureCursor+delta, 0, len(round.Fixtures)-1)
+	}
+}
+
+func (m *Model) shiftRound(delta int) {
+	if m.matchView || m.focus != focusFixtures || m.league == nil {
+		return
+	}
+
+	m.roundCursor = clamp(m.roundCursor+delta, 0, len(m.league.Rounds)-1)
+	m.fixtureCursor = 0
 }
 
 func (m *Model) handleEnter() tea.Cmd {
 	m.loading = true
 	m.err = ""
 
-	if m.focus == focusSeasons {
+	switch m.focus {
+	case focusSeasons:
 		if len(m.seasons) == 0 {
 			m.loading = false
 			return nil
 		}
+		m.matchView = false
+		m.match = nil
 		return m.loadSeasonCompetitionsCmd(m.seasons[m.seasonCursor].URL, m.seasonCursor)
+
+	case focusCompetitions:
+		if len(m.competitions) == 0 {
+			m.loading = false
+			return nil
+		}
+		m.matchView = false
+		m.match = nil
+		return m.loadLeagueCmd(m.competitions[m.competitionCursor].URL, m.competitionCursor)
+
+	case focusFixtures:
+		fixture := m.currentFixture()
+		if fixture == nil {
+			m.loading = false
+			return nil
+		}
+		return m.loadMatchCmd(fixture.MatchURL)
 	}
 
-	if len(m.competitions) == 0 {
-		m.loading = false
+	m.loading = false
+	return nil
+}
+
+func (m Model) currentRound() *site.Round {
+	if m.league == nil || len(m.league.Rounds) == 0 {
 		return nil
 	}
+	if m.roundCursor < 0 || m.roundCursor >= len(m.league.Rounds) {
+		return nil
+	}
+	return &m.league.Rounds[m.roundCursor]
+}
 
-	return m.loadLeagueCmd(m.competitions[m.competitionCursor].URL, m.competitionCursor)
+func (m Model) currentFixture() *site.Fixture {
+	round := m.currentRound()
+	if round == nil || len(round.Fixtures) == 0 {
+		return nil
+	}
+	if m.fixtureCursor < 0 || m.fixtureCursor >= len(round.Fixtures) {
+		return nil
+	}
+	return &round.Fixtures[m.fixtureCursor]
 }
 
 func (m Model) preferredCompetitionIndex() int {
 	if len(m.competitions) == 0 {
 		return 0
 	}
-
 	for i, c := range m.competitions {
 		if strings.Contains(strings.ToLower(c.Name), "ekstraklasa") {
 			return i
 		}
 	}
-
 	return 0
 }
 
@@ -312,14 +453,8 @@ func (m Model) loadArchiveCmd(url string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-
 		seasons, selectedIdx, competitions, err := m.service.LoadArchive(ctx, url)
-		return archiveLoadedMsg{
-			seasons:      seasons,
-			selectedIdx:  selectedIdx,
-			competitions: competitions,
-			err:          err,
-		}
+		return archiveLoadedMsg{seasons: seasons, selectedIdx: selectedIdx, competitions: competitions, err: err}
 	}
 }
 
@@ -327,13 +462,8 @@ func (m Model) loadSeasonCompetitionsCmd(url string, seasonIdx int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-
 		_, _, competitions, err := m.service.LoadArchive(ctx, url)
-		return competitionsLoadedMsg{
-			seasonIdx:    seasonIdx,
-			competitions: competitions,
-			err:          err,
-		}
+		return competitionsLoadedMsg{seasonIdx: seasonIdx, competitions: competitions, err: err}
 	}
 }
 
@@ -341,9 +471,17 @@ func (m Model) loadLeagueCmd(url string, competitionIdx int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-
 		league, err := m.service.LoadLeague(ctx, url)
 		return leagueLoadedMsg{competitionIdx: competitionIdx, league: league, err: err}
+	}
+}
+
+func (m Model) loadMatchCmd(url string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		match, err := m.service.LoadMatch(ctx, url)
+		return matchLoadedMsg{matchURL: url, match: match, err: err}
 	}
 }
 
