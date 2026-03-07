@@ -56,7 +56,7 @@ func (c *Client) Document(ctx context.Context, rawURL string) (*goquery.Document
 		return nil, fmt.Errorf("build request for %q: %w", absoluteURL, err)
 	}
 
-	req.Header.Set("User-Agent", "90minut-go/0.1 (+https://github.com)")
+	req.Header.Set("User-Agent", "90minuTUI/0.1 (+https://github.com/adrunkhuman/90minuTUI)")
 
 	resp, err := c.http.Do(req)
 	if err != nil {

@@ -22,7 +22,7 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
 ## Run
 
 ```bash
-go run ./cmd/90minut-go
+go run ./cmd/90minutui
 ```
 
 ## Controls
@@ -38,7 +38,7 @@ go run ./cmd/90minut-go
 
 ## Architecture
 
-- `cmd/90minut-go` - app entrypoint
+- `cmd/90minutui` - app entrypoint
 - `internal/site` - HTTP fetch + HTML parsing into typed models
 - `internal/ui` - Bubble Tea state/update/view
 
