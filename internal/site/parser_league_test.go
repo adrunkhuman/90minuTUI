@@ -29,6 +29,14 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 			if len(page.Rounds) == 0 {
 				t.Fatalf("expected rounds for %s", fixture.Name)
 			}
+			for _, round := range page.Rounds {
+				if strings.TrimSpace(round.Name) == "" {
+					t.Fatalf("round with empty name in %s", fixture.Name)
+				}
+				if len(round.Fixtures) == 0 {
+					t.Fatalf("round %q has no fixtures in %s", round.Name, fixture.Name)
+				}
+			}
 
 			totalFixtures := 0
 			for _, round := range page.Rounds {

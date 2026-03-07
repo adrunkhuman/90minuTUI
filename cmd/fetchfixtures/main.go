@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -297,12 +298,12 @@ func run() error {
 		return fmt.Errorf("collected %d fixtures, expected at least %d", len(metas), targetFixtures)
 	}
 
-	if err := validateRequiredFixtures(metas, requiredNames); err != nil {
-		return err
-	}
-
 	if len(metas) > targetFixtures {
 		metas = metas[:targetFixtures]
+	}
+
+	if err := validateRequiredFixtures(metas, requiredNames); err != nil {
+		return err
 	}
 
 	manifestData, err := json.MarshalIndent(manifest{
@@ -549,6 +550,7 @@ func validateRequiredFixtures(fixtures []fixtureMeta, required map[string]struct
 		}
 		missing = append(missing, name)
 	}
+	sort.Strings(missing)
 
 	if len(missing) == 0 {
 		return nil

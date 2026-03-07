@@ -1,7 +1,9 @@
 package site
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +13,8 @@ import (
 )
 
 type fixtureManifest struct {
-	Fixtures []fixtureEntry `json:"fixtures"`
+	GeneratedAt string         `json:"generated_at"`
+	Fixtures    []fixtureEntry `json:"fixtures"`
 }
 
 type fixtureEntry struct {
@@ -82,4 +85,29 @@ func containsFixtureName(fixtures []fixtureEntry, name string) bool {
 		}
 	}
 	return false
+}
+
+func competitionIndexByURL(competitions []Competition, url string) int {
+	for i, competition := range competitions {
+		if competition.URL == url {
+			return i
+		}
+	}
+	return -1
+}
+
+func manifestStamp(fixtures []fixtureEntry) string {
+	h := sha256.New()
+	for _, fixture := range fixtures {
+		_, _ = h.Write([]byte(fixture.Name))
+		_, _ = h.Write([]byte("|"))
+		_, _ = h.Write([]byte(fixture.Kind))
+		_, _ = h.Write([]byte("|"))
+		_, _ = h.Write([]byte(fixture.URL))
+		_, _ = h.Write([]byte("|"))
+		_, _ = h.Write([]byte(fixture.Season))
+		_, _ = h.Write([]byte("\n"))
+	}
+
+	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }
