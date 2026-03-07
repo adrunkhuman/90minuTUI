@@ -29,6 +29,9 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 			if len(page.Rounds) == 0 {
 				t.Fatalf("expected rounds for %s", fixture.Name)
 			}
+			if page.LeagueKey == "" {
+				t.Fatalf("expected league key for %s", fixture.Name)
+			}
 			for _, round := range page.Rounds {
 				if strings.TrimSpace(round.Name) == "" {
 					t.Fatalf("round with empty name in %s", fixture.Name)
@@ -50,6 +53,9 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 					}
 					if !strings.Contains(match.MatchURL, "mecz.php") {
 						t.Fatalf("fixture match url is not a match link in %s: %q", fixture.Name, match.MatchURL)
+					}
+					if match.MatchID == "" {
+						t.Fatalf("fixture missing match id in %s: %q", fixture.Name, match.MatchURL)
 					}
 				}
 			}

@@ -46,10 +46,12 @@ func (s *Service) LoadLeague(ctx context.Context, leagueURL string) (*LeaguePage
 	if league == nil {
 		return nil, fmt.Errorf("league parse: no round fixtures found")
 	}
+	league.LeagueKey = extractLeagueKey(league.URL)
 
 	for i := range league.Rounds {
 		for j := range league.Rounds[i].Fixtures {
 			league.Rounds[i].Fixtures[j].MatchURL = s.client.Resolve(league.Rounds[i].Fixtures[j].MatchURL)
+			league.Rounds[i].Fixtures[j].MatchID = extractMatchID(league.Rounds[i].Fixtures[j].MatchURL)
 		}
 	}
 
@@ -70,6 +72,7 @@ func (s *Service) LoadMatch(ctx context.Context, matchURL string) (*MatchPage, e
 	if match == nil {
 		return nil, fmt.Errorf("match parse: no details found")
 	}
+	match.MatchID = extractMatchID(match.URL)
 	if match.NewsURL != "" {
 		match.NewsURL = s.client.Resolve(match.NewsURL)
 	}
@@ -127,9 +130,12 @@ func parseSeasons(doc *goquery.Document, c *Client) ([]Season, int) {
 			return
 		}
 
+		resolvedURL := c.Resolve(rawURL)
+
 		season := Season{
-			Label: strings.TrimSpace(s.Text()),
-			URL:   c.Resolve(rawURL),
+			Label:    strings.TrimSpace(s.Text()),
+			URL:      resolvedURL,
+			SeasonID: extractSeasonID(resolvedURL),
 		}
 
 		if _, isSelected := s.Attr("selected"); isSelected {
@@ -178,7 +184,7 @@ func parseCompetitions(doc *goquery.Document, c *Client) []Competition {
 			name = absoluteURL
 		}
 
-		links = append(links, Competition{Name: name, URL: absoluteURL})
+		links = append(links, Competition{Name: name, URL: absoluteURL, LeagueKey: extractLeagueKey(absoluteURL)})
 	})
 
 	return links

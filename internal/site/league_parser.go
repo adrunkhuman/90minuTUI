@@ -9,7 +9,7 @@ import (
 // parseLeaguePage parses a competition page into rounds and fixtures.
 // It prefers structural markers and match-link semantics over fixed table widths.
 func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
-	page := &LeaguePage{URL: url}
+	page := &LeaguePage{URL: url, LeagueKey: extractLeagueKey(url)}
 
 	page.Title = strings.TrimSpace(doc.Find("title").First().Text())
 	if page.Title == "" {
@@ -119,6 +119,7 @@ func parseFixturesTable(table *goquery.Selection) []Fixture {
 			Score:    score,
 			WhenInfo: whenInfo,
 			MatchURL: matchLink,
+			MatchID:  extractMatchID(matchLink),
 		})
 	})
 
