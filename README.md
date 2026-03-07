@@ -49,3 +49,13 @@ Core pipeline: `fetch -> parse -> render`.
 - 90minut pages use legacy encoding (`iso-8859-2`) and must be decoded before parsing.
 - Prefer semantic selectors over fixed table offsets.
 - URL IDs are treated as stable keys (e.g. season/match links).
+
+## Quality Gates
+
+- CI runs `go test ./...` on pull requests and on pushes to `master`.
+- Local pre-commit checks use `prek` with `.pre-commit-config.yaml`.
+
+```bash
+prek install
+prek run -a
+```
