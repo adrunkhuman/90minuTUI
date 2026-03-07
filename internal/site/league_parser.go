@@ -10,6 +10,7 @@ import (
 
 var spaceRe = regexp.MustCompile(`\s+`)
 var minuteAtEndRe = regexp.MustCompile(`(\d{1,3})\s*$`)
+var minuteAnywhereRe = regexp.MustCompile(`(\d{1,3}(?:\+\d{1,2})?)`)
 
 func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	page := &LeaguePage{URL: url}
@@ -64,8 +65,24 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 			return
 		}
 
-		if left == "" && right != "" && strings.Contains(middle, "-") {
-			page.Scorers = append(page.Scorers, right)
+		if strings.Contains(middle, "-") {
+			if left != "" && right == "" {
+				page.Events = append(page.Events, MatchEvent{
+					MinuteText: extractMinute(left),
+					Kind:       "GOAL",
+					TeamSide:   "home",
+					Text:       left,
+				})
+			}
+
+			if right != "" && left == "" {
+				page.Events = append(page.Events, MatchEvent{
+					MinuteText: extractMinute(right),
+					Kind:       "GOAL",
+					TeamSide:   "away",
+					Text:       right,
+				})
+			}
 		}
 	})
 
@@ -77,9 +94,15 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 
 		if player := parsePlayerCell(tds.Eq(0)); player != nil {
 			page.HomeLineup = append(page.HomeLineup, *player)
+			for _, event := range playerTimelineEvents(*player, "home") {
+				page.Events = append(page.Events, event)
+			}
 		}
 		if player := parsePlayerCell(tds.Eq(2)); player != nil {
 			page.AwayLineup = append(page.AwayLineup, *player)
+			for _, event := range playerTimelineEvents(*player, "away") {
+				page.Events = append(page.Events, event)
+			}
 		}
 	})
 
@@ -94,6 +117,32 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 	})
 
 	return page
+}
+
+func playerTimelineEvents(player PlayerLine, side string) []MatchEvent {
+	events := make([]MatchEvent, 0, 2)
+
+	for _, marker := range player.Events {
+		event := MatchEvent{TeamSide: side, Text: player.Name}
+
+		switch {
+		case marker == "YC":
+			event.Kind = "YC"
+		case marker == "RC":
+			event.Kind = "RC"
+		case strings.Contains(marker, "->"):
+			event.Kind = "SUB"
+			event.MinuteText = extractMinute(marker)
+			event.Text = marker
+		default:
+			event.Kind = "EVENT"
+			event.Text = marker
+		}
+
+		events = append(events, event)
+	}
+
+	return events
 }
 
 func parsePlayerCell(cell *goquery.Selection) *PlayerLine {
@@ -144,6 +193,15 @@ func substitutionMinute(raw, replacement string) string {
 
 	prefix := normalizeWhitespace(raw[:idx])
 	matches := minuteAtEndRe.FindStringSubmatch(prefix)
+	if len(matches) < 2 {
+		return ""
+	}
+
+	return matches[1]
+}
+
+func extractMinute(text string) string {
+	matches := minuteAnywhereRe.FindStringSubmatch(text)
 	if len(matches) < 2 {
 		return ""
 	}

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -318,13 +319,23 @@ func (m Model) rightPaneView(width int) string {
 			b.WriteString("\n")
 		}
 
-		if len(m.match.Scorers) > 0 {
+		if len(m.match.Events) > 0 {
 			b.WriteString("\n")
-			b.WriteString(title.Render("Goals"))
+			b.WriteString(title.Render("Timeline"))
 			b.WriteString("\n")
-			for _, scorer := range m.match.Scorers {
-				b.WriteString("- ")
-				b.WriteString(scorer)
+
+			events := sortedEvents(m.match.Events)
+			for _, event := range events {
+				homeText, awayText := "", ""
+				eventText := formatEventLabel(event)
+				if event.TeamSide == "home" {
+					homeText = eventText
+				} else {
+					awayText = eventText
+				}
+
+				line := renderSideBySide(homeText, event.MinuteText, awayText, width-4)
+				b.WriteString(line)
 				b.WriteString("\n")
 			}
 		}
@@ -333,22 +344,25 @@ func (m Model) rightPaneView(width int) string {
 			b.WriteString("\n")
 			b.WriteString(title.Render("Lineups"))
 			b.WriteString("\n")
+			b.WriteString(renderSideBySide(m.match.HomeTeam, "", m.match.AwayTeam, width-4))
+			b.WriteString("\n")
+
 			maxPlayers := len(m.match.HomeLineup)
 			if len(m.match.AwayLineup) > maxPlayers {
 				maxPlayers = len(m.match.AwayLineup)
 			}
 
 			for i := 0; i < maxPlayers; i++ {
+				homeText, awayText := "", ""
 				if i < len(m.match.HomeLineup) {
-					b.WriteString("H: ")
-					b.WriteString(renderPlayerLine(m.match.HomeLineup[i]))
-					b.WriteString("\n")
+					homeText = renderPlayerLine(m.match.HomeLineup[i])
 				}
 				if i < len(m.match.AwayLineup) {
-					b.WriteString("A: ")
-					b.WriteString(renderPlayerLine(m.match.AwayLineup[i]))
-					b.WriteString("\n")
+					awayText = renderPlayerLine(m.match.AwayLineup[i])
 				}
+
+				b.WriteString(renderSideBySide(homeText, "", awayText, width-4))
+				b.WriteString("\n")
 			}
 		}
 
@@ -637,6 +651,131 @@ func renderPlayerLine(player site.PlayerLine) string {
 
 	line += " [" + strings.Join(player.Events, ", ") + "]"
 	return line
+}
+
+func sortedEvents(events []site.MatchEvent) []site.MatchEvent {
+	ordered := make([]site.MatchEvent, len(events))
+	copy(ordered, events)
+
+	sort.SliceStable(ordered, func(i, j int) bool {
+		mi, hi := minuteSortKey(ordered[i].MinuteText)
+		mj, hj := minuteSortKey(ordered[j].MinuteText)
+
+		if hi != hj {
+			return hi
+		}
+		if hi && mj != mi {
+			return mi < mj
+		}
+
+		weightI := eventWeight(ordered[i].Kind)
+		weightJ := eventWeight(ordered[j].Kind)
+		if weightI != weightJ {
+			return weightI < weightJ
+		}
+
+		return false
+	})
+
+	return ordered
+}
+
+func eventWeight(kind string) int {
+	switch kind {
+	case "GOAL":
+		return 0
+	case "RC":
+		return 1
+	case "YC":
+		return 2
+	case "SUB":
+		return 3
+	default:
+		return 9
+	}
+}
+
+func minuteSortKey(text string) (int, bool) {
+	if text == "" {
+		return 0, false
+	}
+
+	parts := strings.SplitN(text, "+", 2)
+	base := atoiOrNeg(parts[0])
+	if base < 0 {
+		return 0, false
+	}
+
+	extra := 0
+	if len(parts) == 2 {
+		extra = max(0, atoiOrNeg(parts[1]))
+	}
+
+	return base*100 + extra, true
+}
+
+func atoiOrNeg(s string) int {
+	value := 0
+	if _, err := fmt.Sscanf(strings.TrimSpace(s), "%d", &value); err != nil {
+		return -1
+	}
+	return value
+}
+
+func formatEventLabel(event site.MatchEvent) string {
+	prefix := event.Kind
+	if prefix == "" {
+		prefix = "EVENT"
+	}
+
+	if event.Text == "" {
+		return prefix
+	}
+
+	return prefix + " " + event.Text
+}
+
+func renderSideBySide(left, middle, right string, width int) string {
+	if width < 30 {
+		if middle == "" {
+			return left + " | " + right
+		}
+		return left + " | " + middle + " | " + right
+	}
+
+	midWidth := 8
+	gap := 2
+	sideWidth := max(8, (width-midWidth-(gap*2))/2)
+
+	leftText := padRight(truncate(left, sideWidth), sideWidth)
+	midText := padRight(truncate(middle, midWidth), midWidth)
+	rightText := truncate(right, sideWidth)
+
+	return leftText + strings.Repeat(" ", gap) + midText + strings.Repeat(" ", gap) + rightText
+}
+
+func truncate(value string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	r := []rune(value)
+	if len(r) <= maxLen {
+		return value
+	}
+	if maxLen == 1 {
+		return "…"
+	}
+
+	return string(r[:maxLen-1]) + "…"
+}
+
+func padRight(value string, width int) string {
+	pad := width - len([]rune(value))
+	if pad <= 0 {
+		return value
+	}
+
+	return value + strings.Repeat(" ", pad)
 }
 
 func layoutWidths(total int, collapsed, emphasizeRight bool) (int, int) {

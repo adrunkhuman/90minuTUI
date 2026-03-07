@@ -39,11 +39,18 @@ type MatchPage struct {
 	HomeTeam    string
 	AwayTeam    string
 	Score       string
-	Scorers     []string
+	Events      []MatchEvent
 	HomeLineup  []PlayerLine
 	AwayLineup  []PlayerLine
 	NewsTitle   string
 	NewsURL     string
+}
+
+type MatchEvent struct {
+	MinuteText string
+	Kind       string
+	TeamSide   string
+	Text       string
 }
 
 type PlayerLine struct {
