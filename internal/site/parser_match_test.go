@@ -1,0 +1,49 @@
+package site
+
+import "testing"
+
+func TestParseMatchFixturesFromCorpus(t *testing.T) {
+	m := loadManifest(t)
+	matches := fixturesByKind(m, "match")
+	if len(matches) < 6 {
+		t.Fatalf("expected at least 6 match fixtures, got %d", len(matches))
+	}
+
+	foundEventTimeline := false
+	foundDiacritics := false
+
+	for _, fixture := range matches {
+		fixture := fixture
+		t.Run(fixture.Name, func(t *testing.T) {
+			doc, _ := fixtureDoc(t, fixture.File)
+			page := parseMatchPage(doc, fixture.URL)
+			if page == nil {
+				t.Fatalf("expected match page for %s", fixture.Name)
+			}
+			if page.Title == "" {
+				t.Fatalf("expected title for %s", fixture.Name)
+			}
+
+			if hasPolishDiacritic(page.HomeTeam) || hasPolishDiacritic(page.AwayTeam) {
+				foundDiacritics = true
+			}
+
+			if len(page.Events) > 0 {
+				foundEventTimeline = true
+			}
+
+			for _, event := range page.Events {
+				if event.TeamSide != "home" && event.TeamSide != "away" {
+					t.Fatalf("invalid event side %q in %s", event.TeamSide, fixture.Name)
+				}
+			}
+		})
+	}
+
+	if !foundEventTimeline {
+		t.Fatalf("expected at least one match fixture with timeline events")
+	}
+	if !foundDiacritics {
+		t.Fatalf("expected at least one match fixture with Polish diacritics")
+	}
+}

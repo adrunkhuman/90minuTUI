@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -77,6 +77,12 @@ func run() error {
 
 	metas := make([]fixtureMeta, 0, targetFixtures)
 	saved := map[string]struct{}{}
+	requiredNames := map[string]struct{}{
+		"archive_2019_20": {},
+		"archive_2020_21": {},
+		"league_14072":    {},
+		"league_14073":    {},
+	}
 
 	if err := saveFixture(fixtureDir, "archive_current", archiveBody); err != nil {
 		return err
@@ -169,6 +175,7 @@ func run() error {
 
 		seasonBody, seasonDoc, fetchErr := fetchDoc(client, s.URL)
 		if fetchErr != nil {
+			fmt.Fprintf(os.Stderr, "warn: skip season %q (%s): %v\n", s.Label, s.URL, fetchErr)
 			continue
 		}
 
@@ -214,10 +221,6 @@ func run() error {
 		leagueCandidates[i], leagueCandidates[j] = leagueCandidates[j], leagueCandidates[i]
 	})
 
-	sort.SliceStable(leagueCandidates, func(i, j int) bool {
-		return leagueCandidates[i].Name < leagueCandidates[j].Name
-	})
-
 	leagueCandidates = prioritizeLeagues(leagueCandidates)
 
 	matchCandidates := make([]fixtureMeta, 0, 20)
@@ -232,9 +235,7 @@ func run() error {
 
 		leagueBody, leagueDoc, fetchErr := fetchDoc(client, league.URL)
 		if fetchErr != nil {
-			continue
-		}
-		if !isParserFriendlyLeague(leagueDoc) {
+			fmt.Fprintf(os.Stderr, "warn: skip league %q (%s): %v\n", league.Name, league.URL, fetchErr)
 			continue
 		}
 
@@ -280,6 +281,7 @@ func run() error {
 
 		matchBody, _, fetchErr := fetchDoc(client, match.URL)
 		if fetchErr != nil {
+			fmt.Fprintf(os.Stderr, "warn: skip match %q (%s): %v\n", match.Name, match.URL, fetchErr)
 			continue
 		}
 
@@ -295,12 +297,16 @@ func run() error {
 		return fmt.Errorf("collected %d fixtures, expected at least %d", len(metas), targetFixtures)
 	}
 
+	if err := validateRequiredFixtures(metas, requiredNames); err != nil {
+		return err
+	}
+
 	if len(metas) > targetFixtures {
 		metas = metas[:targetFixtures]
 	}
 
 	manifestData, err := json.MarshalIndent(manifest{
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		GeneratedAt: deterministicManifestStamp(metas),
 		Source:      archiveURL,
 		Fixtures:    metas,
 	}, "", "  ")
@@ -514,19 +520,39 @@ func prioritizeLeagues(items []fixtureMeta) []fixtureMeta {
 	return out
 }
 
-func isParserFriendlyLeague(doc *goquery.Document) bool {
-	if doc.Find("a[href*='mecz.php?id_mecz=']").Length() == 0 {
-		return false
+func deterministicManifestStamp(fixtures []fixtureMeta) string {
+	h := sha256.New()
+	for _, fixture := range fixtures {
+		_, _ = h.Write([]byte(fixture.Name))
+		_, _ = h.Write([]byte("|"))
+		_, _ = h.Write([]byte(fixture.Kind))
+		_, _ = h.Write([]byte("|"))
+		_, _ = h.Write([]byte(fixture.URL))
+		_, _ = h.Write([]byte("|"))
+		_, _ = h.Write([]byte(fixture.Season))
+		_, _ = h.Write([]byte("\n"))
 	}
 
-	hasRoundMarker := false
-	doc.Find("table.main[width='600']").EachWithBreak(func(_ int, table *goquery.Selection) bool {
-		if strings.Contains(strings.ToLower(table.Text()), "kolejka") {
-			hasRoundMarker = true
-			return false
-		}
-		return true
-	})
+	return fmt.Sprintf("sha256:%x", h.Sum(nil))
+}
 
-	return hasRoundMarker
+func validateRequiredFixtures(fixtures []fixtureMeta, required map[string]struct{}) error {
+	seen := map[string]struct{}{}
+	for _, fixture := range fixtures {
+		seen[fixture.Name] = struct{}{}
+	}
+
+	missing := make([]string, 0, len(required))
+	for name := range required {
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		missing = append(missing, name)
+	}
+
+	if len(missing) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("missing required fixtures: %s", strings.Join(missing, ", "))
 }
