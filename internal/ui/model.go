@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"90minut_go/internal/site"
+	"github.com/adrunkhuman/90minuTUI/internal/site"
 )
 
 type focusArea int

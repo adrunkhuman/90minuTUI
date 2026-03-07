@@ -1,4 +1,4 @@
-module 90minut_go
+module github.com/adrunkhuman/90minuTUI
 
 go 1.26.1
 

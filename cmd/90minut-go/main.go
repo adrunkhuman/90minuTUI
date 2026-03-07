@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"90minut_go/internal/site"
-	"90minut_go/internal/ui"
+	"github.com/adrunkhuman/90minuTUI/internal/site"
+	"github.com/adrunkhuman/90minuTUI/internal/ui"
 )
 
 func main() {
