@@ -67,6 +67,8 @@ type Model struct {
 
 	matchView bool
 	match     *site.MatchPage
+
+	sidebarCollapsed bool
 }
 
 func NewModel(svc *site.Service) Model {
@@ -113,6 +115,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "enter":
 			return m, m.handleEnter()
+		case "s":
+			m.sidebarCollapsed = !m.sidebarCollapsed
+			return m, nil
 		case "esc", "backspace":
 			if m.matchView {
 				m.matchView = false
@@ -232,11 +237,13 @@ func (m Model) View() string {
 		return "Loading terminal size..."
 	}
 
-	leftWidth := max(36, m.width/2)
-	rightWidth := max(36, m.width-leftWidth-2)
-
-	left := m.leftPaneView(leftWidth)
+	emphasizeRight := m.matchView || m.focus == focusFixtures
+	leftWidth, rightWidth := layoutWidths(m.width, m.sidebarCollapsed, emphasizeRight)
 	right := m.rightPaneView(rightWidth)
+	left := ""
+	if leftWidth > 0 {
+		left = m.leftPaneView(leftWidth)
+	}
 
 	if m.loading {
 		right += "\n\nLoading..."
@@ -245,7 +252,11 @@ func (m Model) View() string {
 		right += "\n\nError: " + m.err
 	}
 
-	help := "tab: focus  enter: load/open  j/k: move  h/l: round  esc: back  r: reload  q: quit"
+	help := "tab: focus  enter: load/open  j/k: move  h/l: round  s: sidebar  esc: back  r: reload  q: quit"
+	if left == "" {
+		return right + "\n\n" + help
+	}
+
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right) + "\n\n" + help
 }
 
@@ -626,4 +637,34 @@ func renderPlayerLine(player site.PlayerLine) string {
 
 	line += " [" + strings.Join(player.Events, ", ") + "]"
 	return line
+}
+
+func layoutWidths(total int, collapsed, emphasizeRight bool) (int, int) {
+	if total < 40 {
+		return 0, total
+	}
+
+	if collapsed {
+		return 0, total
+	}
+
+	leftWidth := 36
+	if emphasizeRight {
+		leftWidth = clamp(total/4, 28, 42)
+	} else {
+		leftWidth = clamp(total/3, 32, 50)
+	}
+
+	rightWidth := total - leftWidth - 1
+	if rightWidth < 40 {
+		rightWidth = 40
+		leftWidth = max(0, total-rightWidth-1)
+	}
+
+	if leftWidth < 24 {
+		leftWidth = 0
+		rightWidth = total
+	}
+
+	return leftWidth, rightWidth
 }
