@@ -115,6 +115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		season := m.currentSeason()
+		// Drop stale async results if the user moved to another season.
 		if season == nil || msg.seasonKey != seasonRequestKey(*season) {
 			return m, nil
 		}
@@ -147,6 +148,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		competition := m.currentCompetition()
+		// Drop stale async results if the user switched competitions.
 		if competition == nil || msg.competitionKey != competitionRequestKey(*competition) {
 			return m, nil
 		}
@@ -170,6 +172,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		current := m.currentFixture()
+		// Drop stale async results if the selected fixture changed.
 		if current == nil || fixtureRequestKey(*current) != msg.fixtureKey {
 			return m, nil
 		}

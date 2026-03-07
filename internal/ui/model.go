@@ -122,6 +122,7 @@ func (m Model) preferredCompetitionIndex() int {
 		return 0
 	}
 	for i, c := range m.competitions {
+		// Keep first load useful for most users without adding config/state persistence.
 		if strings.Contains(strings.ToLower(c.Name), "ekstraklasa") {
 			return i
 		}

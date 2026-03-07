@@ -6,7 +6,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// parseLeaguePage parses a competition page into rounds and fixtures.
 // It prefers structural markers and match-link semantics over fixed table widths.
 func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	page := &LeaguePage{URL: url, LeagueKey: extractLeagueKey(url)}
@@ -42,10 +41,12 @@ func parseRounds(doc *goquery.Document) []Round {
 
 		roundName := currentName
 		if roundName == "" {
+			// Some archive pages omit round headers for a fixture block.
 			roundName = "Wyniki"
 		}
 
 		if len(rounds) > 0 && rounds[len(rounds)-1].Name == roundName {
+			// Source HTML may split one round into adjacent tables with the same heading.
 			rounds[len(rounds)-1].Fixtures = append(rounds[len(rounds)-1].Fixtures, fixtures...)
 			return
 		}

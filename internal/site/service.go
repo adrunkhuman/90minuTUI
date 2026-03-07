@@ -118,8 +118,7 @@ func validateMatchPage(page *MatchPage) error {
 	return nil
 }
 
-// parseSeasons extracts all available seasons and selected season marker
-// from the archive selector.
+// If archive markup has no selected option, we default to the first season.
 func parseSeasons(doc *goquery.Document, c *Client) ([]Season, int) {
 	seasons := make([]Season, 0, 80)
 	selectedIdx := -1
@@ -154,7 +153,6 @@ func parseSeasons(doc *goquery.Document, c *Client) ([]Season, int) {
 	return seasons, selectedIdx
 }
 
-// parseCompetitions extracts season competition links in source order.
 func parseCompetitions(doc *goquery.Document, c *Client) []Competition {
 	links := make([]Competition, 0, 64)
 	seen := map[string]struct{}{}
