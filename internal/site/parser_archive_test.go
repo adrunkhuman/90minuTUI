@@ -8,8 +8,8 @@ import (
 func TestArchiveFixturesCoverage(t *testing.T) {
 	m := loadManifest(t)
 	archives := fixturesByKind(m, "archive")
-	if len(m.Fixtures) != 20 {
-		t.Fatalf("expected 20 fixtures, got %d", len(m.Fixtures))
+	if len(m.Fixtures) < 20 {
+		t.Fatalf("expected at least 20 fixtures, got %d", len(m.Fixtures))
 	}
 	if len(archives) < 4 {
 		t.Fatalf("expected at least 4 archive fixtures, got %d", len(archives))

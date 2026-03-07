@@ -531,6 +531,10 @@ func deterministicManifestStamp(fixtures []fixtureMeta) string {
 		_, _ = h.Write([]byte(fixture.URL))
 		_, _ = h.Write([]byte("|"))
 		_, _ = h.Write([]byte(fixture.Season))
+		_, _ = h.Write([]byte("|"))
+		_, _ = h.Write([]byte(fixture.File))
+		_, _ = h.Write([]byte("|"))
+		_, _ = h.Write([]byte(fixture.Note))
 		_, _ = h.Write([]byte("\n"))
 	}
 

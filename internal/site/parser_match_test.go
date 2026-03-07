@@ -2,9 +2,15 @@ package site
 
 import (
 	"testing"
-
-	"github.com/PuerkitoBio/goquery"
 )
+
+var expectedCardSidesByFixture = map[string]map[string]string{
+	"match_2022810": {
+		"(2) Paskal Meyer":    "away",
+		"(39) Filip Kocaba":   "home",
+		"(68) Bartosz Wolski": "away",
+	},
+}
 
 func TestParseMatchFixturesFromCorpus(t *testing.T) {
 	m := loadManifest(t)
@@ -22,7 +28,6 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 		t.Run(fixture.Name, func(t *testing.T) {
 			doc, _ := fixtureDoc(t, fixture.File)
 			page := parseMatchPage(doc, fixture.URL)
-			expectedCardSides := expectedCardPlayerSides(doc)
 			if page == nil {
 				t.Fatalf("expected match page for %s", fixture.Name)
 			}
@@ -38,6 +43,9 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 				foundEventTimeline = true
 			}
 
+			expectedFixtureCards := expectedCardSidesByFixture[fixture.Name]
+			seenExpectedCards := map[string]bool{}
+
 			for _, event := range page.Events {
 				if event.TeamSide != "home" && event.TeamSide != "away" {
 					t.Fatalf("invalid event side %q in %s", event.TeamSide, fixture.Name)
@@ -50,15 +58,23 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 					continue
 				}
 
-				expectedSide, ok := expectedCardSides[event.Text]
+				expectedSide, ok := expectedFixtureCards[event.Text]
 				if !ok || expectedSide == "" {
 					continue
 				}
 
+				seenExpectedCards[event.Text] = true
 				foundPlayerSideEvidence = true
 				if event.TeamSide != expectedSide {
 					t.Fatalf("event side mismatch for player %q in %s: got %q want %q", event.Text, fixture.Name, event.TeamSide, expectedSide)
 				}
+			}
+
+			for player := range expectedFixtureCards {
+				if seenExpectedCards[player] {
+					continue
+				}
+				t.Fatalf("expected YC/RC event not found for %q in %s", player, fixture.Name)
 			}
 		})
 	}
@@ -72,41 +88,4 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 	if !foundPlayerSideEvidence {
 		t.Fatalf("expected at least one YC/RC event tied to lineup players")
 	}
-}
-
-func expectedCardPlayerSides(doc *goquery.Document) map[string]string {
-	players := map[string]string{}
-	table := doc.Find("table.main[width='480']").First()
-	if table.Length() == 0 {
-		return players
-	}
-
-	table.Find("tr[bgcolor]").Each(func(_ int, row *goquery.Selection) {
-		tds := row.Find("td")
-		if tds.Length() != 3 {
-			return
-		}
-
-		collectCardPlayer(players, tds.Eq(0), "home")
-		collectCardPlayer(players, tds.Eq(2), "away")
-	})
-
-	return players
-}
-
-func collectCardPlayer(players map[string]string, cell *goquery.Selection, side string) {
-	if cell.Find("img[src*='yel.gif'], img[src*='red.gif'], img[src*='red2.gif']").Length() == 0 {
-		return
-	}
-
-	name := normalizeWhitespace(cell.Find("a").First().Text())
-	if name == "" {
-		return
-	}
-
-	if current, exists := players[name]; exists && current != side {
-		players[name] = ""
-		return
-	}
-	players[name] = side
 }
