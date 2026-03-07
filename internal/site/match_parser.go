@@ -7,7 +7,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// parseMatchPage parses a single match page into score, timeline and lineups.
 // It identifies the match table by content signatures instead of a fixed width.
 func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 	title := normalizeWhitespace(doc.Find("title").First().Text())
@@ -44,6 +43,7 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 		}
 
 		if strings.Contains(middle, "-") {
+			// Goal rows keep one side empty; non-empty side maps event ownership.
 			if left != "" && right == "" {
 				page.Events = append(page.Events, MatchEvent{
 					MinuteText: extractMinute(left),
@@ -103,6 +103,7 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 
 func findMatchMainTable(doc *goquery.Document) *goquery.Selection {
 	bestScore := -1
+	// Preserve legacy fallback for older 90minut pages that still use width=480.
 	best := doc.Find("table.main[width='480']").First()
 
 	doc.Find("table").Each(func(_ int, table *goquery.Selection) {
@@ -250,6 +251,7 @@ func parsePlayerCell(cell *goquery.Selection) *PlayerLine {
 	}
 
 	if cell.Find("img[src*='sub.gif']").Length() > 0 && len(anchors) > 1 {
+		// In 90minut substitution cells, the last linked player is the replacement.
 		replacement := anchors[len(anchors)-1]
 		minute := substitutionMinute(raw, replacement)
 		if minute != "" {

@@ -6,6 +6,7 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
 
 - Small, single-binary Go app.
 - Read-only browsing flow: `season -> league -> fixture -> match`.
+- Startup preloads the selected season and opens its preferred competition (defaults to `Ekstraklasa` when present), then focuses fixtures.
 - Fast navigation and robust HTML parsing over feature breadth.
 
 ## Current Features
@@ -49,11 +50,24 @@ Core pipeline: `fetch -> parse -> render`.
 - 90minut pages use legacy encoding (`iso-8859-2`) and must be decoded before parsing.
 - Prefer semantic selectors over fixed table offsets.
 - URL IDs are treated as stable keys (e.g. season/match links).
+- Async UI loads are keyed by season/competition/fixture IDs so stale responses are ignored if focus changes.
+- Match parsing still assumes mostly three-cell timeline rows and uses heuristic table scoring; add fixtures/tests when source layout drifts.
+
+## Fixture Corpus Maintenance
+
+Parser tests rely on saved HTML fixtures in `internal/site/testdata/fixtures` and `internal/site/testdata/manifest.json`.
+
+```bash
+go run ./cmd/fetchfixtures
+go test ./...
+```
+
+Use this flow when parser behavior changes or when upstream HTML structure drifts.
 
 ## Quality Gates
 
 - CI runs `go test ./...` on pull requests and on pushes to `master`.
-- Local pre-commit checks use `prek` with `.pre-commit-config.yaml`.
+- Local pre-commit checks use `prek` with pre-commit-compatible `.pre-commit-config.yaml`.
 
 ```bash
 prek install

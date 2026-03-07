@@ -1,0 +1,98 @@
+package site
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/text/encoding/charmap"
+)
+
+func TestDecodeAndParseISO88592FromContentType(t *testing.T) {
+	html := `<html><head><title>Zażółć gęślą jaźń</title></head><body><div class="main">Piątek</div></body></html>`
+	encoded, err := charmap.ISO8859_2.NewEncoder().Bytes([]byte(html))
+	if err != nil {
+		t.Fatalf("encode fixture html: %v", err)
+	}
+
+	doc, err := decodeAndParse(encoded, "text/html; charset=iso-8859-2")
+	if err != nil {
+		t.Fatalf("decode and parse: %v", err)
+	}
+
+	title := normalizeWhitespace(doc.Find("title").First().Text())
+	if title != "Zażółć gęślą jaźń" {
+		t.Fatalf("unexpected decoded title: %q", title)
+	}
+
+	body := normalizeWhitespace(doc.Find("body").Text())
+	if !strings.Contains(body, "Piątek") {
+		t.Fatalf("expected decoded body to contain diacritics, got %q", body)
+	}
+	if strings.ContainsRune(body, '�') {
+		t.Fatalf("decoded body contains replacement rune: %q", body)
+	}
+}
+
+func TestParseSeasonsDefaultsToFirstWhenNoOptionSelected(t *testing.T) {
+	html := `<html><body><select name="urljump">
+		<option value="/archsezon.php?id_sezon=97">2020/21</option>
+		<option value="/archsezon.php?id_sezon=98">2021/22</option>
+	</select></body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic html: %v", err)
+	}
+
+	seasons, selectedIdx := parseSeasons(doc, NewClient())
+	if len(seasons) != 2 {
+		t.Fatalf("expected 2 seasons, got %d", len(seasons))
+	}
+	if selectedIdx != 0 {
+		t.Fatalf("expected selected index 0, got %d", selectedIdx)
+	}
+	if !seasons[0].Current || seasons[1].Current {
+		t.Fatalf("expected only first season marked current: %#v", seasons)
+	}
+}
+
+func TestParseMatchPageGoalSideAssignmentAndStoppageMinutes(t *testing.T) {
+	html := `
+	<html><head><title>Match Test</title></head><body>
+	<table class="main" width="620">
+	<tr><td colspan="3"><b>I liga</b></td></tr>
+	<tr><td colspan="3">1 marca 2026, 18:00</td></tr>
+	<tr><td>GKS Tychy</td><td>2-2</td><td>Odra Opole</td></tr>
+	<tr><td>(45+1) Jan Kowalski</td><td>-</td><td></td></tr>
+	<tr><td></td><td>-</td><td>(90+2) Adam Nowak</td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic html: %v", err)
+	}
+
+	page := parseMatchPage(doc, "http://www.90minut.pl/mecz.php?id_mecz=777")
+	if page == nil {
+		t.Fatalf("expected parsed match page")
+	}
+
+	goals := make([]MatchEvent, 0, 2)
+	for _, event := range page.Events {
+		if event.Kind == "GOAL" {
+			goals = append(goals, event)
+		}
+	}
+
+	if len(goals) != 2 {
+		t.Fatalf("expected 2 goals, got %d", len(goals))
+	}
+	if goals[0].TeamSide != "home" || goals[0].MinuteText != "45+1" {
+		t.Fatalf("unexpected first goal: %#v", goals[0])
+	}
+	if goals[1].TeamSide != "away" || goals[1].MinuteText != "90+2" {
+		t.Fatalf("unexpected second goal: %#v", goals[1])
+	}
+}
