@@ -53,10 +53,6 @@ func (s *Service) LoadLeague(ctx context.Context, leagueURL string) (*LeaguePage
 		}
 	}
 
-	if err := validateLeaguePage(league); err != nil {
-		return league, err
-	}
-
 	return league, nil
 }
 
@@ -74,49 +70,9 @@ func (s *Service) LoadMatch(ctx context.Context, matchURL string) (*MatchPage, e
 		match.NewsURL = s.client.Resolve(match.NewsURL)
 	}
 
-	if err := validateMatchPage(match); err != nil {
-		return match, err
-	}
-
 	return match, nil
 }
 
-func validateLeaguePage(page *LeaguePage) error {
-	if page == nil {
-		return fmt.Errorf("league parse: empty page")
-	}
-
-	if len(page.Rounds) == 0 {
-		return fmt.Errorf("league parse: no rounds found")
-	}
-
-	fixtureCount := 0
-	for _, round := range page.Rounds {
-		fixtureCount += len(round.Fixtures)
-	}
-	if fixtureCount == 0 {
-		return fmt.Errorf("league parse: rounds found but fixtures are empty")
-	}
-
-	return nil
-}
-
-func validateMatchPage(page *MatchPage) error {
-	if page == nil {
-		return fmt.Errorf("match parse: empty page")
-	}
-
-	if page.HomeTeam == "" || page.AwayTeam == "" {
-		if page.Score == "" && len(page.Events) == 0 && len(page.HomeLineup) == 0 && len(page.AwayLineup) == 0 {
-			return fmt.Errorf("match parse: missing teams and score")
-		}
-	}
-
-	return nil
-}
-
-// parseSeasons extracts all available seasons and selected season marker
-// from the archive selector.
 func parseSeasons(doc *goquery.Document, c *Client) ([]Season, int) {
 	seasons := make([]Season, 0, 80)
 	selectedIdx := -1
@@ -148,7 +104,6 @@ func parseSeasons(doc *goquery.Document, c *Client) ([]Season, int) {
 	return seasons, selectedIdx
 }
 
-// parseCompetitions extracts season competition links in source order.
 func parseCompetitions(doc *goquery.Document, c *Client) []Competition {
 	links := make([]Competition, 0, 64)
 	seen := map[string]struct{}{}
