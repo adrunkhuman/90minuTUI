@@ -6,7 +6,8 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// It prefers structural markers and match-link semantics over fixed table widths.
+// League pages drift across seasons, so round extraction anchors on heading tables
+// and `mecz.php` fixture links instead of brittle width/column assumptions.
 func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	page := &LeaguePage{URL: url, LeagueKey: extractLeagueKey(url)}
 
@@ -27,10 +28,12 @@ func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 func parseRounds(doc *goquery.Document) []Round {
 	rounds := make([]Round, 0, 16)
 	currentName := ""
+	hasNamedRounds := false
 
-	doc.Find("table").Each(func(_ int, table *goquery.Selection) {
+	leagueTables(doc).Each(func(_ int, table *goquery.Selection) {
 		if name, ok := roundNameFromTable(table); ok {
 			currentName = name
+			hasNamedRounds = true
 			return
 		}
 
@@ -39,11 +42,7 @@ func parseRounds(doc *goquery.Document) []Round {
 			return
 		}
 
-		roundName := currentName
-		if roundName == "" {
-			// Some archive pages omit round headers for a fixture block.
-			roundName = "Wyniki"
-		}
+		roundName := strings.TrimSpace(currentName)
 
 		if len(rounds) > 0 && rounds[len(rounds)-1].Name == roundName {
 			// Source HTML may split one round into adjacent tables with the same heading.
@@ -54,7 +53,39 @@ func parseRounds(doc *goquery.Document) []Round {
 		rounds = append(rounds, Round{Name: roundName, Fixtures: fixtures})
 	})
 
+	if hasNamedRounds {
+		// Once explicit round headings exist, unnamed fixture tables in the same area
+		// are usually standings/nav spillover rather than standalone rounds.
+		namedOnly := make([]Round, 0, len(rounds))
+		for _, round := range rounds {
+			if strings.TrimSpace(round.Name) == "" {
+				continue
+			}
+			namedOnly = append(namedOnly, round)
+		}
+		if len(namedOnly) > 0 {
+			rounds = namedOnly
+		}
+	}
+
+	for i := range rounds {
+		if strings.TrimSpace(rounds[i].Name) != "" {
+			continue
+		}
+		// Fully headerless fixture pages are normalized to a single fallback round.
+		rounds[i].Name = "Wyniki"
+	}
+
 	return rounds
+}
+
+func leagueTables(doc *goquery.Document) *goquery.Selection {
+	mainCell := doc.Find("td.main[align='center']").First()
+	if mainCell.Length() > 0 {
+		return mainCell.Find("table")
+	}
+
+	return doc.Find("table")
 }
 
 func roundNameFromTable(table *goquery.Selection) (string, bool) {
@@ -67,12 +98,43 @@ func roundNameFromTable(table *goquery.Selection) (string, bool) {
 		return heading, true
 	}
 
-	text := normalizeWhitespace(table.Text())
+	if !looksLikeStandaloneHeadingTable(table) {
+		return "", false
+	}
+
+	text := normalizeWhitespace(table.ChildrenFiltered("tbody, tr").Text())
 	if looksLikeRoundHeading(text) {
 		return text, true
 	}
 
 	return "", false
+}
+
+func looksLikeStandaloneHeadingTable(table *goquery.Selection) bool {
+	rows := table.ChildrenFiltered("tbody, tr").ChildrenFiltered("tr")
+	if rows.Length() == 0 {
+		rows = table.ChildrenFiltered("tr")
+	}
+	if rows.Length() != 1 {
+		return false
+	}
+
+	tds := rows.First().ChildrenFiltered("td, th")
+	if tds.Length() != 1 {
+		return false
+	}
+
+	text := normalizeWhitespace(tds.First().Text())
+	if text == "" {
+		return false
+	}
+
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "wyniki") || strings.Contains(lower, "strzelcy") || strings.Contains(lower, "statystyki") || strings.Contains(lower, "ostatnia kolejka") {
+		return false
+	}
+
+	return true
 }
 
 func looksLikeRoundHeading(text string) bool {
