@@ -45,6 +45,9 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 					if match.Home == "" || match.Away == "" || match.Score == "" {
 						t.Fatalf("fixture has empty fields in %s", fixture.Name)
 					}
+					if isScoreLikeText(match.Home) || isScoreLikeText(match.Away) {
+						t.Fatalf("fixture side parsed as score token in %s: home=%q away=%q", fixture.Name, match.Home, match.Away)
+					}
 					if !strings.Contains(match.MatchURL, "mecz.php") {
 						t.Fatalf("fixture match url is not a match link in %s: %q", fixture.Name, match.MatchURL)
 					}
