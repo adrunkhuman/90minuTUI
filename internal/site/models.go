@@ -1,14 +1,16 @@
 package site
 
 type Season struct {
-	Label   string
-	URL     string
-	Current bool
+	Label    string
+	URL      string
+	SeasonID string
+	Current  bool
 }
 
 type Competition struct {
-	Name string
-	URL  string
+	Name      string
+	URL       string
+	LeagueKey string
 }
 
 type Fixture struct {
@@ -17,6 +19,7 @@ type Fixture struct {
 	Score    string
 	WhenInfo string
 	MatchURL string
+	MatchID  string
 }
 
 type Round struct {
@@ -25,14 +28,16 @@ type Round struct {
 }
 
 type LeaguePage struct {
-	Title  string
-	URL    string
-	Rounds []Round
+	Title     string
+	URL       string
+	LeagueKey string
+	Rounds    []Round
 }
 
 type MatchPage struct {
 	Title       string
 	URL         string
+	MatchID     string
 	Competition string
 	Meta        string
 	Weather     string

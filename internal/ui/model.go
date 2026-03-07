@@ -29,21 +29,21 @@ type archiveLoadedMsg struct {
 }
 
 type competitionsLoadedMsg struct {
-	seasonIdx    int
+	seasonKey    string
 	competitions []site.Competition
 	err          error
 }
 
 type leagueLoadedMsg struct {
-	competitionIdx int
+	competitionKey string
 	league         *site.LeaguePage
 	err            error
 }
 
 type matchLoadedMsg struct {
-	matchURL string
-	match    *site.MatchPage
-	err      error
+	fixtureKey string
+	match      *site.MatchPage
+	err        error
 }
 
 type Model struct {
@@ -135,13 +135,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.loadArchiveCmd("http://www.90minut.pl/archsezon.php")
 			}
 			if m.focus == focusSeasons {
-				return m, m.loadSeasonCompetitionsCmd(m.seasons[m.seasonCursor].URL, m.seasonCursor)
+				season := m.currentSeason()
+				if season == nil {
+					m.loading = false
+					return m, nil
+				}
+				return m, m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season))
 			}
 			if len(m.competitions) == 0 {
 				m.loading = false
 				return m, nil
 			}
-			return m, m.loadLeagueCmd(m.competitions[m.competitionCursor].URL, m.competitionCursor)
+			competition := m.currentCompetition()
+			if competition == nil {
+				m.loading = false
+				return m, nil
+			}
+			return m, m.loadLeagueCmd(competition.URL, competitionRequestKey(*competition))
 		}
 
 	case archiveLoadedMsg:
@@ -162,7 +172,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.loading = true
-		return m, m.loadLeagueCmd(m.competitions[m.competitionCursor].URL, m.competitionCursor)
+		competition := m.currentCompetition()
+		if competition == nil {
+			m.loading = false
+			return m, nil
+		}
+		return m, m.loadLeagueCmd(competition.URL, competitionRequestKey(*competition))
 
 	case competitionsLoadedMsg:
 		m.loading = false
@@ -171,7 +186,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if msg.seasonIdx != m.seasonCursor {
+		season := m.currentSeason()
+		if season == nil || msg.seasonKey != seasonRequestKey(*season) {
 			return m, nil
 		}
 
@@ -187,7 +203,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.loading = true
-		return m, m.loadLeagueCmd(m.competitions[m.competitionCursor].URL, m.competitionCursor)
+		competition := m.currentCompetition()
+		if competition == nil {
+			m.loading = false
+			return m, nil
+		}
+		return m, m.loadLeagueCmd(competition.URL, competitionRequestKey(*competition))
 
 	case leagueLoadedMsg:
 		m.loading = false
@@ -197,7 +218,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if msg.competitionIdx != m.competitionCursor {
+		competition := m.currentCompetition()
+		if competition == nil || msg.competitionKey != competitionRequestKey(*competition) {
 			return m, nil
 		}
 
@@ -220,7 +242,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		current := m.currentFixture()
-		if current == nil || current.MatchURL != msg.matchURL {
+		if current == nil || fixtureRequestKey(*current) != msg.fixtureKey {
 			return m, nil
 		}
 
@@ -475,7 +497,12 @@ func (m *Model) handleEnter() tea.Cmd {
 		}
 		m.matchView = false
 		m.match = nil
-		return m.loadSeasonCompetitionsCmd(m.seasons[m.seasonCursor].URL, m.seasonCursor)
+		season := m.currentSeason()
+		if season == nil {
+			m.loading = false
+			return nil
+		}
+		return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season))
 
 	case focusCompetitions:
 		if len(m.competitions) == 0 {
@@ -484,7 +511,12 @@ func (m *Model) handleEnter() tea.Cmd {
 		}
 		m.matchView = false
 		m.match = nil
-		return m.loadLeagueCmd(m.competitions[m.competitionCursor].URL, m.competitionCursor)
+		competition := m.currentCompetition()
+		if competition == nil {
+			m.loading = false
+			return nil
+		}
+		return m.loadLeagueCmd(competition.URL, competitionRequestKey(*competition))
 
 	case focusFixtures:
 		fixture := m.currentFixture()
@@ -492,7 +524,7 @@ func (m *Model) handleEnter() tea.Cmd {
 			m.loading = false
 			return nil
 		}
-		return m.loadMatchCmd(fixture.MatchURL)
+		return m.loadMatchCmd(fixture.MatchURL, fixtureRequestKey(*fixture))
 	}
 
 	m.loading = false
@@ -507,6 +539,26 @@ func (m Model) currentRound() *site.Round {
 		return nil
 	}
 	return &m.league.Rounds[m.roundCursor]
+}
+
+func (m Model) currentSeason() *site.Season {
+	if len(m.seasons) == 0 {
+		return nil
+	}
+	if m.seasonCursor < 0 || m.seasonCursor >= len(m.seasons) {
+		return nil
+	}
+	return &m.seasons[m.seasonCursor]
+}
+
+func (m Model) currentCompetition() *site.Competition {
+	if len(m.competitions) == 0 {
+		return nil
+	}
+	if m.competitionCursor < 0 || m.competitionCursor >= len(m.competitions) {
+		return nil
+	}
+	return &m.competitions[m.competitionCursor]
 }
 
 func (m Model) currentFixture() *site.Fixture {
@@ -541,31 +593,52 @@ func (m Model) loadArchiveCmd(url string) tea.Cmd {
 	}
 }
 
-func (m Model) loadSeasonCompetitionsCmd(url string, seasonIdx int) tea.Cmd {
+func (m Model) loadSeasonCompetitionsCmd(url, seasonKey string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		_, _, competitions, err := m.service.LoadArchive(ctx, url)
-		return competitionsLoadedMsg{seasonIdx: seasonIdx, competitions: competitions, err: err}
+		return competitionsLoadedMsg{seasonKey: seasonKey, competitions: competitions, err: err}
 	}
 }
 
-func (m Model) loadLeagueCmd(url string, competitionIdx int) tea.Cmd {
+func (m Model) loadLeagueCmd(url, competitionKey string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		league, err := m.service.LoadLeague(ctx, url)
-		return leagueLoadedMsg{competitionIdx: competitionIdx, league: league, err: err}
+		return leagueLoadedMsg{competitionKey: competitionKey, league: league, err: err}
 	}
 }
 
-func (m Model) loadMatchCmd(url string) tea.Cmd {
+func (m Model) loadMatchCmd(url, fixtureKey string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		match, err := m.service.LoadMatch(ctx, url)
-		return matchLoadedMsg{matchURL: url, match: match, err: err}
+		return matchLoadedMsg{fixtureKey: fixtureKey, match: match, err: err}
 	}
+}
+
+func seasonRequestKey(season site.Season) string {
+	if season.SeasonID != "" {
+		return "season:" + season.SeasonID
+	}
+	return "season-url:" + strings.TrimSpace(season.URL)
+}
+
+func competitionRequestKey(competition site.Competition) string {
+	if competition.LeagueKey != "" {
+		return "league:" + competition.LeagueKey
+	}
+	return "league-url:" + strings.TrimSpace(competition.URL)
+}
+
+func fixtureRequestKey(fixture site.Fixture) string {
+	if fixture.MatchID != "" {
+		return "match:" + fixture.MatchID
+	}
+	return "match-url:" + strings.TrimSpace(fixture.MatchURL)
 }
 
 func renderSeasonsWindow(seasons []site.Season, cursor int) []string {

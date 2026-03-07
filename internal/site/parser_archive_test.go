@@ -53,6 +53,9 @@ func TestParseSeasonsAndCompetitionsFromArchiveFixtures(t *testing.T) {
 
 			currentCount := 0
 			for _, season := range seasons {
+				if season.SeasonID == "" {
+					t.Fatalf("expected season id for %q", season.URL)
+				}
 				if season.Current {
 					currentCount++
 				}
@@ -69,6 +72,11 @@ func TestParseSeasonsAndCompetitionsFromArchiveFixtures(t *testing.T) {
 			competitions := parseCompetitions(doc, c)
 			if len(competitions) == 0 {
 				t.Fatalf("expected competitions from %s", fixture.Name)
+			}
+			for _, competition := range competitions {
+				if competition.LeagueKey == "" {
+					t.Fatalf("expected league key for %q", competition.URL)
+				}
 			}
 
 			if fixture.Name == "archive_2020_21" {

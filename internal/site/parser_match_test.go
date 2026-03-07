@@ -34,6 +34,12 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 			if page.Title == "" {
 				t.Fatalf("expected title for %s", fixture.Name)
 			}
+			if page.MatchID == "" {
+				t.Fatalf("expected match id for %s", fixture.Name)
+			}
+			if fixtureID := extractMatchID(fixture.URL); fixtureID != "" && page.MatchID != fixtureID {
+				t.Fatalf("match id mismatch for %s: got %q want %q", fixture.Name, page.MatchID, fixtureID)
+			}
 
 			if hasPolishDiacritic(page.HomeTeam) || hasPolishDiacritic(page.AwayTeam) {
 				foundDiacritics = true

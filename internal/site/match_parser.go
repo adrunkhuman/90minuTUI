@@ -17,10 +17,10 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 
 	table := findMatchMainTable(doc)
 	if table.Length() == 0 {
-		return &MatchPage{Title: title, URL: url}
+		return &MatchPage{Title: title, URL: url, MatchID: extractMatchID(url)}
 	}
 
-	page := &MatchPage{Title: title, URL: url}
+	page := &MatchPage{Title: title, URL: url, MatchID: extractMatchID(url)}
 
 	page.Competition = normalizeWhitespace(table.Find("tr").First().Find("b").First().Text())
 	page.Meta = firstMetaLine(table)

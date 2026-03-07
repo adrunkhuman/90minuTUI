@@ -34,6 +34,9 @@ func TestParseLeaguePageWithoutWidthSelectors(t *testing.T) {
 	if len(page.Rounds) != 1 {
 		t.Fatalf("expected 1 round, got %d", len(page.Rounds))
 	}
+	if page.LeagueKey != "www.90minut.pl/liga/1/liga-test.html" {
+		t.Fatalf("unexpected league key: %q", page.LeagueKey)
+	}
 	if page.Rounds[0].Name != "1. kolejka" {
 		t.Fatalf("unexpected round name: %q", page.Rounds[0].Name)
 	}
@@ -47,6 +50,9 @@ func TestParseLeaguePageWithoutWidthSelectors(t *testing.T) {
 	}
 	if fixture.MatchURL != "/mecz.php?id_mecz=123" {
 		t.Fatalf("unexpected match URL: %q", fixture.MatchURL)
+	}
+	if fixture.MatchID != "123" {
+		t.Fatalf("unexpected match id: %q", fixture.MatchID)
 	}
 }
 
@@ -73,6 +79,9 @@ func TestParseMatchPageWithout480Width(t *testing.T) {
 	}
 	if page.Score != "2-1" {
 		t.Fatalf("unexpected score: %q", page.Score)
+	}
+	if page.MatchID != "555" {
+		t.Fatalf("unexpected match id: %q", page.MatchID)
 	}
 	if page.HomeTeam != "GKS Tychy" || page.AwayTeam != "Odra Opole" {
 		t.Fatalf("unexpected team names: %q vs %q", page.HomeTeam, page.AwayTeam)
