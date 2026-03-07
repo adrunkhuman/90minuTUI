@@ -1,0 +1,148 @@
+{
+  "generated_at": "sha256:3e120f99aa68d246aeea2dda990e65a2d434dd343546b15772a054c92a37229f",
+  "source": "http://www.90minut.pl/archsezon.php",
+  "fixtures": [
+    {
+      "name": "archive_current",
+      "kind": "archive",
+      "url": "http://www.90minut.pl/archsezon.php",
+      "season": "current",
+      "file": "fixtures/archive_current.html"
+    },
+    {
+      "name": "archive_2019_20",
+      "kind": "archive",
+      "url": "http://www.90minut.pl/archsezon.php?id_sezon=95",
+      "season": "2019/20",
+      "file": "fixtures/archive_2019_20.html"
+    },
+    {
+      "name": "archive_2020_21",
+      "kind": "archive",
+      "url": "http://www.90minut.pl/archsezon.php?id_sezon=97",
+      "season": "2020/21",
+      "file": "fixtures/archive_2020_21.html"
+    },
+    {
+      "name": "archive_1975_76",
+      "kind": "archive",
+      "url": "http://www.90minut.pl/archsezon.php?id_sezon=7",
+      "season": "1975/76",
+      "file": "fixtures/archive_1975_76.html"
+    },
+    {
+      "name": "archive_1958",
+      "kind": "archive",
+      "url": "http://www.90minut.pl/archsezon.php?id_sezon=-28",
+      "season": "1958",
+      "file": "fixtures/archive_1958.html"
+    },
+    {
+      "name": "league_14072",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga14072.html",
+      "season": "2025/26",
+      "file": "fixtures/league_14072.html",
+      "note": "addenda-heavy fixture rows"
+    },
+    {
+      "name": "league_14073",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga14073.html",
+      "season": "2025/26",
+      "file": "fixtures/league_14073.html",
+      "note": "round text annotations"
+    },
+    {
+      "name": "league_liga11233",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga11233.html",
+      "season": "2020/21",
+      "file": "fixtures/league_liga11233.html"
+    },
+    {
+      "name": "league_liga11234",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga11234.html",
+      "season": "2020/21",
+      "file": "fixtures/league_liga11234.html"
+    },
+    {
+      "name": "league_liga10550",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga10550.html",
+      "season": "2019/20",
+      "file": "fixtures/league_liga10550.html"
+    },
+    {
+      "name": "league_liga10551",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga10551.html",
+      "season": "2019/20",
+      "file": "fixtures/league_liga10551.html"
+    },
+    {
+      "name": "league_liga11235",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga11235.html",
+      "season": "2020/21",
+      "file": "fixtures/league_liga11235.html"
+    },
+    {
+      "name": "match_2022810",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=2022810",
+      "season": "2025/26",
+      "file": "fixtures/match_2022810.html"
+    },
+    {
+      "name": "match_2022745",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=2022745",
+      "season": "2025/26",
+      "file": "fixtures/match_2022745.html"
+    },
+    {
+      "name": "match_2023487",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=2023487",
+      "season": "2025/26",
+      "file": "fixtures/match_2023487.html"
+    },
+    {
+      "name": "match_2023485",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=2023485",
+      "season": "2025/26",
+      "file": "fixtures/match_2023485.html"
+    },
+    {
+      "name": "match_1659735",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=1659735",
+      "season": "2020/21",
+      "file": "fixtures/match_1659735.html"
+    },
+    {
+      "name": "match_1659853",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=1659853",
+      "season": "2020/21",
+      "file": "fixtures/match_1659853.html"
+    },
+    {
+      "name": "match_1666115",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=1666115",
+      "season": "2020/21",
+      "file": "fixtures/match_1666115.html"
+    },
+    {
+      "name": "match_1666308",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=1666308",
+      "season": "2020/21",
+      "file": "fixtures/match_1666308.html"
+    }
+  ]
+}
