@@ -113,6 +113,29 @@ func TestParseFixturesTableSkipsRowsWithMultipleMatchLinks(t *testing.T) {
 	}
 }
 
+func TestRoundNameFromTableSkipsNavigationBlocks(t *testing.T) {
+	html := `
+	<table>
+	<tr>
+		<td>
+			.: <a href="/liga/1/liga14072.html" class="main">Wyniki</a> |
+			<a href="/strzelcy.php?id=14072" class="main">Strzelcy</a> |
+			<a href="/stats.php?id=14072" class="main">Statystyki</a> |
+			<a href="/liga/1/liga14072.html#last" class="main">Ostatnia kolejka</a> :.
+		</td>
+	</tr>
+	</table>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	if name, ok := roundNameFromTable(doc.Find("table").First()); ok {
+		t.Fatalf("expected nav block to be ignored, got %q", name)
+	}
+}
+
 func TestValidateMatchPageAllowsPartialWhenTeamsPresent(t *testing.T) {
 	page := &MatchPage{
 		Title:    "Match",
