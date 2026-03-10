@@ -104,3 +104,22 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 		})
 	}
 }
+
+func TestParseLeagueStandingsFromCorpus(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_liga11233.html")
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga11233.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Standings) != 16 {
+		t.Fatalf("unexpected standings row count: got %d want 16", len(page.Standings))
+	}
+
+	first := page.Standings[0]
+	if first.Position != 1 || first.Team != "Legia Warszawa" {
+		t.Fatalf("unexpected first standings row: %+v", first)
+	}
+	if first.Played != 30 || first.Won != 19 || first.Drawn != 7 || first.Lost != 4 || first.Points != 64 {
+		t.Fatalf("unexpected first standings stats: %+v", first)
+	}
+}

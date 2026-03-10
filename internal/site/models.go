@@ -27,10 +27,21 @@ type Round struct {
 	Fixtures []Fixture
 }
 
+type StandingRow struct {
+	Position int
+	Team     string
+	Played   int
+	Won      int
+	Drawn    int
+	Lost     int
+	Points   int
+}
+
 type LeaguePage struct {
 	Title     string
 	URL       string
 	LeagueKey string
+	Standings []StandingRow
 	Rounds    []Round
 }
 

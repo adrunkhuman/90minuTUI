@@ -3,7 +3,10 @@ package ui
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
 )
@@ -246,4 +249,109 @@ func layoutWidths(total int, collapsed, emphasizeRight bool) (int, int) {
 	}
 
 	return leftWidth, rightWidth
+}
+
+func leagueLayoutWidths(total int) (int, int) {
+	if total < 88 {
+		return 0, total
+	}
+
+	leftWidth := clamp(total/2, 44, 66)
+	rightWidth := total - leftWidth - 1
+	if rightWidth < 36 {
+		rightWidth = 36
+		leftWidth = max(0, total-rightWidth-1)
+	}
+
+	return leftWidth, rightWidth
+}
+
+func matchLayoutWidths(total int) (int, int, int) {
+	if total < 72 {
+		return 0, total, 0
+	}
+
+	leftWidth := clamp(total/5, 22, 30)
+	centerWidth := total - leftWidth - 1
+	if centerWidth >= 40 {
+		return leftWidth, centerWidth, 0
+	}
+
+	return 0, total, 0
+}
+
+func abbreviateTeamName(name string) string {
+	clean := strings.TrimSpace(name)
+	if clean == "" {
+		return "---"
+	}
+
+	var letters []rune
+	for _, r := range []rune(clean) {
+		if unicode.IsLetter(r) {
+			letters = append(letters, unicode.ToUpper(r))
+		}
+		if len(letters) == 3 {
+			break
+		}
+	}
+
+	if len(letters) == 0 {
+		letters = []rune(strings.ToUpper(clean))
+	}
+	if len(letters) >= 3 {
+		return string(letters[:3])
+	}
+
+	return padRight(string(letters), 3)
+}
+
+func abbreviatedFixtureLine(fixture *site.Fixture) string {
+	if fixture == nil {
+		return "--- ?-? ---"
+	}
+
+	return fmt.Sprintf("%s %s %s", abbreviateTeamName(fixture.Home), normalizeScore(fixture.Score), abbreviateTeamName(fixture.Away))
+}
+
+func normalizeScore(score string) string {
+	trimmed := strings.TrimSpace(score)
+	if trimmed == "" {
+		return "?-?"
+	}
+	return strings.ReplaceAll(trimmed, "-", "-")
+}
+
+func formatFetchTime(ts time.Time) string {
+	if ts.IsZero() {
+		return "never"
+	}
+	return ts.Format("15:04:05")
+}
+
+func formatStandingRow(row site.StandingRow, selected bool, width int) string {
+	prefix := "  "
+	if selected {
+		prefix = "> "
+	}
+
+	line := fmt.Sprintf("%s%2d %-18s %2d %2d %2d %2d %3d", prefix, row.Position, truncate(row.Team, 18), row.Played, row.Won, row.Drawn, row.Lost, row.Points)
+	return truncate(line, max(12, width))
+}
+
+func parseRoundNumber(name string, fallback int) string {
+	for _, field := range strings.Fields(name) {
+		if _, err := strconv.Atoi(field); err == nil {
+			return field
+		}
+		trimmed := strings.TrimRight(field, ".")
+		if _, err := strconv.Atoi(trimmed); err == nil {
+			return trimmed
+		}
+	}
+
+	if fallback <= 0 {
+		return "?"
+	}
+	return strconv.Itoa(fallback)
 }

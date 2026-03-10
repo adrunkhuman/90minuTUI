@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
 )
@@ -70,6 +71,7 @@ type Model struct {
 	match     *site.MatchPage
 
 	sidebarCollapsed bool
+	lastFetchAt      time.Time
 }
 
 func NewModel(svc archiveLoader) Model {

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -52,6 +54,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.matchView = false
 				m.match = nil
 				m.err = ""
+				return m, nil
+			}
+			if m.league != nil {
+				m.league = nil
+				m.match = nil
+				m.err = ""
+				m.focus = focusCompetitions
 			}
 			return m, nil
 		case "r":
@@ -90,6 +99,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.err = ""
+		m.lastFetchAt = time.Now()
 		m.seasons = msg.seasons
 		m.seasonCursor = clamp(msg.selectedIdx, 0, len(m.seasons)-1)
 		m.competitions = msg.competitions
@@ -121,6 +131,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.err = ""
+		m.lastFetchAt = time.Now()
 		m.competitions = msg.competitions
 		m.competitionCursor = m.preferredCompetitionIndex()
 		m.league = nil
@@ -154,6 +165,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.err = ""
+		m.lastFetchAt = time.Now()
 		m.matchView = false
 		m.match = nil
 		m.league = msg.league
@@ -166,7 +178,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err.Error()
-			m.matchView = false
 			m.match = nil
 			return m, nil
 		}
@@ -178,6 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.err = ""
+		m.lastFetchAt = time.Now()
 		m.matchView = true
 		m.match = msg.match
 		return m, nil
@@ -187,10 +199,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) toggleFocus() {
-	order := []focusArea{focusSeasons, focusCompetitions}
-	if m.league != nil && len(m.league.Rounds) > 0 {
-		order = append(order, focusFixtures)
+	if m.league != nil {
+		return
 	}
+
+	order := []focusArea{focusSeasons, focusCompetitions}
 
 	for i := range order {
 		if order[i] != m.focus {
@@ -270,6 +283,8 @@ func (m *Model) handleEnter() tea.Cmd {
 			m.loading = false
 			return nil
 		}
+		m.matchView = true
+		m.match = nil
 		return m.loadMatchCmd(fixture.MatchURL, fixtureRequestKey(*fixture))
 	}
 

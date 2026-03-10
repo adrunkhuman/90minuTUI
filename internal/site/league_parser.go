@@ -1,6 +1,7 @@
 package site
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -15,6 +16,7 @@ func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	if page.Title == "" {
 		page.Title = strings.TrimSpace(doc.Find("td.main b").First().Text())
 	}
+	page.Standings = parseStandings(doc)
 
 	rounds := parseRounds(doc)
 	if len(rounds) == 0 {
@@ -187,6 +189,85 @@ func parseFixturesTable(table *goquery.Selection) []Fixture {
 	})
 
 	return fixtures
+}
+
+func parseStandings(doc *goquery.Document) []StandingRow {
+	var standings []StandingRow
+
+	leagueTables(doc).EachWithBreak(func(_ int, table *goquery.Selection) bool {
+		header := table.Find("tr").FilterFunction(func(_ int, row *goquery.Selection) bool {
+			text := normalizeWhitespace(row.Text())
+			return strings.Contains(text, "Nazwa") && strings.Contains(text, "Pkt.")
+		}).First()
+		if header.Length() == 0 {
+			return true
+		}
+
+		headerFound := false
+		parsed := make([]StandingRow, 0, 18)
+		table.Find("tr").EachWithBreak(func(_ int, row *goquery.Selection) bool {
+			if !headerFound {
+				if row.IsSelection(header) {
+					headerFound = true
+				}
+				return true
+			}
+
+			standing, ok := parseStandingRow(row)
+			if !ok {
+				return len(parsed) == 0
+			}
+
+			parsed = append(parsed, standing)
+			return true
+		})
+
+		if len(parsed) > 0 {
+			standings = parsed
+			return false
+		}
+
+		return true
+	})
+
+	return standings
+}
+
+func parseStandingRow(row *goquery.Selection) (StandingRow, bool) {
+	tds := row.Find("td")
+	if tds.Length() < 7 {
+		return StandingRow{}, false
+	}
+
+	position := parseIntCell(strings.TrimSuffix(normalizeWhitespace(tds.Eq(0).Text()), "."))
+	team := normalizeWhitespace(tds.Eq(1).Text())
+	played := parseIntCell(tds.Eq(2).Text())
+	points := parseIntCell(tds.Eq(3).Text())
+	won := parseIntCell(tds.Eq(4).Text())
+	drawn := parseIntCell(tds.Eq(5).Text())
+	lost := parseIntCell(tds.Eq(6).Text())
+
+	if position <= 0 || team == "" || played < 0 || points < 0 || won < 0 || drawn < 0 || lost < 0 {
+		return StandingRow{}, false
+	}
+
+	return StandingRow{
+		Position: position,
+		Team:     team,
+		Played:   played,
+		Won:      won,
+		Drawn:    drawn,
+		Lost:     lost,
+		Points:   points,
+	}, true
+}
+
+func parseIntCell(text string) int {
+	value := 0
+	if _, err := fmt.Sscanf(strings.TrimSpace(text), "%d", &value); err != nil {
+		return -1
+	}
+	return value
 }
 
 func nearestTeamCellText(tds *goquery.Selection, start, step int) (string, int) {

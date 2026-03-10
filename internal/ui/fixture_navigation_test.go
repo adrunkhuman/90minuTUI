@@ -86,6 +86,12 @@ func TestFixtureEnterLoadsMatchWithoutReloadingLeague(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected enter on fixture to return loadMatch command")
 	}
+	if !m.matchView {
+		t.Fatalf("expected immediate transition into match view while loading")
+	}
+	if m.match != nil {
+		t.Fatalf("expected match details to remain empty until load completes")
+	}
 	if loader.leagueCalls != 1 {
 		t.Fatalf("expected league load count to stay at 1 before running match command, got %d", loader.leagueCalls)
 	}
@@ -102,6 +108,22 @@ func TestFixtureEnterLoadsMatchWithoutReloadingLeague(t *testing.T) {
 	}
 	if !m.matchView || m.match == nil || m.match.MatchID != "1" {
 		t.Fatalf("expected match view for fixture #1")
+	}
+}
+
+func TestEscapeFromLeagueViewReturnsToSelector(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("expected no command when returning to selector")
+	}
+	if m.league != nil {
+		t.Fatalf("expected escape to leave league view and return to selector")
+	}
+	if m.focus != focusCompetitions {
+		t.Fatalf("expected selector to focus competitions after leaving league view, got %v", m.focus)
 	}
 }
 
@@ -167,6 +189,7 @@ func newRecordingLoader() *recordingLoader {
 			Title:     "Ekstraklasa",
 			URL:       "http://www.90minut.pl/liga/1/liga11233.html",
 			LeagueKey: "liga11233",
+			Standings: []site.StandingRow{{Position: 1, Team: "Team A", Played: 1, Won: 1, Drawn: 0, Lost: 0, Points: 3}, {Position: 2, Team: "Team B", Played: 1, Won: 0, Drawn: 0, Lost: 1, Points: 0}},
 			Rounds: []site.Round{{
 				Name: "1. kolejka",
 				Fixtures: []site.Fixture{
