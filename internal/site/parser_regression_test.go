@@ -91,6 +91,64 @@ func TestParseMatchPageWithout480Width(t *testing.T) {
 	}
 }
 
+func TestParseMatchPageSkipsBreadcrumbLikeMeta(t *testing.T) {
+	html := `
+	<html><head><title>Match Test</title></head><body>
+	<table class="main" width="620">
+	<tr><td colspan="3"><b>I liga - Kolejka 1</b></td></tr>
+	<tr><td colspan="3">Strona główna</td></tr>
+	<tr><td colspan="3">1 marca 2026, 18:00 1234 Jan Kowalski</td></tr>
+	<tr><td>GKS Tychy</td><td>2-1</td><td>Odra Opole</td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	page := parseMatchPage(doc, "http://www.90minut.pl/mecz.php?id_mecz=555")
+	if page == nil {
+		t.Fatalf("expected match page")
+	}
+	if page.Meta != "1 marca 2026, 18:00 1234 Jan Kowalski" {
+		t.Fatalf("unexpected meta: %q", page.Meta)
+	}
+}
+
+func TestParseLeaguePageSeparatesKnockoutStageFromLeagueRound(t *testing.T) {
+	html := `
+	<html><head><title>Europe</title></head><body>
+	<table><tr><td><u>8. kolejka - 28 stycznia</u></td></tr></table>
+	<table>
+	<tr><td>Team A</td><td><a href="/mecz.php?id_mecz=1">1-0</a></td><td>Team B</td><td>28 stycznia, 21:00 (5000)</td></tr>
+	</table>
+	<table><tr><td><u>1/8 finału</u></td></tr></table>
+	<table>
+	<tr><td>Team C</td><td><a href="/mecz.php?id_mecz=2">2-1</a></td><td>Team D</td><td>17 lutego, 21:00 (7000)</td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/europe.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Rounds) != 2 {
+		t.Fatalf("expected 2 rounds, got %d", len(page.Rounds))
+	}
+	if page.Rounds[0].Name != "8. kolejka - 28 stycznia" {
+		t.Fatalf("unexpected first round: %q", page.Rounds[0].Name)
+	}
+	if page.Rounds[1].Name != "1/8 finału" {
+		t.Fatalf("unexpected second round: %q", page.Rounds[1].Name)
+	}
+}
+
 func TestParseFixturesTableSkipsRowsWithMultipleMatchLinks(t *testing.T) {
 	html := `
 	<table>

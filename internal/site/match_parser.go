@@ -2,10 +2,13 @@ package site
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+var matchMetaLineRe = regexp.MustCompile(`\d{1,2}\s+\p{L}+.*\d{1,2}:\d{2}`)
 
 // It identifies the match table by content signatures instead of a fixed width.
 func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
@@ -173,11 +176,32 @@ func firstMetaLine(table *goquery.Selection) string {
 			return true
 		}
 
+		if normalizeWhitespace(td.Find("b").First().Text()) == text {
+			return true
+		}
+
+		if !looksLikeMatchMeta(text) {
+			return true
+		}
+
 		meta = text
 		return false
 	})
 
 	return meta
+}
+
+func looksLikeMatchMeta(text string) bool {
+	cleaned := normalizeWhitespace(text)
+	lower := strings.ToLower(cleaned)
+	if lower == "" {
+		return false
+	}
+	if strings.Contains(lower, "strona główna") || strings.Contains(lower, "strona g") {
+		return false
+	}
+
+	return matchMetaLineRe.MatchString(cleaned)
 }
 
 func isLineupRow(row *goquery.Selection) bool {
