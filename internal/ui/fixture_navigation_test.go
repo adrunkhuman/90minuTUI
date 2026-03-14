@@ -111,19 +111,69 @@ func TestFixtureEnterLoadsMatchWithoutReloadingLeague(t *testing.T) {
 	}
 }
 
-func TestEscapeFromLeagueViewReturnsToSelector(t *testing.T) {
+func TestMatchViewNavigationScrollsWithoutReloadingFixture(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected match load command on enter")
+	}
+	m, _ = updateModelWithMsg(t, m, cmd())
+	m.match.Events = make([]site.MatchEvent, 0, 20)
+	for i := 1; i <= 20; i++ {
+		m.match.Events = append(m.match.Events, site.MatchEvent{MinuteText: "1", TeamSide: "home", Kind: "SUB", Text: "event"})
+	}
+
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	if cmd != nil {
+		t.Fatalf("expected match scroll to avoid loading another fixture")
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "1" {
+		t.Fatalf("expected current fixture to stay selected in match view")
+	}
+	if !m.matchView || m.loading || m.match == nil {
+		t.Fatalf("expected match view to stay open while scrolling")
+	}
+	if loader.matchCalls != 1 {
+		t.Fatalf("expected no extra match loads while scrolling, got %d", loader.matchCalls)
+	}
+}
+
+func TestEscapeFromLeagueViewTogglesSelectorPopup(t *testing.T) {
 	loader := newRecordingLoader()
 	m := bootstrapLeagueLoadedModel(t, loader)
 
 	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	if cmd != nil {
-		t.Fatalf("expected no command when returning to selector")
+		t.Fatalf("expected no command when opening selector popup")
 	}
-	if m.league != nil {
-		t.Fatalf("expected escape to leave league view and return to selector")
+	if m.league == nil {
+		t.Fatalf("expected league to stay loaded when opening selector popup")
+	}
+	if !m.selectorVisible {
+		t.Fatalf("expected escape to open selector popup")
 	}
 	if m.focus != focusCompetitions {
-		t.Fatalf("expected selector to focus competitions after leaving league view, got %v", m.focus)
+		t.Fatalf("expected selector popup to focus competitions, got %v", m.focus)
+	}
+
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("expected no command when closing selector popup")
+	}
+	if m.selectorVisible {
+		t.Fatalf("expected second escape to close selector popup")
+	}
+	if m.focus != focusFixtures {
+		t.Fatalf("expected closing selector popup to restore fixtures focus, got %v", m.focus)
+	}
+}
+
+func TestAnchoredWindowBoundsKeepsSelectedStandingVisible(t *testing.T) {
+	start, end := anchoredWindowBounds(30, []int{1, 18}, 6)
+	if !(start <= 1 && 1 < end) {
+		t.Fatalf("expected anchored window to include at least one selected row, got start=%d end=%d", start, end)
 	}
 }
 

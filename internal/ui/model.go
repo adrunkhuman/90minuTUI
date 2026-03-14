@@ -67,15 +67,34 @@ type Model struct {
 	roundCursor   int
 	fixtureCursor int
 
-	matchView bool
-	match     *site.MatchPage
+	matchView   bool
+	match       *site.MatchPage
+	matchScroll int
 
-	sidebarCollapsed bool
-	lastFetchAt      time.Time
+	selectorVisible bool
+	lastFetchAt     time.Time
 }
 
 func NewModel(svc archiveLoader) Model {
 	return Model{service: svc, focus: focusCompetitions, loading: true}
+}
+
+func (m Model) selectorActive() bool {
+	return m.selectorVisible || m.league == nil
+}
+
+func (m *Model) openSelector() {
+	m.selectorVisible = true
+	if m.focus == focusFixtures {
+		m.focus = focusCompetitions
+	}
+}
+
+func (m *Model) closeSelector() {
+	m.selectorVisible = false
+	if m.league != nil {
+		m.focus = focusFixtures
+	}
 }
 
 func (m Model) currentRound() *site.Round {

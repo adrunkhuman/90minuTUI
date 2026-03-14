@@ -53,7 +53,69 @@ func renderCompetitionWindow(items []site.Competition, cursor int) []string {
 	return lines
 }
 
+func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems int) []string {
+	if len(fixtures) == 0 {
+		return nil
+	}
+	if maxItems <= 0 {
+		return nil
+	}
+
+	start, end := windowBounds(len(fixtures), cursor, maxItems)
+	lines := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		prefix := "  "
+		if i == cursor {
+			prefix = "> "
+		}
+
+		line := prefix + abbreviatedFixtureLine(&fixtures[i])
+		if fixtures[i].WhenInfo != "" {
+			line += " | " + fixtures[i].WhenInfo
+		}
+		lines = append(lines, line)
+	}
+
+	return lines
+}
+
+func renderStandingsWindow(rows []site.StandingRow, fixture *site.Fixture, width, maxItems int) []string {
+	if len(rows) == 0 {
+		return nil
+	}
+	if maxItems <= 0 {
+		return nil
+	}
+
+	start, end := anchoredWindowBounds(len(rows), standingSelectionIndices(rows, fixture), maxItems)
+	lines := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		selected := fixture != nil && (strings.EqualFold(rows[i].Team, fixture.Home) || strings.EqualFold(rows[i].Team, fixture.Away))
+		lines = append(lines, formatStandingRow(rows[i], selected, width))
+	}
+
+	return lines
+}
+
+func standingSelectionIndices(rows []site.StandingRow, fixture *site.Fixture) []int {
+	if fixture == nil {
+		return nil
+	}
+
+	indices := make([]int, 0, 2)
+	for i, row := range rows {
+		if strings.EqualFold(row.Team, fixture.Home) || strings.EqualFold(row.Team, fixture.Away) {
+			indices = append(indices, i)
+		}
+	}
+
+	return indices
+}
+
 func windowBounds(total, cursor, maxItems int) (int, int) {
+	if maxItems <= 0 {
+		return 0, 0
+	}
 	if total <= maxItems {
 		return 0, total
 	}
@@ -64,6 +126,46 @@ func windowBounds(total, cursor, maxItems int) (int, int) {
 		start = 0
 	}
 
+	end := start + maxItems
+	if end > total {
+		end = total
+		start = end - maxItems
+	}
+
+	return start, end
+}
+
+func anchoredWindowBounds(total int, anchors []int, maxItems int) (int, int) {
+	if maxItems <= 0 {
+		return 0, 0
+	}
+	if total <= maxItems {
+		return 0, total
+	}
+	if len(anchors) == 0 {
+		return windowBounds(total, 0, maxItems)
+	}
+
+	minAnchor := anchors[0]
+	maxAnchor := anchors[0]
+	for _, anchor := range anchors[1:] {
+		if anchor < minAnchor {
+			minAnchor = anchor
+		}
+		if anchor > maxAnchor {
+			maxAnchor = anchor
+		}
+	}
+
+	span := maxAnchor - minAnchor + 1
+	if span >= maxItems {
+		return windowBounds(total, minAnchor, maxItems)
+	}
+
+	start := minAnchor - (maxItems-span)/2
+	if start < 0 {
+		start = 0
+	}
 	end := start + maxItems
 	if end > total {
 		end = total
@@ -271,7 +373,7 @@ func matchLayoutWidths(total int) (int, int, int) {
 		return 0, total, 0
 	}
 
-	leftWidth := clamp(total/5, 22, 30)
+	leftWidth := clamp(total/3, 34, 48)
 	centerWidth := total - leftWidth - 1
 	if centerWidth >= 40 {
 		return leftWidth, centerWidth, 0

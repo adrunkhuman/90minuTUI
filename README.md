@@ -5,14 +5,13 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
 ## Scope
 
 - Small, single-binary Go app.
-- Read-only browsing flow: `season -> league -> fixture -> match`.
-- Startup preloads the selected season and opens its preferred competition (defaults to `Ekstraklasa` when present), then focuses fixtures.
+- Read-only browsing flow: `league -> fixture -> match`, with season/league selection available as a popup.
+- Startup preloads the selected season and opens its preferred competition (defaults to `Ekstraklasa` when present), then lands on standings + fixtures.
 - Fast navigation and robust HTML parsing over feature breadth.
 
 ## Current Features
 
-- Season selector from `archsezon.php`.
-- Competition list in source order for the selected season.
+- Season + competition popup selector from `archsezon.php`.
 - Round and fixture browsing for selected league.
 - Match details view with:
   - competition/date/meta
@@ -29,11 +28,10 @@ go run ./cmd/90minutui
 ## Controls
 
 - `tab` focus cycle
-- `j/k` move in focused list
+- `j/k` move in focused list; scroll the match page in match view
 - `h/l` previous/next round (fixtures view)
 - `enter` load/open
-- `s` collapse/restore sidebar
-- `esc` back from match details
+- `esc` close match details or open/close the selector popup
 - `r` reload current context
 - `q` quit
 
