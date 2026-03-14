@@ -7,8 +7,8 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// League pages drift across seasons, so round extraction keys off heading tables
-// and `mecz.php` links instead of width or column positions.
+// League layouts drift across seasons, so round parsing keys off headings and
+// `mecz.php` links, not table shape.
 func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	page := &LeaguePage{URL: url, LeagueKey: extractLeagueKey(url)}
 
@@ -23,7 +23,7 @@ func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 		return nil
 	}
 
-	page.Rounds = rounds
+	page.Rounds = normalizeLeagueOrder(rounds)
 	return page
 }
 
@@ -47,7 +47,7 @@ func parseRounds(doc *goquery.Document) []Round {
 		roundName := strings.TrimSpace(currentName)
 
 		if len(rounds) > 0 && rounds[len(rounds)-1].Name == roundName {
-			// Source HTML may split one round into adjacent tables with the same heading.
+			// 90minut sometimes splits one round across adjacent tables under the same heading.
 			rounds[len(rounds)-1].Fixtures = append(rounds[len(rounds)-1].Fixtures, fixtures...)
 			return
 		}
@@ -56,8 +56,8 @@ func parseRounds(doc *goquery.Document) []Round {
 	})
 
 	if hasNamedRounds {
-		// Once explicit round headings exist, unnamed fixture tables in the same area
-		// are usually standings/nav spillover rather than standalone rounds.
+		// If headings exist, unnamed fixture tables here are usually standings/nav spillover,
+		// not separate rounds.
 		namedOnly := make([]Round, 0, len(rounds))
 		for _, round := range rounds {
 			if strings.TrimSpace(round.Name) == "" {
@@ -74,7 +74,7 @@ func parseRounds(doc *goquery.Document) []Round {
 		if strings.TrimSpace(rounds[i].Name) != "" {
 			continue
 		}
-		// Fully headerless fixture pages are normalized to a single fallback round.
+		// Headerless fixture pages still need a stable round label for downstream rendering.
 		rounds[i].Name = "Wyniki"
 	}
 
@@ -203,8 +203,8 @@ func parseFixturesTable(table *goquery.Selection) []Fixture {
 func parseStandings(doc *goquery.Document) []StandingRow {
 	var standings []StandingRow
 
-	// Standings pages drift too, so stop at the first table whose header matches
-	// the classic league columns and stop once parsed rows give way to other content.
+	// Standings tables drift too; take the first table with classic league headers
+	// and stop when rows stop parsing.
 	leagueTables(doc).EachWithBreak(func(_ int, table *goquery.Selection) bool {
 		header := table.Find("tr").FilterFunction(func(_ int, row *goquery.Selection) bool {
 			text := normalizeWhitespace(row.Text())

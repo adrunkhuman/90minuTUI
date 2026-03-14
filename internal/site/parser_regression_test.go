@@ -194,6 +194,84 @@ func TestRoundNameFromTableSkipsNavigationBlocks(t *testing.T) {
 	}
 }
 
+func TestParseLeaguePageNormalizesRoundsByRoundNumber(t *testing.T) {
+	html := `
+	<html><head><title>Test League</title></head><body>
+	<table><tr><td><u>3. kolejka</u></td></tr></table>
+	<table>
+	<tr><td>Team E</td><td><a href="/mecz.php?id_mecz=3">1-0</a></td><td>Team F</td><td>3 sierpnia, 18:00</td></tr>
+	</table>
+	<table><tr><td><u>1. kolejka</u></td></tr></table>
+	<table>
+	<tr><td>Team A</td><td><a href="/mecz.php?id_mecz=1">1-0</a></td><td>Team B</td><td>20 lipca, 18:00</td></tr>
+	</table>
+	<table><tr><td><u>2. kolejka</u></td></tr></table>
+	<table>
+	<tr><td>Team C</td><td><a href="/mecz.php?id_mecz=2">2-1</a></td><td>Team D</td><td>27 lipca, 18:00</td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga-test.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Rounds) != 3 {
+		t.Fatalf("expected 3 rounds, got %d", len(page.Rounds))
+	}
+
+	got := []string{page.Rounds[0].Name, page.Rounds[1].Name, page.Rounds[2].Name}
+	want := []string{"1. kolejka", "2. kolejka", "3. kolejka"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected round order: got %#v want %#v", got, want)
+		}
+	}
+}
+
+func TestParseLeaguePageNormalizesFixturesByDate(t *testing.T) {
+	html := `
+	<html><head><title>Test League</title></head><body>
+	<table><tr><td><u>1. kolejka</u></td></tr></table>
+	<table>
+	<tr><td>Team C</td><td><a href="/mecz.php?id_mecz=3">1-0</a></td><td>Team D</td><td>24 lipca, 20:30</td></tr>
+	<tr><td>Team A</td><td><a href="/mecz.php?id_mecz=1">2-1</a></td><td>Team B</td><td>20 lipca, 18:00</td></tr>
+	<tr><td>Team E</td><td><a href="/mecz.php?id_mecz=5">0-0</a></td><td>Team F</td><td>odwołany</td></tr>
+	<tr><td>Team G</td><td><a href="/mecz.php?id_mecz=7">3-2</a></td><td>Team H</td><td>24 lipca, 18:00</td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga-test.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Rounds) != 1 {
+		t.Fatalf("expected 1 round, got %d", len(page.Rounds))
+	}
+
+	fixtures := page.Rounds[0].Fixtures
+	if len(fixtures) != 4 {
+		t.Fatalf("expected 4 fixtures, got %d", len(fixtures))
+	}
+
+	got := []string{fixtures[0].MatchID, fixtures[1].MatchID, fixtures[2].MatchID, fixtures[3].MatchID}
+	want := []string{"1", "7", "3", "5"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected fixture order: got %#v want %#v", got, want)
+		}
+	}
+}
+
 func TestValidateMatchPageAllowsPartialWhenTeamsPresent(t *testing.T) {
 	page := &MatchPage{
 		Title:    "Match",

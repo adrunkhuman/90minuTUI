@@ -36,6 +36,9 @@ func (s *Service) LoadArchive(ctx context.Context, archiveURL string) ([]Season,
 	return seasons, selectedIdx, competitions, nil
 }
 
+// LoadLeague fetches and parses a league page into a normalized LeaguePage.
+// Rounds are ordered by detected round number when available, and fixtures
+// inside each round are ordered by parsed date/time in the site layer.
 func (s *Service) LoadLeague(ctx context.Context, leagueURL string) (*LeaguePage, error) {
 	doc, err := s.client.Document(ctx, leagueURL)
 	if err != nil {

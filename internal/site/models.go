@@ -22,6 +22,8 @@ type Fixture struct {
 	MatchID  string
 }
 
+// Round fixtures are normalized to ascending parsed date/time when available;
+// undated entries keep their relative source order after dated fixtures.
 type Round struct {
 	Name     string
 	Fixtures []Fixture
@@ -38,13 +40,15 @@ type StandingRow struct {
 	Points   int
 }
 
+// LeaguePage is the normalized league view returned by the site layer.
 type LeaguePage struct {
 	Title     string
 	URL       string
 	LeagueKey string
 	// Standings stays empty when the page has no detectable table.
 	Standings []StandingRow
-	Rounds    []Round
+	// Rounds are ordered by detected round number when available.
+	Rounds []Round
 }
 
 type MatchPage struct {

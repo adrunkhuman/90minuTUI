@@ -12,7 +12,7 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
 ## Current Features
 
 - Season/competition popup selector from `archsezon.php`.
-- Standings plus round/fixture browsing for the selected league.
+- Standings plus round/fixture browsing for the selected league, with rounds normalized by round number and fixtures within each round ordered by parsed match date.
 - Match details view with:
   - competition/date/meta
   - score
@@ -52,6 +52,7 @@ Core pipeline: `fetch -> parse -> render`.
 - 90minut pages use legacy encoding (`iso-8859-2`) and must be decoded before parsing.
 - Prefer semantic selectors over fixed table offsets.
 - URL IDs are treated as stable keys (e.g. season/match links).
+- League parsing preserves standings table order from the source page, but normalizes rounds by detected round number and fixtures by parsed `WhenInfo` date/time so all consumers see a stable sequence.
 - Async UI loads are keyed by season/competition/fixture IDs so stale responses are ignored if focus changes.
 - Match parsing still assumes mostly three-cell timeline rows and uses heuristic table scoring; add fixtures/tests when source layout drifts.
 
