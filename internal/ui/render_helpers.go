@@ -343,6 +343,7 @@ func formatPlayerLabel(value string) string {
 		return ""
 	}
 
+	// Compact match rows drop shirt numbers but keep semantic suffixes like (k).
 	cleaned = playerNumberPrefixRe.ReplaceAllString(cleaned, "")
 	cleaned = playerNumberSuffixRe.ReplaceAllString(cleaned, "")
 
@@ -524,6 +525,7 @@ func halftimeScore(events []site.MatchEvent) string {
 		if !ok {
 			continue
 		}
+		// minuteSortKey encodes stoppage as MM*100+extra, so 45:59 is the first-half ceiling.
 		if minute <= 4599 {
 			hasFirstHalf = true
 			if event.Kind == "GOAL" {

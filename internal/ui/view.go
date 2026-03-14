@@ -480,6 +480,7 @@ func (m Model) matchDetailContent(width int) string {
 		htDivider := halftimeScore(m.match.Events)
 		insertedDivider := false
 		for _, event := range sortedEvents(m.match.Events) {
+			// Cards without minute data render as detached badges, so the compact timeline omits them.
 			if strings.TrimSpace(event.MinuteText) == "" && (event.Kind == "YC" || event.Kind == "RC") {
 				continue
 			}

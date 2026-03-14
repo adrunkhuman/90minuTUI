@@ -14,10 +14,11 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
 - Season/competition popup selector from `archsezon.php`.
 - Standings plus round/fixture browsing for the selected league, with rounds normalized by round number and fixtures within each round ordered by parsed match date.
 - Match details view with:
-  - competition/date/meta
-  - score
-  - side-aware timeline (goals/cards/subs)
-  - side-by-side lineups
+  - centered score line with scorer rows anchored to a shared minute column
+  - side-aware timeline with halftime/full-time dividers
+  - compact event markers: `⚽` goal, `↕` substitution, `🟨` yellow, `🟥` red, plus status markers like `HT`, `FT`, `AET`, `PPD`, and `OFF`
+  - side-by-side lineups aligned around the same center axis
+  - match metadata grouped into a separate `Details` block
   - persistent standings/fixture context beside match details
 
 ## Run
