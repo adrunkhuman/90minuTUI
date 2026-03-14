@@ -72,6 +72,7 @@ type Model struct {
 	matchScroll int
 
 	selectorVisible bool
+	suppressTopBar  bool
 	lastFetchAt     time.Time
 }
 

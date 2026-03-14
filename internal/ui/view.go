@@ -13,6 +13,7 @@ func (m Model) View() string {
 		return "Loading terminal size..."
 	}
 
+	topBar := m.topContextBarView()
 	body := m.leagueSketchView()
 	if m.matchView {
 		body = m.matchSketchView()
@@ -21,6 +22,9 @@ func (m Model) View() string {
 		body = m.selectorOverlayView(body)
 	}
 	body = fitLines(body, m.bodyHeightLimit())
+	if topBar != "" {
+		return topBar + "\n" + body + "\n" + m.statusBarView()
+	}
 
 	return body + "\n" + m.statusBarView()
 }
@@ -28,7 +32,7 @@ func (m Model) View() string {
 func (m Model) selectorOverlayView(body string) string {
 	popup := m.selectorPopupView(selectorPopupWidth(m.width))
 	bodyLines := strings.Split(body, "\n")
-	totalHeight := max(len(bodyLines), max(1, m.height-1))
+	totalHeight := max(len(bodyLines), max(1, m.bodyHeightLimit()))
 	for len(bodyLines) < totalHeight {
 		bodyLines = append(bodyLines, "")
 	}
@@ -157,11 +161,6 @@ func (m Model) standingsPaneViewBounded(width int) string {
 	var b strings.Builder
 	b.WriteString(title.Render("Standings"))
 	b.WriteString("\n")
-	if m.league != nil {
-		b.WriteString(truncate(m.league.Title, width-2))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
 
 	if m.league == nil || len(m.league.Standings) == 0 {
 		b.WriteString("Standings unavailable")
@@ -192,20 +191,13 @@ func (m Model) leagueFixturesPaneView(width int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(title.Render(m.league.Title))
-	b.WriteString("\n")
-	if season := m.currentSeason(); season != nil {
-		b.WriteString(season.Label)
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-	b.WriteString(title.Render(fmt.Sprintf("Round %s", parseRoundNumber(round.Name, m.roundCursor+1))))
+	b.WriteString(title.Render("Fixtures"))
 	if m.focus == focusFixtures {
 		b.WriteString(" ")
 		b.WriteString(focusStyle.Render("[focus]"))
 	}
 	b.WriteString("\n")
-	b.WriteString(round.Name)
+	b.WriteString(displayRoundLabel(round.Name, m.roundCursor+1))
 	b.WriteString("\n\n")
 
 	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.fixtureRowLimit()) {
@@ -236,11 +228,30 @@ func (m Model) matchSketchView() string {
 }
 
 func (m Model) bodyHeightLimit() int {
-	if m.height <= 1 {
+	reserved := 1
+	if m.topContextBarView() != "" {
+		reserved++
+	}
+	if m.height <= reserved {
 		return 0
 	}
 
-	return m.height - 1
+	return m.height - reserved
+}
+
+func (m Model) topContextBarView() string {
+	if m.suppressTopBar {
+		return ""
+	}
+
+	if m.league != nil {
+		if label := displayCompetitionLabel(m.league.Title); label != "" {
+			style := lipgloss.NewStyle().Width(m.width).Padding(0, 1).Bold(true)
+			return style.Render(truncate(label, m.width-2))
+		}
+	}
+
+	return ""
 }
 
 func (m Model) standingsRowLimit() int {
@@ -249,7 +260,7 @@ func (m Model) standingsRowLimit() int {
 		return len(m.league.Standings)
 	}
 
-	reserved := 4
+	reserved := 2
 	return max(0, limit-reserved)
 }
 
@@ -263,7 +274,7 @@ func (m Model) fixtureRowLimit() int {
 		return len(round.Fixtures)
 	}
 
-	reserved := 6
+	reserved := 3
 	if m.loading {
 		reserved += 2
 	}
@@ -281,11 +292,13 @@ func (m Model) matchSidebarView(width int) string {
 	if standingsHeight > 0 {
 		standingsModel := m
 		standingsModel.height = standingsHeight + 1
+		standingsModel.suppressTopBar = true
 		parts = append(parts, standingsModel.standingsPaneViewBounded(width))
 	}
 	if fixturesHeight > 0 {
 		fixturesModel := m
 		fixturesModel.height = fixturesHeight + 1
+		fixturesModel.suppressTopBar = true
 		parts = append(parts, fixturesModel.matchFixtureRailView(width))
 	}
 
@@ -337,17 +350,7 @@ func (m Model) matchFixtureRailView(width int) string {
 	var b strings.Builder
 	b.WriteString(title.Render("Fixtures"))
 	b.WriteString("\n")
-	if season := m.currentSeason(); season != nil {
-		b.WriteString(truncate(season.Label, width-2))
-		b.WriteString("\n")
-	}
-	if m.league != nil {
-		b.WriteString(truncate(m.league.Title, width-2))
-		b.WriteString("\n")
-	}
-	b.WriteString(title.Render(fmt.Sprintf("Round %s", parseRoundNumber(round.Name, m.roundCursor+1))))
-	b.WriteString("\n")
-	b.WriteString(truncate(round.Name, width-2))
+	b.WriteString(truncate(displayRoundLabel(round.Name, m.roundCursor+1), width-2))
 	b.WriteString("\n")
 
 	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.matchFixtureRowLimit()) {
@@ -372,7 +375,7 @@ func (m Model) matchFixtureRowLimit() int {
 		return len(round.Fixtures)
 	}
 
-	reserved := 5
+	reserved := 2
 	if m.loading && m.match == nil {
 		reserved += 2
 	}
@@ -381,15 +384,15 @@ func (m Model) matchFixtureRowLimit() int {
 }
 
 func (m Model) matchFixtureMinHeight() int {
-	return 6
+	return 4
 }
 
 func (m Model) standingsContentHeight() int {
 	if m.league == nil || len(m.league.Standings) == 0 {
-		return 4
+		return 2
 	}
 
-	return 4 + len(m.league.Standings)
+	return 2 + len(m.league.Standings)
 }
 
 func (m Model) matchDetailPaneView(width int) string {
@@ -449,6 +452,7 @@ func selectorPopupWidth(total int) int {
 func (m Model) matchDetailContent(width int) string {
 	title := lipgloss.NewStyle().Bold(true)
 	var b strings.Builder
+	metaLine := displayMatchMeta(m.match.Meta, m.match.Weather)
 	heading := m.match.Title
 	if m.match.HomeTeam != "" && m.match.AwayTeam != "" && m.match.Score != "" {
 		heading = fmt.Sprintf("%s %s %s", m.match.HomeTeam, m.match.Score, m.match.AwayTeam)
@@ -456,17 +460,8 @@ func (m Model) matchDetailContent(width int) string {
 
 	b.WriteString(title.Render(heading))
 	b.WriteString("\n")
-	if m.match.Competition != "" {
-		b.WriteString(m.match.Competition)
-		b.WriteString("\n")
-	}
-	if m.match.Meta != "" {
-		b.WriteString(m.match.Meta)
-		b.WriteString("\n")
-	}
-	if m.match.Weather != "" {
-		b.WriteString("Pogoda: ")
-		b.WriteString(m.match.Weather)
+	if metaLine != "" {
+		b.WriteString(metaLine)
 		b.WriteString("\n")
 	}
 
@@ -510,18 +505,6 @@ func (m Model) matchDetailContent(width int) string {
 			b.WriteString(renderSideBySide(homeText, "", awayText, width-4))
 			b.WriteString("\n")
 		}
-	}
-
-	if m.match.NewsTitle != "" {
-		b.WriteString("\n")
-		b.WriteString(title.Render("Related news"))
-		b.WriteString("\n")
-		b.WriteString(m.match.NewsTitle)
-		if m.match.NewsURL != "" {
-			b.WriteString(" | ")
-			b.WriteString(m.match.NewsURL)
-		}
-		b.WriteString("\n")
 	}
 
 	return strings.TrimRight(b.String(), "\n")

@@ -14,12 +14,15 @@ func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
 	m.width = 120
 	m.height = 18
 	m.lastFetchAt = time.Date(2026, time.March, 10, 21, 15, 0, 0, time.UTC)
+	m.league.Title = "PKO Bank Polski Ekstraklasa 2025/2026"
 
 	view := m.View()
 	for _, want := range []string{
+		"PKO Bank Polski Ekstraklasa 2025/2026",
 		"Standings",
 		"# Team",
 		"Legia Warszawa",
+		"Fixtures",
 		"Round 1",
 		"LEG 2-1 LEC",
 		"fetched: 21:15:00",
@@ -27,6 +30,33 @@ func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
 		}
+	}
+}
+
+func TestLeagueSketchViewShowsLeagueTitleOnlyOnce(t *testing.T) {
+	m := sketchModel()
+	m.width = 120
+	m.height = 18
+	m.league.Title = "PKO Bank Polski Ekstraklasa 2025/2026"
+
+	view := m.View()
+	if got := strings.Count(view, "PKO Bank Polski Ekstraklasa 2025/2026"); got != 1 {
+		t.Fatalf("expected league title once, got %d\n%s", got, view)
+	}
+}
+
+func TestLeagueViewUsesTopContextBar(t *testing.T) {
+	m := sketchModel()
+	m.width = 120
+	m.height = 18
+	m.league.Title = "PKO Bank Polski Ekstraklasa 2025/2026"
+
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) == 0 || !strings.Contains(lines[0], "PKO Bank Polski Ekstraklasa 2025/2026") {
+		t.Fatalf("expected top line to show competition context\n%s", m.View())
+	}
+	if strings.Contains(m.View(), "Fixtures\nPKO Bank Polski Ekstraklasa 2025/2026") {
+		t.Fatalf("expected fixtures pane to avoid repeating competition context\n%s", m.View())
 	}
 }
 
@@ -60,6 +90,66 @@ func TestMatchSketchViewShowsLoadingState(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
 		}
+	}
+}
+
+func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
+	m := sketchModel()
+	m.width = 140
+	m.matchView = true
+	m.league.Title = "PKO Bank Polski Ekstraklasa 2025/2026"
+	m.match = &site.MatchPage{
+		HomeTeam:    "Bruk-Bet Termalica Nieciecza",
+		AwayTeam:    "Motor Lublin",
+		Score:       "1-2",
+		Competition: "PKO Bank Polski Ekstraklasa 2025/2026 - Kolejka 25",
+		Meta:        "13 marca 2026, 18:00 3542 Damian Kos",
+		Weather:     "15 C",
+		Events: []site.MatchEvent{{
+			MinuteText: "17",
+			Kind:       "GOAL",
+			TeamSide:   "home",
+			Text:       "Krzysztof Kubica 17",
+		}},
+		NewsTitle: "PKO BP Ekstraklasa: Bruk-Bet Termalica 1-2 Motor",
+		NewsURL:   "http://www.90minut.pl/news/example.html",
+	}
+
+	view := m.View()
+	for _, want := range []string{
+		"PKO Bank Polski Ekstraklasa 2025/2026",
+		"13 March 2026, 18:00 | Attendance 3542 | Ref. Damian Kos | Weather 15 C",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected match view to contain %q\n%s", want, view)
+		}
+	}
+	for _, unwanted := range []string{
+		"Strona główna",
+		"Kolejka 25",
+		"PKO Bank Polski Ekstraklasa 2025/2026 - Round 25",
+		"GOAL Krzysztof Kubica 17",
+		"Related News",
+		"http://www.90minut.pl/news/example.html",
+	} {
+		if strings.Contains(view, unwanted) {
+			t.Fatalf("expected match view to omit %q\n%s", unwanted, view)
+		}
+	}
+}
+
+func TestLayoutWidthsFavorWiderLeftPane(t *testing.T) {
+	leagueLeft, leagueRight := leagueLayoutWidths(120)
+	if leagueLeft <= leagueRight/2 {
+		t.Fatalf("expected league left pane to be materially wider, got left=%d right=%d", leagueLeft, leagueRight)
+	}
+
+	matchLeft, matchCenter, _ := matchLayoutWidths(120)
+	if matchLeft < 40 {
+		t.Fatalf("expected match left pane widened, got %d", matchLeft)
+	}
+	if matchCenter <= matchLeft {
+		t.Fatalf("expected match center pane to remain dominant, got left=%d center=%d", matchLeft, matchCenter)
 	}
 }
 
@@ -127,7 +217,7 @@ func TestSelectorPopupHandlesShortTerminal(t *testing.T) {
 	m.focus = focusCompetitions
 
 	view := m.View()
-	for _, want := range []string{"Season + league", "Ekstraklasa"} {
+	for _, want := range []string{"Season + league", "Fixtures"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
 		}

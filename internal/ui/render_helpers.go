@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -10,6 +11,28 @@ import (
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
 )
+
+var polishMonthReplacer = strings.NewReplacer(
+	"stycznia", "January",
+	"lutego", "February",
+	"marca", "March",
+	"kwietnia", "April",
+	"maja", "May",
+	"czerwca", "June",
+	"lipca", "July",
+	"sierpnia", "August",
+	"wrzesnia", "September",
+	"września", "September",
+	"pazdziernika", "October",
+	"października", "October",
+	"listopada", "November",
+	"grudnia", "December",
+)
+
+var roundLabelPrefixRe = regexp.MustCompile(`(?i)^\s*(?:\d+\.?\s+)?(?:kolejka|runda)\b`)
+var roundSuffixRe = regexp.MustCompile(`(?i)\s*-\s*(?:kolejka|runda)\s+(\d+)\s*$`)
+var matchDatePrefixRe = regexp.MustCompile(`^\d{1,2}\s+\p{L}+\s+\d{4},\s+\d{1,2}:\d{2}`)
+var leadingAttendanceRe = regexp.MustCompile(`^(\d[\d ]*)\b`)
 
 func renderSeasonsWindow(seasons []site.Season, cursor int) []string {
 	if len(seasons) == 0 {
@@ -274,11 +297,12 @@ func formatEventLabel(event site.MatchEvent) string {
 		prefix = "EVENT"
 	}
 
-	if event.Text == "" {
+	text := trimEventMinute(event)
+	if text == "" {
 		return prefix
 	}
 
-	return prefix + " " + event.Text
+	return prefix + " " + text
 }
 
 func renderSideBySide(left, middle, right string, width int) string {
@@ -359,7 +383,7 @@ func leagueLayoutWidths(total int) (int, int) {
 		return 0, total
 	}
 
-	leftWidth := clamp(total/2, 44, 66)
+	leftWidth := clamp(total/2+4, 48, 72)
 	rightWidth := total - leftWidth - 1
 	if rightWidth < 36 {
 		rightWidth = 36
@@ -374,7 +398,7 @@ func matchLayoutWidths(total int) (int, int, int) {
 		return 0, total, 0
 	}
 
-	leftWidth := clamp(total/3, 34, 48)
+	leftWidth := clamp(total/3+4, 38, 54)
 	centerWidth := total - leftWidth - 1
 	if centerWidth >= 40 {
 		return leftWidth, centerWidth, 0
@@ -457,4 +481,101 @@ func parseRoundNumber(name string, fallback int) string {
 		return "?"
 	}
 	return strconv.Itoa(fallback)
+}
+
+func displayCompetitionLabel(label string) string {
+	cleaned := normalizeDisplayText(label)
+	if cleaned == "" {
+		return ""
+	}
+
+	if matches := roundSuffixRe.FindStringSubmatch(cleaned); len(matches) == 2 {
+		base := strings.TrimSpace(roundSuffixRe.ReplaceAllString(cleaned, ""))
+		if base != "" {
+			return base + " - Round " + matches[1]
+		}
+	}
+
+	return translatePolishDateText(cleaned)
+}
+
+func displayRoundLabel(name string, fallback int) string {
+	cleaned := normalizeDisplayText(name)
+	if cleaned == "" {
+		return "Round " + parseRoundNumber("", fallback)
+	}
+
+	lower := strings.ToLower(cleaned)
+	if lower == "wyniki" {
+		return "Results"
+	}
+
+	if strings.Contains(lower, "kolejka") || strings.Contains(lower, "runda") {
+		number := parseRoundNumber(cleaned, fallback)
+		if idx := strings.Index(cleaned, "-"); idx >= 0 {
+			suffix := translatePolishDateText(strings.TrimSpace(cleaned[idx+1:]))
+			if suffix != "" {
+				return "Round " + number + " - " + suffix
+			}
+		}
+		return "Round " + number
+	}
+
+	return translatePolishDateText(cleaned)
+}
+
+func displayMatchMeta(meta, weather string) string {
+	parts := make([]string, 0, 4)
+	cleanedMeta := normalizeDisplayText(meta)
+	if cleanedMeta != "" {
+		datePart := matchDatePrefixRe.FindString(cleanedMeta)
+		remainder := strings.TrimSpace(strings.TrimPrefix(cleanedMeta, datePart))
+		if datePart != "" {
+			parts = append(parts, translatePolishDateText(datePart))
+		}
+		if matches := leadingAttendanceRe.FindStringSubmatch(remainder); len(matches) == 2 {
+			parts = append(parts, "Attendance "+strings.TrimSpace(matches[1]))
+			remainder = strings.TrimSpace(strings.TrimPrefix(remainder, matches[0]))
+		}
+		if remainder != "" {
+			parts = append(parts, "Ref. "+translatePolishDateText(remainder))
+		}
+		if len(parts) == 0 {
+			parts = append(parts, translatePolishDateText(cleanedMeta))
+		}
+	}
+
+	cleanedWeather := normalizeDisplayText(weather)
+	if cleanedWeather != "" {
+		parts = append(parts, "Weather "+cleanedWeather)
+	}
+
+	return strings.Join(parts, " | ")
+}
+
+func trimEventMinute(event site.MatchEvent) string {
+	text := normalizeDisplayText(event.Text)
+	if text == "" || event.MinuteText == "" {
+		return text
+	}
+
+	minute := regexp.QuoteMeta(event.MinuteText)
+	re := regexp.MustCompile(`^` + minute + `'?\s*(?:->\s*)?`)
+	text = strings.TrimSpace(re.ReplaceAllString(text, ""))
+	re = regexp.MustCompile(`\s+` + minute + `(\s*(?:\([^)]*\))?)$`)
+	text = strings.TrimSpace(re.ReplaceAllString(text, `$1`))
+
+	if event.Kind == "SUB" {
+		text = strings.TrimSpace(strings.TrimPrefix(text, "->"))
+	}
+
+	return text
+}
+
+func normalizeDisplayText(value string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+}
+
+func translatePolishDateText(value string) string {
+	return polishMonthReplacer.Replace(normalizeDisplayText(value))
 }

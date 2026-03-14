@@ -91,6 +91,31 @@ func TestParseMatchPageWithout480Width(t *testing.T) {
 	}
 }
 
+func TestParseMatchPageSkipsBreadcrumbLikeMeta(t *testing.T) {
+	html := `
+	<html><head><title>Match Test</title></head><body>
+	<table class="main" width="620">
+	<tr><td colspan="3"><b>I liga - Kolejka 1</b></td></tr>
+	<tr><td colspan="3">Strona główna</td></tr>
+	<tr><td colspan="3">1 marca 2026, 18:00 1234 Jan Kowalski</td></tr>
+	<tr><td>GKS Tychy</td><td>2-1</td><td>Odra Opole</td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	page := parseMatchPage(doc, "http://www.90minut.pl/mecz.php?id_mecz=555")
+	if page == nil {
+		t.Fatalf("expected match page")
+	}
+	if page.Meta != "1 marca 2026, 18:00 1234 Jan Kowalski" {
+		t.Fatalf("unexpected meta: %q", page.Meta)
+	}
+}
+
 func TestParseFixturesTableSkipsRowsWithMultipleMatchLinks(t *testing.T) {
 	html := `
 	<table>
