@@ -387,7 +387,7 @@ func leagueLayoutWidths(total int) (int, int) {
 		return 0, total
 	}
 
-	leftWidth := clamp(total/2+2, 46, 70)
+	leftWidth := clamp(total/3+8, 42, 58)
 	rightWidth := total - leftWidth - 1
 	if rightWidth < 36 {
 		rightWidth = 36

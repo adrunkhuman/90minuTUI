@@ -142,8 +142,8 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 
 func TestLayoutWidthsFavorWiderLeftPane(t *testing.T) {
 	leagueLeft, leagueRight := leagueLayoutWidths(120)
-	if leagueLeft <= leagueRight/2 {
-		t.Fatalf("expected league left pane to be materially wider, got left=%d right=%d", leagueLeft, leagueRight)
+	if leagueLeft < 42 || leagueLeft >= leagueRight {
+		t.Fatalf("expected league layout to reserve a moderate left pane and wider fixtures pane, got left=%d right=%d", leagueLeft, leagueRight)
 	}
 
 	matchLeft, matchCenter, _ := matchLayoutWidths(120)
