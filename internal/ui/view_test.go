@@ -199,6 +199,9 @@ func TestRenderFixtureWindowAlignsFullFixtureColumns(t *testing.T) {
 	if strings.Index(lines[0][2:], "|") != strings.Index(lines[1][2:], "|") {
 		t.Fatalf("expected aligned date column, got %q and %q", lines[0], lines[1])
 	}
+	if strings.Index(lines[0][2:], "1-2") != strings.Index(lines[1][2:], "1-2") {
+		t.Fatalf("expected score column alignment, got %q and %q", lines[0], lines[1])
+	}
 }
 
 func TestLeagueViewCanShowSelectorPopup(t *testing.T) {

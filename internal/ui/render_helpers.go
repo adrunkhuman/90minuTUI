@@ -352,6 +352,15 @@ func padRight(value string, width int) string {
 	return value + strings.Repeat(" ", pad)
 }
 
+func padLeft(value string, width int) string {
+	pad := width - len([]rune(value))
+	if pad <= 0 {
+		return value
+	}
+
+	return strings.Repeat(" ", pad) + value
+}
+
 func layoutWidths(total int, collapsed, emphasizeRight bool) (int, int) {
 	if total < 40 {
 		return 0, total
@@ -462,7 +471,7 @@ func fixtureLine(fixture *site.Fixture, width, whenWidth int, compact bool) stri
 		reserved += 3 + whenWidth
 	}
 	nameWidth := max(12, (width-reserved-1)/2)
-	home := padRight(truncate(fixture.Home, nameWidth), nameWidth)
+	home := padLeft(truncate(fixture.Home, nameWidth), nameWidth)
 	away := padRight(truncate(fixture.Away, nameWidth), nameWidth)
 	return home + " " + score + " " + away
 }
