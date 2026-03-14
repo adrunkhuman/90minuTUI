@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
+	"github.com/charmbracelet/x/ansi"
 )
 
 var polishMonthReplacer = strings.NewReplacer(
@@ -33,6 +34,9 @@ var roundSuffixRe = regexp.MustCompile(`(?i)\s*-\s*(?:kolejka|runda)\s+(\d+)\s*$
 var matchDatePrefixRe = regexp.MustCompile(`^\d{1,2}\s+\p{L}+\s+\d{4},\s+\d{1,2}:\d{2}`)
 var leadingAttendanceRe = regexp.MustCompile(`^(\d[\d ]*)\b`)
 var fixtureWhenInfoRe = regexp.MustCompile(`(?i)^(\d{1,2})\s+([\p{L}]+)(?:\s+\d{4})?,\s*(\d{1,2}:\d{2})`)
+var playerNumberPrefixRe = regexp.MustCompile(`^\(\d+\)\s*`)
+var playerNumberSuffixRe = regexp.MustCompile(`\s+\(\d+\)$`)
+var trailingParenRe = regexp.MustCompile(`^(.*?)(\s+\([^)]*\))$`)
 
 func renderSeasonsWindow(seasons []site.Season, cursor int) []string {
 	if len(seasons) == 0 {
@@ -217,13 +221,7 @@ func clamp(v, minV, maxV int) int {
 }
 
 func renderPlayerLine(player site.PlayerLine) string {
-	line := player.Name
-	if len(player.Events) == 0 {
-		return line
-	}
-
-	line += " [" + strings.Join(player.Events, ", ") + "]"
-	return line
+	return formatPlayerLabel(player.Name)
 }
 
 func sortedEvents(events []site.MatchEvent) []site.MatchEvent {
@@ -296,17 +294,297 @@ func atoiOrNeg(s string) int {
 }
 
 func formatEventLabel(event site.MatchEvent) string {
-	prefix := event.Kind
-	if prefix == "" {
-		prefix = "EVENT"
-	}
-
 	text := trimEventMinute(event)
+	prefix := eventPrefix(event.Kind)
 	if text == "" {
 		return prefix
 	}
+	if event.TeamSide == "home" {
+		return formatLeftEventLabel(event.Kind, text)
+	}
 
+	return formatRightEventLabel(event.Kind, text)
+}
+
+func formatLeftEventLabel(kind, text string) string {
+	prefix := eventPrefix(kind)
+	if text == "" {
+		return prefix
+	}
+	return text + " " + prefix
+}
+
+func formatRightEventLabel(kind, text string) string {
+	prefix := eventPrefix(kind)
+	if text == "" {
+		return prefix
+	}
 	return prefix + " " + text
+}
+
+func eventPrefix(kind string) string {
+	switch kind {
+	case "GOAL":
+		return "⚽"
+	case "SUB":
+		return "↕"
+	case "YC":
+		return "🟨"
+	case "RC":
+		return "🟥"
+	default:
+		return "•"
+	}
+}
+
+func formatPlayerLabel(value string) string {
+	cleaned := normalizeDisplayText(value)
+	if cleaned == "" {
+		return ""
+	}
+
+	cleaned = playerNumberPrefixRe.ReplaceAllString(cleaned, "")
+	cleaned = playerNumberSuffixRe.ReplaceAllString(cleaned, "")
+
+	suffixes := make([]string, 0, 2)
+	for {
+		matches := trailingParenRe.FindStringSubmatch(cleaned)
+		if len(matches) != 3 {
+			break
+		}
+		inner := strings.TrimSpace(strings.Trim(matches[2], " ()"))
+		cleaned = normalizeDisplayText(matches[1])
+		if digitsOnly(inner) {
+			continue
+		}
+		suffixes = append([]string{strings.TrimSpace(matches[2])}, suffixes...)
+	}
+
+	words := strings.Fields(cleaned)
+	if len(words) >= 2 {
+		last := words[len(words)-1]
+		initials := make([]string, 0, len(words)-1)
+		for _, word := range words[:len(words)-1] {
+			r := []rune(word)
+			if len(r) == 0 {
+				continue
+			}
+			initials = append(initials, string(unicode.ToUpper(r[0]))+".")
+		}
+		cleaned = strings.TrimSpace(strings.Join(append(initials, last), " "))
+	}
+
+	if len(suffixes) > 0 {
+		cleaned += " " + strings.Join(suffixes, " ")
+	}
+
+	return cleaned
+}
+
+func digitsOnly(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func formatMatchMinute(minute string) string {
+	cleaned := normalizeDisplayText(minute)
+	if cleaned == "" {
+		return ""
+	}
+	if strings.HasSuffix(cleaned, "'") {
+		if ansi.StringWidth(cleaned) == 2 {
+			return " " + cleaned
+		}
+		return cleaned
+	}
+	formatted := cleaned + "'"
+	if ansi.StringWidth(formatted) == 2 {
+		return " " + formatted
+	}
+	return formatted
+}
+
+func renderDividerLabel(label string, width int) string {
+	cleaned := normalizeDisplayText(label)
+	if cleaned == "" {
+		cleaned = "-"
+	}
+	if width <= len([]rune(cleaned))+2 {
+		return cleaned
+	}
+
+	pad := width - len([]rune(cleaned)) - 2
+	left := pad / 2
+	right := pad - left
+	return strings.Repeat("-", left) + " " + cleaned + " " + strings.Repeat("-", right)
+}
+
+func renderMatchDividerRow(label string, width int) string {
+	if width < 30 {
+		return renderDividerLabel(label, width)
+	}
+
+	midWidth := 9
+	gap := 1
+	sideWidth := max(8, (width-midWidth-(gap*2))/2)
+	left := strings.Repeat("-", sideWidth)
+	right := strings.Repeat("-", sideWidth)
+
+	return left + strings.Repeat(" ", gap) + padCenter(truncate(label, midWidth), midWidth) + strings.Repeat(" ", gap) + right
+}
+
+func matchStatus(page *site.MatchPage) string {
+	if page == nil {
+		return ""
+	}
+
+	text := strings.ToLower(normalizeDisplayText(page.Meta + " " + page.Title))
+	switch {
+	case strings.Contains(text, "odwo"):
+		return "OFF"
+	case strings.Contains(text, "przelo") || strings.Contains(text, "przeło"):
+		return "PPD"
+	case strings.Contains(text, "dogr"):
+		return "AET"
+	default:
+		return ""
+	}
+}
+
+type scorerLine struct {
+	label  string
+	minute string
+	side   string
+}
+
+func scorerLines(events []site.MatchEvent, side string) []scorerLine {
+
+	ordered := sortedEvents(events)
+	lines := make([]scorerLine, 0, 4)
+	for _, event := range ordered {
+		if event.Kind != "GOAL" || event.TeamSide != side {
+			continue
+		}
+
+		name := trimEventMinute(event)
+		if name == "" {
+			continue
+		}
+		lines = append(lines, scorerLine{label: name, minute: formatMatchMinute(event.MinuteText), side: side})
+	}
+
+	return lines
+}
+
+func scorerTimeline(events []site.MatchEvent) []scorerLine {
+	ordered := sortedEvents(events)
+	lines := make([]scorerLine, 0, 4)
+	for _, event := range ordered {
+		if event.Kind != "GOAL" {
+			continue
+		}
+
+		name := trimEventMinute(event)
+		if name == "" {
+			continue
+		}
+
+		lines = append(lines, scorerLine{
+			label:  formatScorerLabel(name, event.TeamSide),
+			minute: formatMatchMinute(event.MinuteText),
+			side:   event.TeamSide,
+		})
+	}
+
+	return lines
+}
+
+func formatScorerLabel(name, side string) string {
+	if side == "home" {
+		return name + " " + eventPrefix("GOAL")
+	}
+	return eventPrefix("GOAL") + " " + name
+}
+
+func halftimeScore(events []site.MatchEvent) string {
+	homeGoals := 0
+	awayGoals := 0
+	hasSecondHalf := false
+	hasFirstHalf := false
+
+	for _, event := range sortedEvents(events) {
+		minute, ok := minuteSortKey(event.MinuteText)
+		if !ok {
+			continue
+		}
+		if minute <= 4599 {
+			hasFirstHalf = true
+			if event.Kind == "GOAL" {
+				if event.TeamSide == "home" {
+					homeGoals++
+				} else if event.TeamSide == "away" {
+					awayGoals++
+				}
+			}
+			continue
+		}
+		hasSecondHalf = true
+	}
+
+	if !hasFirstHalf || !hasSecondHalf {
+		return ""
+	}
+
+	return fmt.Sprintf("HT %d-%d", homeGoals, awayGoals)
+}
+
+func finalScoreLine(page *site.MatchPage) string {
+	if page == nil {
+		return ""
+	}
+
+	score := strings.TrimSpace(page.Score)
+	if score == "" {
+		return ""
+	}
+
+	return "FT " + normalizeScore(score)
+}
+
+func matchMetaParts(meta, weather string) []string {
+	parts := make([]string, 0, 4)
+	cleanedMeta := normalizeDisplayText(meta)
+	if cleanedMeta != "" {
+		datePart := matchDatePrefixRe.FindString(cleanedMeta)
+		remainder := strings.TrimSpace(strings.TrimPrefix(cleanedMeta, datePart))
+		if datePart != "" {
+			parts = append(parts, translatePolishDateText(datePart))
+		}
+		if matches := leadingAttendanceRe.FindStringSubmatch(remainder); len(matches) == 2 {
+			parts = append(parts, "Attendance "+strings.TrimSpace(matches[1]))
+			remainder = strings.TrimSpace(strings.TrimPrefix(remainder, matches[0]))
+		}
+		if remainder != "" {
+			parts = append(parts, "Ref. "+translatePolishDateText(remainder))
+		}
+		if len(parts) == 0 {
+			parts = append(parts, translatePolishDateText(cleanedMeta))
+		}
+	}
+
+	cleanedWeather := normalizeDisplayText(weather)
+	if cleanedWeather != "" {
+		parts = append(parts, "Weather "+cleanedWeather)
+	}
+
+	return parts
 }
 
 func renderSideBySide(left, middle, right string, width int) string {
@@ -317,34 +595,72 @@ func renderSideBySide(left, middle, right string, width int) string {
 		return left + " | " + middle + " | " + right
 	}
 
-	midWidth := 8
-	gap := 2
+	midWidth := 9
+	gap := 1
 	sideWidth := max(8, (width-midWidth-(gap*2))/2)
 
 	leftText := padRight(truncate(left, sideWidth), sideWidth)
-	midText := padRight(truncate(middle, midWidth), midWidth)
+	midText := padCenter(truncate(middle, midWidth), midWidth)
 	rightText := truncate(right, sideWidth)
 
 	return leftText + strings.Repeat(" ", gap) + midText + strings.Repeat(" ", gap) + rightText
+}
+
+func renderMatchDetailRow(left, middle, right string, width int) string {
+	if width < 30 {
+		return renderSideBySide(left, middle, right, width)
+	}
+
+	midWidth := 9
+	gap := 1
+	sideWidth := max(8, (width-midWidth-(gap*2))/2)
+
+	leftText := padLeft(truncate(left, sideWidth), sideWidth)
+	midText := padCenter(truncate(middle, midWidth), midWidth)
+	rightText := truncate(right, sideWidth)
+
+	return leftText + strings.Repeat(" ", gap) + midText + strings.Repeat(" ", gap) + rightText
+}
+
+func renderLineupRow(left, right string, width int) string {
+	if width < 30 {
+		return renderSideBySide(left, "|", right, width)
+	}
+
+	midWidth := 3
+	gap := 1
+	sideWidth := max(8, (width-midWidth-(gap*2))/2)
+
+	leftText := padLeft(truncate(left, sideWidth), sideWidth)
+	midText := padCenter("|", midWidth)
+	rightText := truncate(right, sideWidth)
+
+	return leftText + strings.Repeat(" ", gap) + midText + strings.Repeat(" ", gap) + rightText
+}
+
+func renderCenteredText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	return padCenter(truncate(text, width), width)
 }
 
 func truncate(value string, maxLen int) string {
 	if maxLen <= 0 {
 		return ""
 	}
-	r := []rune(value)
-	if len(r) <= maxLen {
+	if ansi.StringWidth(value) <= maxLen {
 		return value
 	}
 	if maxLen == 1 {
 		return "…"
 	}
 
-	return string(r[:maxLen-1]) + "…"
+	return ansi.Cut(value, 0, maxLen-1) + "…"
 }
 
 func padRight(value string, width int) string {
-	pad := width - len([]rune(value))
+	pad := width - ansi.StringWidth(value)
 	if pad <= 0 {
 		return value
 	}
@@ -353,12 +669,23 @@ func padRight(value string, width int) string {
 }
 
 func padLeft(value string, width int) string {
-	pad := width - len([]rune(value))
+	pad := width - ansi.StringWidth(value)
 	if pad <= 0 {
 		return value
 	}
 
 	return strings.Repeat(" ", pad) + value
+}
+
+func padCenter(value string, width int) string {
+	pad := width - ansi.StringWidth(value)
+	if pad <= 0 {
+		return value
+	}
+
+	left := pad / 2
+	right := pad - left
+	return strings.Repeat(" ", left) + value + strings.Repeat(" ", right)
 }
 
 func layoutWidths(total int, collapsed, emphasizeRight bool) (int, int) {
@@ -566,32 +893,7 @@ func displayRoundLabel(name string, fallback int) string {
 }
 
 func displayMatchMeta(meta, weather string) string {
-	parts := make([]string, 0, 4)
-	cleanedMeta := normalizeDisplayText(meta)
-	if cleanedMeta != "" {
-		datePart := matchDatePrefixRe.FindString(cleanedMeta)
-		remainder := strings.TrimSpace(strings.TrimPrefix(cleanedMeta, datePart))
-		if datePart != "" {
-			parts = append(parts, translatePolishDateText(datePart))
-		}
-		if matches := leadingAttendanceRe.FindStringSubmatch(remainder); len(matches) == 2 {
-			parts = append(parts, "Attendance "+strings.TrimSpace(matches[1]))
-			remainder = strings.TrimSpace(strings.TrimPrefix(remainder, matches[0]))
-		}
-		if remainder != "" {
-			parts = append(parts, "Ref. "+translatePolishDateText(remainder))
-		}
-		if len(parts) == 0 {
-			parts = append(parts, translatePolishDateText(cleanedMeta))
-		}
-	}
-
-	cleanedWeather := normalizeDisplayText(weather)
-	if cleanedWeather != "" {
-		parts = append(parts, "Weather "+cleanedWeather)
-	}
-
-	return strings.Join(parts, " | ")
+	return strings.Join(matchMetaParts(meta, weather), " | ")
 }
 
 func trimEventMinute(event site.MatchEvent) string {
@@ -608,9 +910,18 @@ func trimEventMinute(event site.MatchEvent) string {
 
 	if event.Kind == "SUB" {
 		text = strings.TrimSpace(strings.TrimPrefix(text, "->"))
+		text = normalizeSubstitutionText(text)
 	}
 
-	return text
+	return formatPlayerLabel(text)
+}
+
+func normalizeSubstitutionText(text string) string {
+	cleaned := normalizeDisplayText(text)
+	if cleaned == "" {
+		return ""
+	}
+	return playerNumberSuffixRe.ReplaceAllString(cleaned, "")
 }
 
 func normalizeDisplayText(value string) string {
