@@ -6,16 +6,15 @@ import (
 )
 
 type leagueRoundExpectation struct {
-	firstRoundName      string
-	firstRoundFixtures  int
-	firstFixtureMatchID string
+	firstRoundName     string
+	firstRoundFixtures int
 }
 
 func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 	m := loadManifest(t)
 	expected := map[string]leagueRoundExpectation{
-		"league_14072": {firstRoundName: "Kolejka 1 - 19-20 lipca", firstRoundFixtures: 9, firstFixtureMatchID: "2022730"},
-		"league_14073": {firstRoundName: "Kolejka 1 - 19-20 lipca", firstRoundFixtures: 9, firstFixtureMatchID: "2023371"},
+		"league_14072": {firstRoundName: "Kolejka 1 - 19-20 lipca", firstRoundFixtures: 9},
+		"league_14073": {firstRoundName: "Kolejka 1 - 19-20 lipca", firstRoundFixtures: 9},
 	}
 	leagues := fixturesByKind(m, "league")
 	if len(leagues) < 6 {
@@ -49,6 +48,7 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 				if len(round.Fixtures) == 0 {
 					t.Fatalf("round %q has no fixtures in %s", round.Name, fixture.Name)
 				}
+				assertFixturesSortedByDate(t, fixture.Name, round)
 			}
 
 			totalFixtures := 0
@@ -91,9 +91,6 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 				if len(firstRound.Fixtures) != want.firstRoundFixtures {
 					t.Fatalf("unexpected first round fixture count in %s: got %d want %d", fixture.Name, len(firstRound.Fixtures), want.firstRoundFixtures)
 				}
-				if firstRound.Fixtures[0].MatchID != want.firstFixtureMatchID {
-					t.Fatalf("unexpected first fixture id in %s: got %q want %q", fixture.Name, firstRound.Fixtures[0].MatchID, want.firstFixtureMatchID)
-				}
 			}
 
 			if fixture.Name == "league_14072" || fixture.Name == "league_14073" {
@@ -102,6 +99,32 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func assertFixturesSortedByDate(t *testing.T, fixtureName string, round Round) {
+	t.Helper()
+
+	lastKey := 0
+	lastWhenInfo := ""
+	seenDate := false
+	seenUndated := false
+
+	for _, fixture := range round.Fixtures {
+		dateKey, ok := fixtureDateKey(fixture.WhenInfo)
+		if !ok {
+			seenUndated = true
+			continue
+		}
+		if seenUndated {
+			t.Fatalf("dated fixture %q appears after undated fixture in %s round %q", fixture.MatchID, fixtureName, round.Name)
+		}
+		if seenDate && dateKey < lastKey {
+			t.Fatalf("fixtures not sorted by date in %s round %q: %q before %q", fixtureName, round.Name, fixture.WhenInfo, lastWhenInfo)
+		}
+		lastKey = dateKey
+		lastWhenInfo = fixture.WhenInfo
+		seenDate = true
 	}
 }
 
