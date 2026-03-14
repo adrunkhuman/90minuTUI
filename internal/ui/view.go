@@ -200,7 +200,7 @@ func (m Model) leagueFixturesPaneView(width int) string {
 	b.WriteString(displayRoundLabel(round.Name, m.roundCursor+1))
 	b.WriteString("\n\n")
 
-	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.fixtureRowLimit(), false) {
+	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.fixtureRowLimit(), width-2, false) {
 		b.WriteString(truncate(line, width-2))
 		b.WriteString("\n")
 	}
@@ -353,7 +353,7 @@ func (m Model) matchFixtureRailView(width int) string {
 	b.WriteString(truncate(displayRoundLabel(round.Name, m.roundCursor+1), width-2))
 	b.WriteString("\n")
 
-	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.matchFixtureRowLimit(), true) {
+	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.matchFixtureRowLimit(), width-2, true) {
 		b.WriteString(truncate(line, width-2))
 		b.WriteString("\n")
 	}

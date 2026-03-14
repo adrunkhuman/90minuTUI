@@ -24,7 +24,9 @@ func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
 		"Legia Warszawa",
 		"Fixtures",
 		"Round 1",
-		"Legia Warszawa 2-1 Lech Poznan | 24/01 20:30",
+		"Legia Warszawa",
+		"Lech Poznan",
+		"| 24/01 20:30",
 		"fetched: 21:15:00",
 	} {
 		if !strings.Contains(view, want) {
@@ -165,9 +167,9 @@ func TestRenderFixtureWindowUsesFullNamesOutsideMatchSidebar(t *testing.T) {
 		Away:     "Lech Poznan",
 		Score:    "2-1",
 		WhenInfo: "24 stycznia, 20:30 (16 580)",
-	}}, 0, 5, false)
+	}}, 0, 5, 80, false)
 
-	if len(lines) != 1 || !strings.Contains(lines[0], "Legia Warszawa 2-1 Lech Poznan | 24/01 20:30") {
+	if len(lines) != 1 || !strings.Contains(lines[0], "Legia Warszawa") || !strings.Contains(lines[0], "Lech Poznan") || !strings.Contains(lines[0], "| 24/01 20:30") {
 		t.Fatalf("expected full fixture line, got %v", lines)
 	}
 }
@@ -178,10 +180,24 @@ func TestRenderFixtureWindowUsesCompactNamesInMatchSidebar(t *testing.T) {
 		Away:     "Lech Poznan",
 		Score:    "2-1",
 		WhenInfo: "24 stycznia, 20:30 (16 580)",
-	}}, 0, 5, true)
+	}}, 0, 5, 40, true)
 
 	if len(lines) != 1 || !strings.Contains(lines[0], "LEG 2-1 LEC | 24/01 20:30") {
 		t.Fatalf("expected compact fixture line, got %v", lines)
+	}
+}
+
+func TestRenderFixtureWindowAlignsFullFixtureColumns(t *testing.T) {
+	fixtures := []site.Fixture{
+		{Home: "Bruk-Bet Termalica Nieciecza", Away: "Motor Lublin", Score: "1-2", WhenInfo: "13 marca, 18:00 (3542)"},
+		{Home: "Jagiellonia Bialystok", Away: "Piast Gliwice", Score: "1-2", WhenInfo: "14 marca, 14:45 (16 580)"},
+	}
+	lines := renderFixtureWindow(fixtures, 0, 5, 84, false)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d", len(lines))
+	}
+	if strings.Index(lines[0][2:], "|") != strings.Index(lines[1][2:], "|") {
+		t.Fatalf("expected aligned date column, got %q and %q", lines[0], lines[1])
 	}
 }
 
@@ -195,7 +211,9 @@ func TestLeagueViewCanShowSelectorPopup(t *testing.T) {
 	view := m.View()
 	for _, want := range []string{
 		"Standings",
-		"Legia Warszawa 2-1 Lech Poznan",
+		"Legia Warszawa",
+		"Lech Poznan",
+		"| 24/01 20:30",
 		"Season + league",
 		"2024/2025",
 		"Ekstraklasa",

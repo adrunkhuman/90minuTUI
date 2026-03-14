@@ -76,7 +76,7 @@ func renderCompetitionWindow(items []site.Competition, cursor int) []string {
 	return lines
 }
 
-func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems int, compact bool) []string {
+func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems, width int, compact bool) []string {
 	if len(fixtures) == 0 {
 		return nil
 	}
@@ -85,6 +85,10 @@ func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems int, compact 
 	}
 
 	start, end := windowBounds(len(fixtures), cursor, maxItems)
+	whenWidth := 0
+	for i := start; i < end; i++ {
+		whenWidth = max(whenWidth, len([]rune(formatFixtureWhenInfo(fixtures[i].WhenInfo))))
+	}
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		prefix := "  "
@@ -92,7 +96,7 @@ func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems int, compact 
 			prefix = "> "
 		}
 
-		line := prefix + fixtureLine(&fixtures[i], compact)
+		line := prefix + fixtureLine(&fixtures[i], width-len([]rune(prefix)), whenWidth, compact)
 		if whenInfo := formatFixtureWhenInfo(fixtures[i].WhenInfo); whenInfo != "" {
 			line += " | " + whenInfo
 		}
@@ -383,7 +387,7 @@ func leagueLayoutWidths(total int) (int, int) {
 		return 0, total
 	}
 
-	leftWidth := clamp(total/2+4, 48, 72)
+	leftWidth := clamp(total/2+2, 46, 70)
 	rightWidth := total - leftWidth - 1
 	if rightWidth < 36 {
 		rightWidth = 36
@@ -441,15 +445,26 @@ func abbreviatedFixtureLine(fixture *site.Fixture) string {
 	return fmt.Sprintf("%s %s %s", abbreviateTeamName(fixture.Home), normalizeScore(fixture.Score), abbreviateTeamName(fixture.Away))
 }
 
-func fixtureLine(fixture *site.Fixture, compact bool) string {
+func fixtureLine(fixture *site.Fixture, width, whenWidth int, compact bool) string {
 	if compact {
 		return abbreviatedFixtureLine(fixture)
 	}
 	if fixture == nil {
 		return "--- ?-? ---"
 	}
+	if width <= 0 {
+		return fmt.Sprintf("%s %s %s", fixture.Home, normalizeScore(fixture.Score), fixture.Away)
+	}
 
-	return fmt.Sprintf("%s %s %s", fixture.Home, normalizeScore(fixture.Score), fixture.Away)
+	score := normalizeScore(fixture.Score)
+	reserved := len([]rune(score)) + 2
+	if whenWidth > 0 {
+		reserved += 3 + whenWidth
+	}
+	nameWidth := max(12, (width-reserved-1)/2)
+	home := padRight(truncate(fixture.Home, nameWidth), nameWidth)
+	away := padRight(truncate(fixture.Away, nameWidth), nameWidth)
+	return home + " " + score + " " + away
 }
 
 func normalizeScore(score string) string {
