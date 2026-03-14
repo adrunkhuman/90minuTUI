@@ -29,10 +29,10 @@ var polishMonthReplacer = strings.NewReplacer(
 	"grudnia", "December",
 )
 
-var roundLabelPrefixRe = regexp.MustCompile(`(?i)^\s*(?:\d+\.?\s+)?(?:kolejka|runda)\b`)
 var roundSuffixRe = regexp.MustCompile(`(?i)\s*-\s*(?:kolejka|runda)\s+(\d+)\s*$`)
 var matchDatePrefixRe = regexp.MustCompile(`^\d{1,2}\s+\p{L}+\s+\d{4},\s+\d{1,2}:\d{2}`)
 var leadingAttendanceRe = regexp.MustCompile(`^(\d[\d ]*)\b`)
+var fixtureWhenInfoRe = regexp.MustCompile(`(?i)^(\d{1,2})\s+([\p{L}]+)(?:\s+\d{4})?,\s*(\d{1,2}:\d{2})`)
 
 func renderSeasonsWindow(seasons []site.Season, cursor int) []string {
 	if len(seasons) == 0 {
@@ -76,7 +76,7 @@ func renderCompetitionWindow(items []site.Competition, cursor int) []string {
 	return lines
 }
 
-func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems int) []string {
+func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems int, compact bool) []string {
 	if len(fixtures) == 0 {
 		return nil
 	}
@@ -92,9 +92,9 @@ func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems int) []string
 			prefix = "> "
 		}
 
-		line := prefix + abbreviatedFixtureLine(&fixtures[i])
-		if fixtures[i].WhenInfo != "" {
-			line += " | " + fixtures[i].WhenInfo
+		line := prefix + fixtureLine(&fixtures[i], compact)
+		if whenInfo := formatFixtureWhenInfo(fixtures[i].WhenInfo); whenInfo != "" {
+			line += " | " + whenInfo
 		}
 		lines = append(lines, line)
 	}
@@ -441,6 +441,17 @@ func abbreviatedFixtureLine(fixture *site.Fixture) string {
 	return fmt.Sprintf("%s %s %s", abbreviateTeamName(fixture.Home), normalizeScore(fixture.Score), abbreviateTeamName(fixture.Away))
 }
 
+func fixtureLine(fixture *site.Fixture, compact bool) string {
+	if compact {
+		return abbreviatedFixtureLine(fixture)
+	}
+	if fixture == nil {
+		return "--- ?-? ---"
+	}
+
+	return fmt.Sprintf("%s %s %s", fixture.Home, normalizeScore(fixture.Score), fixture.Away)
+}
+
 func normalizeScore(score string) string {
 	trimmed := strings.TrimSpace(score)
 	if trimmed == "" {
@@ -508,6 +519,12 @@ func displayRoundLabel(name string, fallback int) string {
 	lower := strings.ToLower(cleaned)
 	if lower == "wyniki" {
 		return "Results"
+	}
+	if strings.Contains(lower, "fina") {
+		return translatePolishStageLabel(cleaned)
+	}
+	if strings.Contains(lower, "bara") || strings.Contains(lower, "play-off") || strings.Contains(lower, "playoff") {
+		return translatePolishStageLabel(cleaned)
 	}
 
 	if strings.Contains(lower, "kolejka") || strings.Contains(lower, "runda") {
@@ -578,4 +595,72 @@ func normalizeDisplayText(value string) string {
 
 func translatePolishDateText(value string) string {
 	return polishMonthReplacer.Replace(normalizeDisplayText(value))
+}
+
+func formatFixtureWhenInfo(value string) string {
+	cleaned := normalizeDisplayText(value)
+	if cleaned == "" {
+		return ""
+	}
+
+	if matches := fixtureWhenInfoRe.FindStringSubmatch(cleaned); len(matches) == 4 {
+		if month := polishMonthNumber(matches[2]); month != "" {
+			return fmt.Sprintf("%02s/%s %s", matches[1], month, matches[3])
+		}
+	}
+
+	if idx := strings.Index(cleaned, "("); idx > 0 {
+		cleaned = strings.TrimSpace(cleaned[:idx])
+	}
+
+	return translatePolishDateText(cleaned)
+}
+
+func polishMonthNumber(value string) string {
+	switch strings.ToLower(normalizeDisplayText(value)) {
+	case "stycznia":
+		return "01"
+	case "lutego":
+		return "02"
+	case "marca":
+		return "03"
+	case "kwietnia":
+		return "04"
+	case "maja":
+		return "05"
+	case "czerwca":
+		return "06"
+	case "lipca":
+		return "07"
+	case "sierpnia":
+		return "08"
+	case "wrzesnia", "września":
+		return "09"
+	case "pazdziernika", "października":
+		return "10"
+	case "listopada":
+		return "11"
+	case "grudnia":
+		return "12"
+	default:
+		return ""
+	}
+}
+
+func translatePolishStageLabel(value string) string {
+	cleaned := translatePolishDateText(value)
+	replacements := []struct{ old, new string }{
+		{"1/16 finału", "Round of 32"},
+		{"1/8 finału", "Round of 16"},
+		{"1/4 finału", "Quarter-finals"},
+		{"1/2 finału", "Semi-finals"},
+		{"finał", "Final"},
+		{"baraże", "Play-offs"},
+		{"baraż", "Play-off"},
+	}
+	for _, replacement := range replacements {
+		cleaned = strings.ReplaceAll(cleaned, replacement.old, replacement.new)
+	}
+
+	return cleaned
 }

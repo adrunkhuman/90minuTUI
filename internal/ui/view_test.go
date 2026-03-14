@@ -24,7 +24,7 @@ func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
 		"Legia Warszawa",
 		"Fixtures",
 		"Round 1",
-		"LEG 2-1 LEC",
+		"Legia Warszawa 2-1 Lech Poznan | 24/01 20:30",
 		"fetched: 21:15:00",
 	} {
 		if !strings.Contains(view, want) {
@@ -153,6 +153,38 @@ func TestLayoutWidthsFavorWiderLeftPane(t *testing.T) {
 	}
 }
 
+func TestFormatFixtureWhenInfoShortensDateAndDropsAttendance(t *testing.T) {
+	if got := formatFixtureWhenInfo("28 stycznia, 21:00 (51 719)"); got != "28/01 21:00" {
+		t.Fatalf("unexpected fixture when info: %q", got)
+	}
+}
+
+func TestRenderFixtureWindowUsesFullNamesOutsideMatchSidebar(t *testing.T) {
+	lines := renderFixtureWindow([]site.Fixture{{
+		Home:     "Legia Warszawa",
+		Away:     "Lech Poznan",
+		Score:    "2-1",
+		WhenInfo: "24 stycznia, 20:30 (16 580)",
+	}}, 0, 5, false)
+
+	if len(lines) != 1 || !strings.Contains(lines[0], "Legia Warszawa 2-1 Lech Poznan | 24/01 20:30") {
+		t.Fatalf("expected full fixture line, got %v", lines)
+	}
+}
+
+func TestRenderFixtureWindowUsesCompactNamesInMatchSidebar(t *testing.T) {
+	lines := renderFixtureWindow([]site.Fixture{{
+		Home:     "Legia Warszawa",
+		Away:     "Lech Poznan",
+		Score:    "2-1",
+		WhenInfo: "24 stycznia, 20:30 (16 580)",
+	}}, 0, 5, true)
+
+	if len(lines) != 1 || !strings.Contains(lines[0], "LEG 2-1 LEC | 24/01 20:30") {
+		t.Fatalf("expected compact fixture line, got %v", lines)
+	}
+}
+
 func TestLeagueViewCanShowSelectorPopup(t *testing.T) {
 	m := sketchModel()
 	m.width = 120
@@ -163,7 +195,7 @@ func TestLeagueViewCanShowSelectorPopup(t *testing.T) {
 	view := m.View()
 	for _, want := range []string{
 		"Standings",
-		"LEG 2-1 LEC",
+		"Legia Warszawa 2-1 Lech Poznan",
 		"Season + league",
 		"2024/2025",
 		"Ekstraklasa",
@@ -359,7 +391,7 @@ func sketchModel() Model {
 			Rounds: []site.Round{{
 				Name: "1. kolejka",
 				Fixtures: []site.Fixture{
-					{Home: "Legia Warszawa", Away: "Lech Poznan", Score: "2-1", WhenInfo: "Fri 20:30", MatchID: "1", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1"},
+					{Home: "Legia Warszawa", Away: "Lech Poznan", Score: "2-1", WhenInfo: "24 stycznia, 20:30 (16 580)", MatchID: "1", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1"},
 					{Home: "Rakow Czestochowa", Away: "Pogon Szczecin", Score: "1-1", MatchID: "2", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=2"},
 				},
 			}},
