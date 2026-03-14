@@ -96,7 +96,7 @@ func roundNameFromTable(table *goquery.Selection) (string, bool) {
 	}
 
 	heading := normalizeWhitespace(table.Find("u").First().Text())
-	if looksLikeRoundHeading(heading) {
+	if looksLikeRoundHeading(heading) || looksLikeStageHeading(heading) {
 		return heading, true
 	}
 
@@ -105,7 +105,7 @@ func roundNameFromTable(table *goquery.Selection) (string, bool) {
 	}
 
 	text := normalizeWhitespace(table.ChildrenFiltered("tbody, tr").Text())
-	if looksLikeRoundHeading(text) {
+	if looksLikeRoundHeading(text) || looksLikeStageHeading(text) {
 		return text, true
 	}
 
@@ -146,6 +146,15 @@ func looksLikeRoundHeading(text string) bool {
 
 	lower := strings.ToLower(text)
 	return strings.Contains(lower, "kolejka") || strings.Contains(lower, "runda")
+}
+
+func looksLikeStageHeading(text string) bool {
+	if text == "" {
+		return false
+	}
+
+	lower := strings.ToLower(text)
+	return strings.Contains(lower, "fina") || strings.Contains(lower, "bara") || strings.Contains(lower, "play-off") || strings.Contains(lower, "playoff")
 }
 
 func parseFixturesTable(table *goquery.Selection) []Fixture {
