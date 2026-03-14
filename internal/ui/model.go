@@ -80,7 +80,7 @@ func NewModel(svc archiveLoader) Model {
 }
 
 func (m Model) selectorActive() bool {
-	return m.selectorVisible || m.league == nil
+	return m.selectorVisible || (m.league == nil && !m.loading && len(m.seasons) > 0)
 }
 
 func (m *Model) openSelector() {

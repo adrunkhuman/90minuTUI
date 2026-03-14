@@ -20,6 +20,7 @@ func (m Model) View() string {
 	if m.selectorActive() {
 		body = m.selectorOverlayView(body)
 	}
+	body = fitLines(body, m.bodyHeightLimit())
 
 	return body + "\n" + m.statusBarView()
 }
@@ -223,7 +224,14 @@ func (m Model) leagueFixturesPaneView(width int) string {
 }
 
 func (m Model) matchSketchView() string {
-	return m.matchDetailPaneView(m.width)
+	leftWidth, centerWidth, _ := matchLayoutWidths(m.width)
+	if leftWidth == 0 {
+		return m.matchDetailPaneView(centerWidth)
+	}
+
+	sidebar := m.matchSidebarView(leftWidth)
+	detail := m.matchDetailPaneView(centerWidth)
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, detail)
 }
 
 func (m Model) bodyHeightLimit() int {
@@ -259,6 +267,105 @@ func (m Model) fixtureRowLimit() int {
 		reserved += 2
 	}
 	if m.err != "" {
+		reserved += 2
+	}
+
+	return max(0, limit-reserved)
+}
+
+func (m Model) matchSidebarView(width int) string {
+	standingsHeight, fixturesHeight := m.matchSidebarHeights()
+	parts := make([]string, 0, 2)
+
+	if standingsHeight > 0 {
+		standingsModel := m
+		standingsModel.height = standingsHeight + 1
+		parts = append(parts, standingsModel.standingsPaneViewBounded(width))
+	}
+	if fixturesHeight > 0 {
+		fixturesModel := m
+		fixturesModel.height = fixturesHeight + 1
+		parts = append(parts, fixturesModel.matchFixtureRailView(width))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+func (m Model) matchSidebarHeights() (int, int) {
+	total := m.bodyHeightLimit()
+	if total <= 0 {
+		return 0, 0
+	}
+	if total < 12 {
+		return max(4, total/2), max(0, total-max(4, total/2))
+	}
+
+	standings := clamp(total/2, 8, 14)
+	fixtures := total - standings
+	if fixtures < 8 {
+		fixtures = 8
+		standings = max(4, total-fixtures)
+	}
+
+	return standings, fixtures
+}
+
+func (m Model) matchFixtureRailView(width int) string {
+	base := lipgloss.NewStyle().Width(width).Padding(0, 1)
+	if limit := m.bodyHeightLimit(); limit > 0 {
+		base = base.Height(limit).MaxHeight(limit)
+	}
+	title := lipgloss.NewStyle().Bold(true)
+
+	round := m.currentRound()
+	if round == nil {
+		return base.Render(title.Render("Fixtures") + "\nNo fixtures in selected round")
+	}
+
+	var b strings.Builder
+	b.WriteString(title.Render("Fixtures"))
+	b.WriteString("\n")
+	if season := m.currentSeason(); season != nil {
+		b.WriteString(truncate(season.Label, width-2))
+		b.WriteString("\n")
+	}
+	if m.league != nil {
+		b.WriteString(truncate(m.league.Title, width-2))
+		b.WriteString("\n")
+	}
+	b.WriteString(title.Render(fmt.Sprintf("Round %s", parseRoundNumber(round.Name, m.roundCursor+1))))
+	b.WriteString("\n")
+	b.WriteString(truncate(round.Name, width-2))
+	b.WriteString("\n")
+
+	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.matchFixtureRowLimit()) {
+		b.WriteString(truncate(line, width-2))
+		b.WriteString("\n")
+	}
+
+	if m.loading && m.match == nil {
+		b.WriteString("\nLoading...")
+	}
+
+	return base.Render(strings.TrimRight(b.String(), "\n"))
+}
+
+func (m Model) matchFixtureRowLimit() int {
+	limit := m.bodyHeightLimit()
+	if limit == 0 {
+		round := m.currentRound()
+		if round == nil {
+			return 0
+		}
+		return len(round.Fixtures)
+	}
+
+	reserved := 5
+	if m.loading && m.match == nil {
 		reserved += 2
 	}
 
@@ -404,6 +511,11 @@ func (m Model) matchViewportHeight() int {
 	return m.bodyHeightLimit()
 }
 
+func (m Model) matchDetailWidth() int {
+	_, centerWidth, _ := matchLayoutWidths(m.width)
+	return centerWidth
+}
+
 func (m Model) matchScrollLimit() int {
 	if !m.matchView || m.match == nil {
 		return 0
@@ -412,7 +524,7 @@ func (m Model) matchScrollLimit() int {
 	if viewport <= 0 {
 		return 0
 	}
-	lines := strings.Split(m.matchDetailContent(m.width), "\n")
+	lines := strings.Split(m.matchDetailContent(m.matchDetailWidth()), "\n")
 	return max(0, len(lines)-viewport)
 }
 
@@ -427,4 +539,20 @@ func clipLines(content string, offset, height int) string {
 	start := clamp(offset, 0, len(lines)-height)
 	end := min(len(lines), start+height)
 	return strings.Join(lines[start:end], "\n")
+}
+
+func fitLines(content string, height int) string {
+	if height <= 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+
+	return strings.Join(lines, "\n")
 }

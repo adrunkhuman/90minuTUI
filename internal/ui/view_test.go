@@ -12,6 +12,7 @@ import (
 func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
 	m := sketchModel()
 	m.width = 120
+	m.height = 18
 	m.lastFetchAt = time.Date(2026, time.March, 10, 21, 15, 0, 0, time.UTC)
 
 	view := m.View()
@@ -29,6 +30,20 @@ func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
 	}
 }
 
+func TestStartupViewDoesNotFlashSelectorPopup(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 120
+	m.height = 18
+
+	view := m.View()
+	if strings.Contains(view, "Season + league") {
+		t.Fatalf("expected startup view to avoid selector popup\n%s", view)
+	}
+	if got := strings.Count(view, "\n") + 1; got != m.height {
+		t.Fatalf("expected startup view to fill terminal height, got %d lines for height %d\n%s", got, m.height, view)
+	}
+}
+
 func TestMatchSketchViewShowsLoadingState(t *testing.T) {
 	m := sketchModel()
 	m.width = 120
@@ -37,6 +52,9 @@ func TestMatchSketchViewShowsLoadingState(t *testing.T) {
 
 	view := m.View()
 	for _, want := range []string{
+		"Standings",
+		"Fixtures",
+		"LEG 2-1 LEC",
 		"Loading match details...",
 	} {
 		if !strings.Contains(view, want) {
@@ -64,6 +82,9 @@ func TestLeagueViewCanShowSelectorPopup(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
 		}
+	}
+	if got := strings.Count(view, "\n") + 1; got != m.height {
+		t.Fatalf("expected popup view to fill terminal height, got %d lines for height %d\n%s", got, m.height, view)
 	}
 }
 
@@ -164,6 +185,11 @@ func TestMatchViewScrollsLongContent(t *testing.T) {
 	if !strings.Contains(view, "event-01") {
 		t.Fatalf("expected initial match view to show top content\n%s", view)
 	}
+	for _, want := range []string{"Standings", "Fixtures", "LEG 2-1 LEC"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected match view to keep sidebar content %q visible\n%s", want, view)
+		}
+	}
 
 	m.matchScroll = 12
 	view = m.View()
@@ -172,6 +198,14 @@ func TestMatchViewScrollsLongContent(t *testing.T) {
 	}
 	if strings.Contains(view, "event-01") {
 		t.Fatalf("expected scrolled match view to hide top content\n%s", view)
+	}
+	for _, want := range []string{"Standings", "Fixtures", "LEG 2-1 LEC"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected scrolled match view to keep sidebar content %q visible\n%s", want, view)
+		}
+	}
+	if got := strings.Count(view, "\n") + 1; got != m.height {
+		t.Fatalf("expected match view to fill terminal height, got %d lines for height %d\n%s", got, m.height, view)
 	}
 }
 
