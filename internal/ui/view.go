@@ -168,7 +168,8 @@ func (m Model) standingsPaneViewBounded(width int) string {
 		return base.Render(b.String())
 	}
 
-	b.WriteString("   # Team                P  W  D  L Pts\n")
+	b.WriteString(truncate("   # Team                P  W  D  L Pts", width-2))
+	b.WriteString("\n")
 	for _, line := range renderStandingsWindow(m.league.Standings, m.currentFixture(), width-2, m.standingsRowLimit()) {
 		b.WriteString(line)
 		b.WriteString("\n")
@@ -300,14 +301,21 @@ func (m Model) matchSidebarHeights() (int, int) {
 	if total <= 0 {
 		return 0, 0
 	}
+
+	minFixtures := m.matchFixtureMinHeight()
+	fullStandings := m.standingsContentHeight()
+	if fullStandings > 0 && total >= fullStandings+minFixtures {
+		return fullStandings, total - fullStandings
+	}
+
 	if total < 12 {
 		return max(4, total/2), max(0, total-max(4, total/2))
 	}
 
 	standings := clamp(total/2, 8, 14)
 	fixtures := total - standings
-	if fixtures < 8 {
-		fixtures = 8
+	if fixtures < minFixtures {
+		fixtures = minFixtures
 		standings = max(4, total-fixtures)
 	}
 
@@ -372,6 +380,18 @@ func (m Model) matchFixtureRowLimit() int {
 	return max(0, limit-reserved)
 }
 
+func (m Model) matchFixtureMinHeight() int {
+	return 6
+}
+
+func (m Model) standingsContentHeight() int {
+	if m.league == nil || len(m.league.Standings) == 0 {
+		return 4
+	}
+
+	return 4 + len(m.league.Standings)
+}
+
 func (m Model) matchDetailPaneView(width int) string {
 	base := lipgloss.NewStyle().Width(width).Padding(0, 1)
 	if limit := m.matchViewportHeight(); limit > 0 {
@@ -398,7 +418,7 @@ func (m Model) matchDetailPaneView(width int) string {
 func (m Model) statusBarView() string {
 	parts := []string{"j/k: move", "left/right: round", "enter: open", "esc: selector", "q: quit"}
 	if m.matchView {
-		parts = []string{"j/k: scroll", "esc: league", "r: reload", "q: quit"}
+		parts = []string{"h/l: round", "j/k: fixture", "pgup/pgdn: scroll", "ctrl+u/d: scroll", "esc: league", "r: reload", "q: quit"}
 	}
 	if m.selectorActive() {
 		parts = []string{"tab: focus", "j/k: move", "enter: load", "q: quit"}

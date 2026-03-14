@@ -27,6 +27,7 @@ type Round struct {
 	Fixtures []Fixture
 }
 
+// StandingRow keeps league-table order from the source page.
 type StandingRow struct {
 	Position int
 	Team     string
@@ -41,6 +42,7 @@ type LeaguePage struct {
 	Title     string
 	URL       string
 	LeagueKey string
+	// Standings stays empty when the page has no detectable table.
 	Standings []StandingRow
 	Rounds    []Round
 }

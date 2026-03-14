@@ -39,6 +39,8 @@ func (l *recordingLoader) LoadMatch(context.Context, string) (*site.MatchPage, e
 func TestFixtureNavigationDoesNotReloadLeague(t *testing.T) {
 	loader := newRecordingLoader()
 	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
 
 	if loader.leagueCalls != 1 {
 		t.Fatalf("expected one league load after startup, got %d", loader.leagueCalls)
@@ -81,6 +83,8 @@ func TestFixtureNavigationDoesNotReloadLeague(t *testing.T) {
 func TestFixtureEnterLoadsMatchWithoutReloadingLeague(t *testing.T) {
 	loader := newRecordingLoader()
 	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
 
 	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -111,32 +115,127 @@ func TestFixtureEnterLoadsMatchWithoutReloadingLeague(t *testing.T) {
 	}
 }
 
-func TestMatchViewNavigationScrollsWithoutReloadingFixture(t *testing.T) {
+func TestMatchViewNavigationLoadsAdjacentFixture(t *testing.T) {
 	loader := newRecordingLoader()
 	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
 
 	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatalf("expected match load command on enter")
 	}
 	m, _ = updateModelWithMsg(t, m, cmd())
-	m.match.Events = make([]site.MatchEvent, 0, 20)
-	for i := 1; i <= 20; i++ {
+
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	if cmd == nil {
+		t.Fatalf("expected moving in match view to load adjacent fixture")
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "2" {
+		t.Fatalf("expected second fixture selected in match view")
+	}
+	if !m.matchView || !m.loading || m.match != nil {
+		t.Fatalf("expected match view to stay open and reload selected fixture")
+	}
+
+	m, _ = updateModelWithMsg(t, m, cmd())
+	if loader.matchCalls != 2 {
+		t.Fatalf("expected second match load after navigating in match view, got %d", loader.matchCalls)
+	}
+}
+
+func TestMatchViewRoundNavigationLoadsFirstFixture(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected match load command on enter")
+	}
+	m, _ = updateModelWithMsg(t, m, cmd())
+	m.fixtureCursor = 1
+
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyRight})
+	if cmd == nil {
+		t.Fatalf("expected round change in match view to load first fixture")
+	}
+	if m.roundCursor != 1 {
+		t.Fatalf("expected second round selected, got %d", m.roundCursor)
+	}
+	if m.fixtureCursor != 0 {
+		t.Fatalf("expected first fixture selected after round change, got %d", m.fixtureCursor)
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "3" {
+		t.Fatalf("expected first fixture from next round selected")
+	}
+
+	m, _ = updateModelWithMsg(t, m, cmd())
+	if loader.matchCalls != 2 {
+		t.Fatalf("expected new match load after round change, got %d", loader.matchCalls)
+	}
+}
+
+func TestMatchViewScrollKeysDoNotChangeFixture(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected match load command on enter")
+	}
+	m, _ = updateModelWithMsg(t, m, cmd())
+	m.match.Events = make([]site.MatchEvent, 0, 60)
+	for i := 1; i <= 60; i++ {
 		m.match.Events = append(m.match.Events, site.MatchEvent{MinuteText: "1", TeamSide: "home", Kind: "SUB", Text: "event"})
 	}
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
 	if cmd != nil {
-		t.Fatalf("expected match scroll to avoid loading another fixture")
+		t.Fatalf("expected scroll keys not to load another fixture")
+	}
+	if m.matchScroll == 0 {
+		t.Fatalf("expected page down to scroll match content")
 	}
 	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "1" {
-		t.Fatalf("expected current fixture to stay selected in match view")
-	}
-	if !m.matchView || m.loading || m.match == nil {
-		t.Fatalf("expected match view to stay open while scrolling")
+		t.Fatalf("expected current fixture to stay selected while scrolling")
 	}
 	if loader.matchCalls != 1 {
 		t.Fatalf("expected no extra match loads while scrolling, got %d", loader.matchCalls)
+	}
+}
+
+func TestMatchViewRoundNavigationClearsDetailForEmptyRound(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+	m.league.Rounds = []site.Round{
+		m.league.Rounds[0],
+		{Name: "2. kolejka"},
+	}
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected match load command on enter")
+	}
+	m, _ = updateModelWithMsg(t, m, cmd())
+
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyRight})
+	if cmd != nil {
+		t.Fatalf("expected no load command for empty round")
+	}
+	if m.roundCursor != 1 {
+		t.Fatalf("expected empty round selected, got %d", m.roundCursor)
+	}
+	if m.match != nil {
+		t.Fatalf("expected stale match details to clear on empty round")
+	}
+	if !m.matchView {
+		t.Fatalf("expected match view to stay open on empty round")
 	}
 }
 
@@ -205,6 +304,8 @@ func bootstrapLeagueLoadedModel(t *testing.T, loader *recordingLoader) Model {
 	if m.focus != focusFixtures {
 		t.Fatalf("expected fixtures focus after league load")
 	}
+	m.width = 120
+	m.height = 40
 
 	return m
 }
@@ -240,13 +341,21 @@ func newRecordingLoader() *recordingLoader {
 			URL:       "http://www.90minut.pl/liga/1/liga11233.html",
 			LeagueKey: "liga11233",
 			Standings: []site.StandingRow{{Position: 1, Team: "Team A", Played: 1, Won: 1, Drawn: 0, Lost: 0, Points: 3}, {Position: 2, Team: "Team B", Played: 1, Won: 0, Drawn: 0, Lost: 1, Points: 0}},
-			Rounds: []site.Round{{
-				Name: "1. kolejka",
-				Fixtures: []site.Fixture{
-					{Home: "Team A", Away: "Team B", Score: "1-0", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1", MatchID: "1"},
-					{Home: "Team C", Away: "Team D", Score: "2-2", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=2", MatchID: "2"},
+			Rounds: []site.Round{
+				{
+					Name: "1. kolejka",
+					Fixtures: []site.Fixture{
+						{Home: "Team A", Away: "Team B", Score: "1-0", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1", MatchID: "1"},
+						{Home: "Team C", Away: "Team D", Score: "2-2", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=2", MatchID: "2"},
+					},
 				},
-			}},
+				{
+					Name: "2. kolejka",
+					Fixtures: []site.Fixture{
+						{Home: "Team E", Away: "Team F", Score: "0-0", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=3", MatchID: "3"},
+					},
+				},
+			},
 		},
 		match: &site.MatchPage{
 			URL:      "http://www.90minut.pl/mecz.php?id_mecz=1",

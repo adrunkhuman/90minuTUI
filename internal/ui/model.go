@@ -79,6 +79,7 @@ func NewModel(svc archiveLoader) Model {
 	return Model{service: svc, focus: focusCompetitions, loading: true}
 }
 
+// The selector is implicit on first load, then explicit once a league is open.
 func (m Model) selectorActive() bool {
 	return m.selectorVisible || (m.league == nil && !m.loading && len(m.seasons) > 0)
 }
@@ -143,7 +144,7 @@ func (m Model) preferredCompetitionIndex() int {
 		return 0
 	}
 	for i, c := range m.competitions {
-		// Keep first load useful for most users without adding config/state persistence.
+		// Bias the default load toward Ekstraklasa without persisting user prefs.
 		if strings.Contains(strings.ToLower(c.Name), "ekstraklasa") {
 			return i
 		}

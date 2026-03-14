@@ -7,8 +7,8 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// League pages drift across seasons, so round extraction anchors on heading tables
-// and `mecz.php` fixture links instead of brittle width/column assumptions.
+// League pages drift across seasons, so round extraction keys off heading tables
+// and `mecz.php` links instead of width or column positions.
 func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	page := &LeaguePage{URL: url, LeagueKey: extractLeagueKey(url)}
 
@@ -194,6 +194,8 @@ func parseFixturesTable(table *goquery.Selection) []Fixture {
 func parseStandings(doc *goquery.Document) []StandingRow {
 	var standings []StandingRow
 
+	// Standings pages drift too, so stop at the first table whose header matches
+	// the classic league columns and stop once parsed rows give way to other content.
 	leagueTables(doc).EachWithBreak(func(_ int, table *goquery.Selection) bool {
 		header := table.Find("tr").FilterFunction(func(_ int, row *goquery.Selection) bool {
 			text := normalizeWhitespace(row.Text())

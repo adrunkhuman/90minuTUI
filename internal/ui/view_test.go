@@ -209,6 +209,25 @@ func TestMatchViewScrollsLongContent(t *testing.T) {
 	}
 }
 
+func TestMatchViewShowsFullStandingsWhenHeightAllows(t *testing.T) {
+	m := sketchModel()
+	m.width = 120
+	m.height = 27
+	m.matchView = true
+	m.match = &site.MatchPage{Title: "Tall match", HomeTeam: "Team 01", AwayTeam: "Team 02", Score: "1-0"}
+	m.league.Standings = make([]site.StandingRow, 0, 16)
+	for i := 1; i <= 16; i++ {
+		m.league.Standings = append(m.league.Standings, site.StandingRow{Position: i, Team: fmt.Sprintf("Team %02d", i), Played: 30, Won: 10, Drawn: 10, Lost: 10, Points: 40 - i})
+	}
+
+	view := m.View()
+	for _, want := range []string{"Team 01", "Team 16"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected match sidebar to show full standings including %q\n%s", want, view)
+		}
+	}
+}
+
 func TestMatchViewScrollLimitIsClamped(t *testing.T) {
 	m := sketchModel()
 	m.width = 100

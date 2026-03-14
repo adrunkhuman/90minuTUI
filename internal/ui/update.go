@@ -32,24 +32,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			m.toggleFocus()
 			return m, nil
+		case "pgup", "ctrl+u":
+			m.scrollMatch(-m.matchScrollStep())
+			return m, nil
+		case "pgdown", "ctrl+d":
+			m.scrollMatch(m.matchScrollStep())
+			return m, nil
 		case "up", "k":
 			if m.matchView {
-				m.scrollMatch(-1)
-				return m, nil
+				return m, m.moveMatchFixture(-1)
 			}
 			m.moveCursor(-1)
 			return m, nil
 		case "down", "j":
 			if m.matchView {
-				m.scrollMatch(1)
-				return m, nil
+				return m, m.moveMatchFixture(1)
 			}
 			m.moveCursor(1)
 			return m, nil
 		case "left", "h":
+			if m.matchView {
+				return m, m.moveMatchRound(-1)
+			}
 			m.shiftRound(-1)
 			return m, nil
 		case "right", "l":
+			if m.matchView {
+				return m, m.moveMatchRound(1)
+			}
 			m.shiftRound(1)
 			return m, nil
 		case "enter":
@@ -109,7 +119,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		season := m.currentSeason()
-		// Drop stale async results if the user moved to another season.
+		// Drop stale async results after the selected season changes.
 		if season == nil || msg.seasonKey != seasonRequestKey(*season) {
 			return m, nil
 		}
@@ -142,7 +152,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		competition := m.currentCompetition()
-		// Drop stale async results if the user switched competitions.
+		// Drop stale async results after the selected competition changes.
 		if competition == nil || msg.competitionKey != competitionRequestKey(*competition) {
 			return m, nil
 		}
@@ -167,7 +177,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		current := m.currentFixture()
-		// Drop stale async results if the selected fixture changed.
+		// Drop stale async results after fixture navigation changes context.
 		if current == nil || fixtureRequestKey(*current) != msg.fixtureKey {
 			return m, nil
 		}
@@ -226,6 +236,40 @@ func (m *Model) shiftRound(delta int) {
 
 	m.roundCursor = clamp(m.roundCursor+delta, 0, len(m.league.Rounds)-1)
 	m.fixtureCursor = 0
+}
+
+func (m *Model) moveMatchFixture(delta int) tea.Cmd {
+	if !m.matchView {
+		return nil
+	}
+
+	round := m.currentRound()
+	if round == nil || len(round.Fixtures) == 0 {
+		return nil
+	}
+
+	nextCursor := clamp(m.fixtureCursor+delta, 0, len(round.Fixtures)-1)
+	if nextCursor == m.fixtureCursor {
+		return nil
+	}
+
+	m.fixtureCursor = nextCursor
+	return m.loadCurrentMatch()
+}
+
+func (m *Model) moveMatchRound(delta int) tea.Cmd {
+	if !m.matchView || m.league == nil || len(m.league.Rounds) == 0 {
+		return nil
+	}
+
+	nextRound := clamp(m.roundCursor+delta, 0, len(m.league.Rounds)-1)
+	if nextRound == m.roundCursor {
+		return nil
+	}
+
+	m.roundCursor = nextRound
+	m.fixtureCursor = 0
+	return m.loadCurrentMatch()
 }
 
 func (m *Model) handleEnter() tea.Cmd {
@@ -328,4 +372,28 @@ func (m *Model) scrollMatch(delta int) {
 
 	maxScroll := m.matchScrollLimit()
 	m.matchScroll = clamp(m.matchScroll+delta, 0, maxScroll)
+}
+
+func (m *Model) matchScrollStep() int {
+	step := max(1, m.matchViewportHeight()/2)
+	return step
+}
+
+func (m *Model) loadCurrentMatch() tea.Cmd {
+	fixture := m.currentFixture()
+	if fixture == nil {
+		m.loading = false
+		m.err = ""
+		m.matchView = true
+		m.match = nil
+		m.matchScroll = 0
+		return nil
+	}
+
+	m.loading = true
+	m.err = ""
+	m.matchView = true
+	m.match = nil
+	m.matchScroll = 0
+	return m.loadMatchCmd(fixture.MatchURL, fixtureRequestKey(*fixture))
 }

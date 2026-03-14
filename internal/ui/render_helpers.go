@@ -136,6 +136,7 @@ func windowBounds(total, cursor, maxItems int) (int, int) {
 }
 
 func anchoredWindowBounds(total int, anchors []int, maxItems int) (int, int) {
+	// Keep the highlighted home/away rows visible together when standings overflow.
 	if maxItems <= 0 {
 		return 0, 0
 	}
