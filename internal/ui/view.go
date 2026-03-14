@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -452,24 +451,47 @@ func selectorPopupWidth(total int) int {
 func (m Model) matchDetailContent(width int) string {
 	title := lipgloss.NewStyle().Bold(true)
 	var b strings.Builder
-	metaLine := displayMatchMeta(m.match.Meta, m.match.Weather)
-	heading := m.match.Title
-	if m.match.HomeTeam != "" && m.match.AwayTeam != "" && m.match.Score != "" {
-		heading = fmt.Sprintf("%s %s %s", m.match.HomeTeam, m.match.Score, m.match.AwayTeam)
-	}
-
-	b.WriteString(title.Render(heading))
+	b.WriteString(title.Render(renderMatchDetailRow(m.match.HomeTeam, normalizeScore(m.match.Score), m.match.AwayTeam, width-4)))
 	b.WriteString("\n")
-	if metaLine != "" {
-		b.WriteString(metaLine)
-		b.WriteString("\n")
+
+	status := matchStatus(m.match)
+	scorers := scorerTimeline(m.match.Events)
+	if len(scorers) > 0 || status != "" {
+		if status != "" {
+			b.WriteString(renderMatchDetailRow("", status, "", width-4))
+			b.WriteString("\n")
+		}
+		for _, scorer := range scorers {
+			homeText, awayText := "", ""
+			if scorer.side == "home" {
+				homeText = scorer.label
+			} else {
+				awayText = scorer.label
+			}
+			b.WriteString(renderMatchDetailRow(homeText, scorer.minute, awayText, width-4))
+			b.WriteString("\n")
+		}
 	}
 
 	if len(m.match.Events) > 0 {
 		b.WriteString("\n")
-		b.WriteString(title.Render("Timeline"))
+		b.WriteString(title.Render(renderCenteredText("Timeline", width-4)))
 		b.WriteString("\n")
+		htDivider := halftimeScore(m.match.Events)
+		insertedDivider := false
 		for _, event := range sortedEvents(m.match.Events) {
+			// Cards without minute data render as detached badges, so the compact timeline omits them.
+			if strings.TrimSpace(event.MinuteText) == "" && (event.Kind == "YC" || event.Kind == "RC") {
+				continue
+			}
+			if !insertedDivider && htDivider != "" {
+				if minute, ok := minuteSortKey(event.MinuteText); ok && minute > 4599 {
+					b.WriteString(renderMatchDividerRow(htDivider, width-4))
+					b.WriteString("\n")
+					insertedDivider = true
+				}
+			}
+
 			homeText, awayText := "", ""
 			eventText := formatEventLabel(event)
 			if event.TeamSide == "home" {
@@ -477,16 +499,20 @@ func (m Model) matchDetailContent(width int) string {
 			} else {
 				awayText = eventText
 			}
-			b.WriteString(renderSideBySide(homeText, event.MinuteText, awayText, width-4))
+			b.WriteString(renderMatchDetailRow(homeText, formatMatchMinute(event.MinuteText), awayText, width-4))
+			b.WriteString("\n")
+		}
+		if ftDivider := finalScoreLine(m.match); ftDivider != "" {
+			b.WriteString(renderMatchDividerRow(ftDivider, width-4))
 			b.WriteString("\n")
 		}
 	}
 
 	if len(m.match.HomeLineup) > 0 || len(m.match.AwayLineup) > 0 {
 		b.WriteString("\n")
-		b.WriteString(title.Render("Lineups"))
+		b.WriteString(title.Render(renderCenteredText("Lineups", width-4)))
 		b.WriteString("\n")
-		b.WriteString(renderSideBySide(m.match.HomeTeam, "", m.match.AwayTeam, width-4))
+		b.WriteString(renderLineupRow(m.match.HomeTeam, m.match.AwayTeam, width-4))
 		b.WriteString("\n")
 
 		maxPlayers := len(m.match.HomeLineup)
@@ -502,9 +528,16 @@ func (m Model) matchDetailContent(width int) string {
 			if i < len(m.match.AwayLineup) {
 				awayText = renderPlayerLine(m.match.AwayLineup[i])
 			}
-			b.WriteString(renderSideBySide(homeText, "", awayText, width-4))
+			b.WriteString(renderLineupRow(homeText, awayText, width-4))
 			b.WriteString("\n")
 		}
+	}
+
+	if metaLine := displayMatchMeta(m.match.Meta, m.match.Weather); metaLine != "" {
+		b.WriteString("\n")
+		b.WriteString(title.Render(renderCenteredText("Details", width-4)))
+		b.WriteString("\n")
+		b.WriteString(metaLine)
 	}
 
 	return strings.TrimRight(b.String(), "\n")

@@ -112,6 +112,11 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 			Kind:       "GOAL",
 			TeamSide:   "home",
 			Text:       "Krzysztof Kubica 17",
+		}, {
+			MinuteText: "62",
+			Kind:       "GOAL",
+			TeamSide:   "away",
+			Text:       "Samuel Mraz 62",
 		}},
 		NewsTitle: "PKO BP Ekstraklasa: Bruk-Bet Termalica 1-2 Motor",
 		NewsURL:   "http://www.90minut.pl/news/example.html",
@@ -120,6 +125,15 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 	view := m.View()
 	for _, want := range []string{
 		"PKO Bank Polski Ekstraklasa 2025/2026",
+		"Bruk-Bet Termalica Nieciecza",
+		"1-2",
+		"Motor Lublin",
+		"K. Kubica",
+		"S. Mraz",
+		"17'",
+		"62'",
+		"FT 1-2",
+		"Details",
 		"13 March 2026, 18:00 | Attendance 3542 | Ref. Damian Kos | Weather 15 C",
 	} {
 		if !strings.Contains(view, want) {
@@ -137,6 +151,146 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 		if strings.Contains(view, unwanted) {
 			t.Fatalf("expected match view to omit %q\n%s", unwanted, view)
 		}
+	}
+}
+
+func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
+	m := sketchModel()
+	m.width = 140
+	m.matchView = true
+	m.match = &site.MatchPage{
+		HomeTeam: "GKS Katowice",
+		AwayTeam: "Lechia Gdansk",
+		Score:    "2-0",
+		Events: []site.MatchEvent{
+			{MinuteText: "39", Kind: "GOAL", TeamSide: "home", Text: "Wdowiak 39"},
+			{MinuteText: "46", Kind: "SUB", TeamSide: "away", Text: "46' -> Pllana (4)"},
+			{MinuteText: "46", Kind: "SUB", TeamSide: "home", Text: "46' -> Igor Strzalek (86)"},
+			{MinuteText: "60", Kind: "GOAL", TeamSide: "home", Text: "Szkurin 60"},
+		},
+	}
+
+	view := m.View()
+	for _, want := range []string{
+		"Wdowiak",
+		"Szkurin",
+		"Wdowiak ⚽",
+		"39'",
+		"HT 1-0",
+		"FT 2-0",
+		"↕ Pllana",
+		"I. Strzalek ↕",
+		"Szkurin ⚽",
+		"60'",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected match view to contain %q\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "Wdowiak 39', Szkurin 60'") {
+		t.Fatalf("expected scorers to render as separate rows\n%s", view)
+	}
+}
+
+func TestMatchDetailRowsAnchorTowardCenteredMinuteColumn(t *testing.T) {
+	line := renderMatchDetailRow("Wdowiak ⚽", "39'", "↕ Pllana (4)", 76)
+	minuteIdx := strings.Index(line, "39'")
+	leftIdx := strings.Index(line, "Wdowiak ⚽")
+	rightIdx := strings.Index(line, "↕ Pllana (4)")
+	if minuteIdx <= 0 || leftIdx < 0 || rightIdx < 0 {
+		t.Fatalf("expected all columns rendered, got %q", line)
+	}
+	if leftIdx == 0 {
+		t.Fatalf("expected left event to anchor toward the minute column, got %q", line)
+	}
+	if !(leftIdx < minuteIdx && minuteIdx < rightIdx) {
+		t.Fatalf("expected centered minute between left and right columns, got %q", line)
+	}
+}
+
+func TestMatchDetailMinuteColumnStaysFixedForDifferentHomeTextWidths(t *testing.T) {
+	short := renderMatchDetailRow("K. Kubica ⚽", "17'", "", 76)
+	long := renderMatchDetailRow("B. Wolski (k) ⚽", "78'", "", 76)
+	if strings.Index(short, "17'") != strings.Index(long, "78'") {
+		t.Fatalf("expected minute column to stay fixed\nshort: %q\nlong: %q", short, long)
+	}
+}
+
+func TestFormatMatchMinuteLeftPadsSingleDigitMinute(t *testing.T) {
+	if got := formatMatchMinute("9"); got != " 9'" {
+		t.Fatalf("unexpected single-digit minute formatting: %q", got)
+	}
+	if got := formatMatchMinute("17"); got != "17'" {
+		t.Fatalf("unexpected double-digit minute formatting: %q", got)
+	}
+}
+
+func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
+	row := renderMatchDetailRow("Wdowiak G", "39'", "S Pllana (4)", 76)
+	divider := renderMatchDividerRow("HT 1-0", 76)
+	rowMid := strings.Index(row, "39'") + (len("39'") / 2)
+	dividerMid := strings.Index(divider, "HT 1-0") + (len("HT 1-0") / 2)
+	if rowMid != dividerMid {
+		t.Fatalf("expected divider label to align with minute column\nrow: %q\ndiv: %q", row, divider)
+	}
+}
+
+func TestScorerTimelineUsesCenteredMinuteColumn(t *testing.T) {
+	rows := scorerTimeline([]site.MatchEvent{{MinuteText: "17", Kind: "GOAL", TeamSide: "home", Text: "Krzysztof Kubica 17"}, {MinuteText: "30", Kind: "GOAL", TeamSide: "away", Text: "Karol Czubak (k) 30"}})
+	if len(rows) != 2 {
+		t.Fatalf("expected two scorer rows, got %d", len(rows))
+	}
+	if rows[0].label != "K. Kubica ⚽" || rows[1].label != "⚽ K. Czubak (k)" {
+		t.Fatalf("unexpected scorer labels: %#v", rows)
+	}
+	home := renderMatchDetailRow(rows[0].label, rows[0].minute, "", 76)
+	away := renderMatchDetailRow("", rows[1].minute, rows[1].label, 76)
+	homeMid := strings.Index(home, "17'") + (len("17'") / 2)
+	awayMid := strings.Index(away, "30'") + (len("30'") / 2)
+	if diff := homeMid - awayMid; diff < -1 || diff > 1 {
+		t.Fatalf("expected scorer minutes to share centered column\nhome: %q\naway: %q", home, away)
+	}
+}
+
+func TestRenderPlayerLineAbbreviatesNameAndDropsEvents(t *testing.T) {
+	got := renderPlayerLine(site.PlayerLine{Name: "(86) Igor Strzalek", Events: []string{"YC", "RC"}})
+	if got != "I. Strzalek" {
+		t.Fatalf("unexpected player line: %q", got)
+	}
+}
+
+func TestRenderLineupRowUsesCenteredSeparatorColumn(t *testing.T) {
+	row := renderLineupRow("K. Kubica", "B. Mrozek", 76)
+	divider := renderMatchDividerRow("HT 1-0", 76)
+	rowMid := strings.Index(row, "|")
+	dividerMid := strings.Index(divider, "HT 1-0") + (len("HT 1-0") / 2)
+	if rowMid != dividerMid {
+		t.Fatalf("expected lineup separator to share center axis\nrow: %q\ndiv: %q", row, divider)
+	}
+	if !strings.Contains(row, "K. Kubica") || !strings.Contains(row, "B. Mrozek") {
+		t.Fatalf("expected lineup row to contain both players, got %q", row)
+	}
+	if strings.Contains(row, "    |    ") {
+		t.Fatalf("expected tighter lineup spacing around center separator, got %q", row)
+	}
+}
+
+func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {
+	centered := renderCenteredText("Timeline", 21)
+	leftPad := strings.Index(centered, "Timeline")
+	rightPad := len(centered) - leftPad - len("Timeline")
+	if leftPad == 0 || rightPad == 0 {
+		t.Fatalf("expected centered padding, got %q", centered)
+	}
+	if leftPad-rightPad > 1 || rightPad-leftPad > 1 {
+		t.Fatalf("expected roughly symmetric padding, got %q", centered)
+	}
+}
+
+func TestFinalScoreLineUsesMatchScore(t *testing.T) {
+	got := finalScoreLine(&site.MatchPage{Score: "2-0"})
+	if got != "FT 2-0" {
+		t.Fatalf("unexpected final score line: %q", got)
 	}
 }
 
