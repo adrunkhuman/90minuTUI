@@ -191,14 +191,14 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	view := m.View()
 	plainView := ansi.Strip(view)
 
-	// Score header: goals with minute-in-label, score progression in center, HT/FT dividers
+	// Score header: goals with minute-in-center, HT/FT dividers
 	for _, want := range []string{
-		"Wdowiak", "39'", "⚽", "(1-0)", // home goal row
+		"Wdowiak", "39'", "⚽", // home goal row (minute in center, icon adjacent)
 		"HT 1 - 0",
-		"❌", "52'",                      // away missed penalty row
-		"Szkurin", "60'", "(2-0)",        // second home goal row
-		"K. Czubak", "70'", "(2-1)",      // away goal row
-		"🟥", "85'",                      // away red card row
+		"❌", "52'",            // away missed penalty row
+		"Szkurin", "60'",      // second home goal row
+		"K. Czubak", "70'",    // away goal row
+		"🟥", "85'",           // away red card row
 		"FT 2-1",
 	} {
 		if !strings.Contains(plainView, want) {
@@ -237,14 +237,14 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		}
 	}
 
-	// Lineup event columns: cards and sub arrows visible; no goals in lineup
+	// Lineup section: sub minutes at outer edge, sub-on player visible, cards in event column
 	for _, want := range []string{
-		"→",   // sub-off arrow in event column
-		"←",   // sub-on arrow in event column
-		"🟥",  // red card badge in event column
+		"46'",      // sub minute visible at outer edge of player name
+		"D. Nowak", // sub-on player visible immediately after sub-off
+		"🟥",       // red card badge in event column
 	} {
 		if !strings.Contains(plainView, want) {
-			t.Fatalf("expected lineup event column to contain %q\n%s", want, view)
+			t.Fatalf("expected lineup section to contain %q\n%s", want, view)
 		}
 	}
 	// Goals must NOT be annotated in the lineup (they belong to the score header)
@@ -305,7 +305,7 @@ func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 	}
 }
 
-func TestHeaderEventRowsIncludeScoreProgressionLabels(t *testing.T) {
+func TestHeaderEventRowsMinuteInCenterColumn(t *testing.T) {
 	rows := headerEventRows([]site.MatchEvent{
 		{MinuteText: "17", Kind: "GOAL", TeamSide: "home", Text: "Krzysztof Kubica 17"},
 		{MinuteText: "30", Kind: "GOAL", TeamSide: "away", Text: "Karol Czubak (k) 30"},
@@ -314,31 +314,31 @@ func TestHeaderEventRowsIncludeScoreProgressionLabels(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("expected two header rows, got %d: %#v", len(rows), rows)
 	}
-	// Label has minute embedded, icon adjacent to center
-	if ansi.Strip(rows[0].label) != "K. Kubica 17' ⚽" {
+	// Label has name + icon only; no minute embedded in label
+	if ansi.Strip(rows[0].label) != "K. Kubica ⚽" {
 		t.Fatalf("unexpected home scorer label: %q", ansi.Strip(rows[0].label))
 	}
-	if ansi.Strip(rows[1].label) != "⚽ 30' K. Czubak (pen)" {
+	if ansi.Strip(rows[1].label) != "⚽ K. Czubak (pen)" {
 		t.Fatalf("unexpected away scorer label: %q", ansi.Strip(rows[1].label))
 	}
 	// Penalty suffix must still be dimmed
 	if !strings.Contains(rows[1].label, "\x1b[2m(pen)\x1b[0m") {
 		t.Fatalf("expected scored penalty suffix to be dimmed, got %q", rows[1].label)
 	}
-	// Center column carries the score progression, not the minute
-	if rows[0].minute != "(1-0)" {
-		t.Fatalf("expected home center to carry score (1-0), got %q", rows[0].minute)
+	// Center column carries the minute
+	if strings.TrimSpace(rows[0].minute) != "17'" {
+		t.Fatalf("expected home center to carry minute 17', got %q", rows[0].minute)
 	}
-	if rows[1].minute != "(1-1)" {
-		t.Fatalf("expected away center to carry score (1-1), got %q", rows[1].minute)
+	if strings.TrimSpace(rows[1].minute) != "30'" {
+		t.Fatalf("expected away center to carry minute 30', got %q", rows[1].minute)
 	}
-	// Score columns align on the same center axis
+	// Minutes align on the same center axis
 	home := renderMatchDetailRow(rows[0].label, rows[0].minute, "", 76)
 	away := renderMatchDetailRow("", rows[1].minute, rows[1].label, 76)
-	homeMid := strings.Index(home, "(1-0)") + (len("(1-0)") / 2)
-	awayMid := strings.Index(away, "(1-1)") + (len("(1-1)") / 2)
+	homeMid := strings.Index(home, "17'")
+	awayMid := strings.Index(away, "30'")
 	if diff := homeMid - awayMid; diff < -1 || diff > 1 {
-		t.Fatalf("expected score labels to share centered column\nhome: %q\naway: %q", home, away)
+		t.Fatalf("expected minutes to share centered column\nhome: %q\naway: %q", home, away)
 	}
 }
 
@@ -357,8 +357,11 @@ func TestHeaderEventRowsIncludesRedCardsAndHTDivider(t *testing.T) {
 	} else {
 		t.Fatalf("expected row 1 to be HT divider, got %#v", rows[1])
 	}
-	if ansi.Strip(rows[0].label) != "Wdowiak 39' ⚽" {
+	if ansi.Strip(rows[0].label) != "Wdowiak ⚽" {
 		t.Fatalf("unexpected first goal label: %q", ansi.Strip(rows[0].label))
+	}
+	if strings.TrimSpace(rows[0].minute) != "39'" {
+		t.Fatalf("expected first goal minute 39' in center, got %q", rows[0].minute)
 	}
 	if !strings.Contains(ansi.Strip(rows[3].label), "🟥") {
 		t.Fatalf("expected red card row to contain 🟥, got %q", ansi.Strip(rows[3].label))

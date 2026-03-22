@@ -498,20 +498,34 @@ func (m Model) matchDetailContent(width int) string {
 
 		homeIdx := playerEventIndex(m.match.Events, "home")
 		awayIdx := playerEventIndex(m.match.Events, "away")
-		maxPlayers := max(len(m.match.HomeLineup), len(m.match.AwayLineup))
+		homeEntries := reorderedLineup(m.match.HomeLineup, homeIdx)
+		awayEntries := reorderedLineup(m.match.AwayLineup, awayIdx)
+		maxPlayers := max(len(homeEntries), len(awayEntries))
 
 		for i := 0; i < maxPlayers; i++ {
-			homeName, homeEvents := "", ""
-			awayName, awayEvents := "", ""
-			if i < len(m.match.HomeLineup) {
-				homeName = formatPlayerLabel(m.match.HomeLineup[i].Name)
-				homeEvents = playerEventAnnotation(m.match.HomeLineup[i], "home", homeIdx)
+			var hEntry, aEntry lineupEntry
+			if i < len(homeEntries) {
+				hEntry = homeEntries[i]
 			}
-			if i < len(m.match.AwayLineup) {
-				awayName = formatPlayerLabel(m.match.AwayLineup[i].Name)
-				awayEvents = playerEventAnnotation(m.match.AwayLineup[i], "away", awayIdx)
+			if i < len(awayEntries) {
+				aEntry = awayEntries[i]
 			}
-			b.WriteString(renderAnnotatedLineupRow(homeName, homeEvents, awayName, awayEvents, width-4))
+
+			// Sub-on players get their substitution minute at the outer edge of the name.
+			homeName := formatPlayerLabel(hEntry.player.Name)
+			if hEntry.subMinute != "" {
+				homeName = hEntry.subMinute + " " + homeName
+			}
+			awayName := formatPlayerLabel(aEntry.player.Name)
+			if aEntry.subMinute != "" {
+				awayName = awayName + " " + aEntry.subMinute
+			}
+
+			b.WriteString(renderAnnotatedLineupRow(
+				homeName, cardAnnotation(hEntry.player, homeIdx),
+				awayName, cardAnnotation(aEntry.player, awayIdx),
+				width-4,
+			))
 			b.WriteString("\n")
 		}
 	}

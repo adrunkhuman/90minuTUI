@@ -490,8 +490,7 @@ type scorerLine struct {
 
 // headerEventRows returns goal, missed-penalty, and red-card events sorted by minute,
 // with an HT divider injected between halves when both exist.
-// Goals embed the minute in the side label; the center column carries the score progression.
-// MISS and RC events keep the minute in the center column (no score change).
+// All events carry the minute in the center column; the side label holds name + icon.
 func headerEventRows(events []site.MatchEvent) []scorerLine {
 	ordered := sortedEvents(events)
 	home, away := 0, 0
@@ -527,10 +526,9 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 			if name == "" {
 				continue
 			}
-			minute := strings.TrimSpace(formatMatchMinute(event.MinuteText))
 			lines = append(lines, scorerLine{
-				label:  formatGoalLabel(name, minute, event.TeamSide),
-				minute: fmt.Sprintf("(%d-%d)", home, away),
+				label:  formatGoalLabel(name, event.TeamSide),
+				minute: formatMatchMinute(event.MinuteText),
 				side:   event.TeamSide,
 			})
 		case "MISS":
@@ -563,14 +561,14 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 	return lines
 }
 
-// formatGoalLabel builds a goal side-label with the minute embedded and the icon
-// adjacent to the center column: "Name min' ⚽" (home) or "⚽ min' Name" (away).
-func formatGoalLabel(name, minute, side string) string {
+// formatGoalLabel builds a goal side-label with the icon adjacent to the center column.
+// "Name ⚽" (home, icon on right nearest center) or "⚽ Name" (away, icon on left nearest center).
+func formatGoalLabel(name, side string) string {
 	glyph := eventPrefix("GOAL")
 	if side == "home" {
-		return name + " " + minute + " " + glyph
+		return name + " " + glyph
 	}
-	return glyph + " " + minute + " " + name
+	return glyph + " " + name
 }
 
 // playerLastName returns a lowercase last-name key for fuzzy event-to-player matching.
@@ -617,10 +615,9 @@ func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.M
 	return idx
 }
 
-// playerEventAnnotation returns the event badge string for a lineup player —
-// cards and sub arrows only (goals are shown in the score header, not lineups).
-// Empty string means no events; the caller renders a wider gap in that case.
-func playerEventAnnotation(player site.PlayerLine, side string, idx map[string][]site.MatchEvent) string {
+// cardAnnotation returns the YC/RC badge string for a lineup player, intended
+// for the dedicated event column next to the centre separator. Empty when clean.
+func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) string {
 	base := formatPlayerLabel(player.Name)
 	key := playerLastName(base)
 	if key == "" {
@@ -632,35 +629,85 @@ func playerEventAnnotation(player site.PlayerLine, side string, idx map[string][
 		return ""
 	}
 
-	parts := make([]string, 0, 2)
 	for _, e := range matched {
-		minute := strings.TrimSpace(formatMatchMinute(e.MinuteText))
 		switch e.Kind {
 		case "YC":
-			parts = append(parts, eventPrefix("YC")+" "+minute)
+			return eventPrefix("YC")
 		case "RC":
-			parts = append(parts, eventPrefix("RC")+" "+minute)
-		case "SUB":
+			return eventPrefix("RC")
+		}
+	}
+	return ""
+}
+
+// lineupEntry is a display-ready lineup row entry.
+// subMinute is non-empty for sub-on players and carries the substitution minute.
+type lineupEntry struct {
+	player    site.PlayerLine
+	subMinute string
+}
+
+// reorderedLineup returns lineup entries with each sub-on player inserted
+// immediately after the player they replaced. Sub-on players are identified
+// via the event index; those that cannot be matched are appended at the end.
+func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
+	if len(players) == 0 {
+		return nil
+	}
+
+	type subInfo struct{ onKey, minute string }
+	subOffMap := make(map[string]subInfo, 4)
+	subOnSet := make(map[string]bool, 4)
+
+	for _, player := range players {
+		key := playerLastName(formatPlayerLabel(player.Name))
+		for _, e := range idx[key] {
+			if e.Kind != "SUB" {
+				continue
+			}
 			out, in := substitutionPlayers(e.Text)
 			outKey := playerLastName(out)
 			inKey := playerLastName(in)
-			if outKey == key {
-				if minute != "" {
-					parts = append(parts, "→ "+minute)
-				} else {
-					parts = append(parts, "→")
-				}
-			} else if inKey == key {
-				if minute != "" {
-					parts = append(parts, "← "+minute)
-				} else {
-					parts = append(parts, "←")
-				}
+			minute := strings.TrimSpace(formatMatchMinute(e.MinuteText))
+			if outKey == key && inKey != "" {
+				subOffMap[key] = subInfo{onKey: inKey, minute: minute}
+				subOnSet[inKey] = true
 			}
 		}
 	}
 
-	return strings.Join(parts, " ")
+	// Build key → PlayerLine lookup
+	byKey := make(map[string]site.PlayerLine, len(players))
+	for _, p := range players {
+		byKey[playerLastName(formatPlayerLabel(p.Name))] = p
+	}
+
+	result := make([]lineupEntry, 0, len(players))
+	insertedSubOns := make(map[string]bool, len(subOnSet))
+
+	for _, player := range players {
+		key := playerLastName(formatPlayerLabel(player.Name))
+		if subOnSet[key] {
+			continue // will be placed after their sub-off player
+		}
+		result = append(result, lineupEntry{player: player})
+		if info, ok := subOffMap[key]; ok {
+			if onPlayer, exists := byKey[info.onKey]; exists {
+				result = append(result, lineupEntry{player: onPlayer, subMinute: info.minute})
+				insertedSubOns[info.onKey] = true
+			}
+		}
+	}
+
+	// Append unmatched sub-on players (name mismatch between event and lineup)
+	for _, player := range players {
+		key := playerLastName(formatPlayerLabel(player.Name))
+		if subOnSet[key] && !insertedSubOns[key] {
+			result = append(result, lineupEntry{player: player})
+		}
+	}
+
+	return result
 }
 
 // renderAnnotatedLineupRow renders a lineup player row with a dedicated event column
@@ -683,7 +730,7 @@ func renderAnnotatedLineupRow(homePlayer, homeEvents, awayPlayer, awayEvents str
 		return renderLineupRow(home, away, width)
 	}
 
-	const eventWidth = 9
+	const eventWidth = 2 // one emoji wide (YC/RC or empty)
 	const gap = 1
 	playerWidth := max(8, (width-1-2*eventWidth-2*gap)/2)
 
