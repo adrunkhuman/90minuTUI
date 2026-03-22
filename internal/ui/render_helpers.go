@@ -361,6 +361,13 @@ func faintText(text string) string {
 	return "\x1b[2m" + text + "\x1b[0m"
 }
 
+func faintPenaltySuffix(text string) string {
+	if text == "" || !strings.Contains(text, "(pen)") {
+		return text
+	}
+	return strings.ReplaceAll(text, "(pen)", faintText("(pen)"))
+}
+
 func formatLeftEventLabel(kind, text string) string {
 	prefix := eventPrefix(kind)
 	if text == "" {
@@ -436,7 +443,7 @@ func formatPlayerLabel(value string) string {
 		cleaned += " " + strings.Join(suffixes, " ")
 	}
 
-	return cleaned
+	return faintPenaltySuffix(cleaned)
 }
 
 func digitsOnly(value string) bool {
@@ -974,6 +981,9 @@ func trimEventMinute(event site.MatchEvent) string {
 	if event.Kind == "SUB" {
 		text = strings.TrimSpace(strings.TrimPrefix(text, "->"))
 		text = normalizeSubstitutionText(text)
+	}
+	if event.Kind == "GOAL" {
+		text = strings.ReplaceAll(text, "(k)", "(pen)")
 	}
 	if event.Kind == "MISS" {
 		text = strings.ReplaceAll(text, "(nk)", "(pen)")
