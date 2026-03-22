@@ -488,8 +488,10 @@ type scorerLine struct {
 	isDivider bool
 }
 
-// headerEventRows returns goal events (with running score labels) and red card events
-// sorted by minute, with an HT divider injected between halves when both exist.
+// headerEventRows returns goal, missed-penalty, and red-card events sorted by minute,
+// with an HT divider injected between halves when both exist.
+// Goals embed the minute in the side label; the center column carries the score progression.
+// MISS and RC events keep the minute in the center column (no score change).
 func headerEventRows(events []site.MatchEvent) []scorerLine {
 	ordered := sortedEvents(events)
 	home, away := 0, 0
@@ -498,10 +500,12 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 	lines := make([]scorerLine, 0, 8)
 
 	for _, event := range ordered {
-		if event.Kind != "GOAL" && event.Kind != "RC" {
+		switch event.Kind {
+		case "GOAL", "MISS", "RC":
+		default:
 			continue
 		}
-		if event.Kind == "RC" && strings.TrimSpace(event.MinuteText) == "" {
+		if strings.TrimSpace(event.MinuteText) == "" {
 			continue
 		}
 
@@ -512,6 +516,7 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 			}
 		}
 
+		name := trimEventMinute(event)
 		switch event.Kind {
 		case "GOAL":
 			if event.TeamSide == "home" {
@@ -519,17 +524,28 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 			} else if event.TeamSide == "away" {
 				away++
 			}
-			name := trimEventMinute(event)
 			if name == "" {
 				continue
 			}
+			minute := strings.TrimSpace(formatMatchMinute(event.MinuteText))
 			lines = append(lines, scorerLine{
-				label:  formatScorerLabelWithScore(name, event.TeamSide, fmt.Sprintf("(%d-%d)", home, away)),
+				label:  formatGoalLabel(name, minute, event.TeamSide),
+				minute: fmt.Sprintf("(%d-%d)", home, away),
+				side:   event.TeamSide,
+			})
+		case "MISS":
+			var label string
+			if event.TeamSide == "home" {
+				label = formatLeftEventLabel("MISS", name)
+			} else {
+				label = formatRightEventLabel("MISS", name)
+			}
+			lines = append(lines, scorerLine{
+				label:  label,
 				minute: formatMatchMinute(event.MinuteText),
 				side:   event.TeamSide,
 			})
 		case "RC":
-			name := trimEventMinute(event)
 			var label string
 			if event.TeamSide == "home" {
 				label = formatLeftEventLabel("RC", name)
@@ -547,12 +563,14 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 	return lines
 }
 
-func formatScorerLabelWithScore(name, side, scoreLabel string) string {
+// formatGoalLabel builds a goal side-label with the minute embedded and the icon
+// adjacent to the center column: "Name min' ⚽" (home) or "⚽ min' Name" (away).
+func formatGoalLabel(name, minute, side string) string {
 	glyph := eventPrefix("GOAL")
 	if side == "home" {
-		return name + " " + glyph + " " + scoreLabel
+		return name + " " + minute + " " + glyph
 	}
-	return glyph + " " + name + " " + scoreLabel
+	return glyph + " " + minute + " " + name
 }
 
 // playerLastName returns a lowercase last-name key for fuzzy event-to-player matching.
@@ -600,8 +618,9 @@ func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.M
 }
 
 // renderAnnotatedPlayer returns the player label with event annotations appended.
-// Goals get ⚽+minute, cards get their glyph+minute, substitutions get directional
-// arrows (→ for sub-off with the name dimmed, ← for sub-on).
+// Goals get ⚽+minute, cards get their glyph+minute.
+// Substitutions show a directional arrow with minute: → for sub-off, ← for sub-on.
+// No dimming is applied — all players share equal visual priority.
 func renderAnnotatedPlayer(player site.PlayerLine, side string, idx map[string][]site.MatchEvent) string {
 	base := formatPlayerLabel(player.Name)
 	key := playerLastName(base)
@@ -614,7 +633,6 @@ func renderAnnotatedPlayer(player site.PlayerLine, side string, idx map[string][
 		return base
 	}
 
-	dimName := false
 	annotations := make([]string, 0, 3)
 
 	for _, e := range matched {
@@ -631,32 +649,18 @@ func renderAnnotatedPlayer(player site.PlayerLine, side string, idx map[string][
 			outKey := playerLastName(out)
 			inKey := playerLastName(in)
 			if outKey == key {
-				dimName = true
-				if in != "" {
-					annotations = append(annotations, "→ "+in+" "+minute)
-				} else {
-					annotations = append(annotations, "→ "+minute)
-				}
+				annotations = append(annotations, "→ "+minute)
 			} else if inKey == key {
-				if out != "" {
-					annotations = append(annotations, "← "+out+" "+minute)
-				} else {
-					annotations = append(annotations, "← "+minute)
-				}
+				annotations = append(annotations, "← "+minute)
 			}
 		}
 	}
 
-	name := base
-	if dimName {
-		name = faintText(base)
-	}
-
 	if len(annotations) == 0 {
-		return name
+		return base
 	}
 
-	return name + " " + strings.Join(annotations, " ")
+	return base + " " + strings.Join(annotations, " ")
 }
 
 func halftimeScore(events []site.MatchEvent) string {
