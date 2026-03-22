@@ -96,3 +96,42 @@ func TestParseMatchPageGoalSideAssignmentAndStoppageMinutes(t *testing.T) {
 		t.Fatalf("unexpected second goal: %#v", goals[1])
 	}
 }
+
+func TestParseMatchPageMissedPenaltyTimelineEvent(t *testing.T) {
+	html := `
+	<html><head><title>Match Test</title></head><body>
+	<table class="main" width="480">
+	<tr><td colspan="3"><b>Ekstraklasa</b></td></tr>
+	<tr><td colspan="3">20 marca 2026, 18:00</td></tr>
+	<tr><td>Piast Gliwice</td><td>3 - 1</td><td>Radomiak Radom</td></tr>
+	<tr><td align="right">&nbsp;<img src="http://img.90minut.pl/img/missed.gif" width="10" height="10" align="absmiddle" alt="(nk)"> Gierman Barkowskij 52 (nk)&nbsp;&nbsp;&nbsp;&nbsp;</td><td></td><td></td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic html: %v", err)
+	}
+
+	page := parseMatchPage(doc, "http://www.90minut.pl/mecz.php?id_mecz=2022961")
+	if page == nil {
+		t.Fatalf("expected parsed match page")
+	}
+	if len(page.Events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(page.Events))
+	}
+
+	event := page.Events[0]
+	if event.Kind != "MISS" {
+		t.Fatalf("unexpected event kind: %#v", event)
+	}
+	if event.TeamSide != "home" {
+		t.Fatalf("unexpected event side: %#v", event)
+	}
+	if event.MinuteText != "52" {
+		t.Fatalf("unexpected missed penalty minute: %#v", event)
+	}
+	if event.Text != "Gierman Barkowskij 52 (nk)" {
+		t.Fatalf("unexpected missed penalty text: %#v", event)
+	}
+}

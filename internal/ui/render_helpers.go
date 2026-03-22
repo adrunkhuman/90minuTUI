@@ -256,12 +256,14 @@ func eventWeight(kind string) int {
 	switch kind {
 	case "GOAL":
 		return 0
-	case "RC":
+	case "MISS":
 		return 1
-	case "YC":
+	case "RC":
 		return 2
-	case "SUB":
+	case "YC":
 		return 3
+	case "SUB":
+		return 4
 	default:
 		return 9
 	}
@@ -379,6 +381,8 @@ func eventPrefix(kind string) string {
 	switch kind {
 	case "GOAL":
 		return "⚽"
+	case "MISS":
+		return "❌"
 	case "SUB":
 		return "↕"
 	case "YC":
@@ -970,6 +974,9 @@ func trimEventMinute(event site.MatchEvent) string {
 	if event.Kind == "SUB" {
 		text = strings.TrimSpace(strings.TrimPrefix(text, "->"))
 		text = normalizeSubstitutionText(text)
+	}
+	if event.Kind == "MISS" {
+		text = strings.ReplaceAll(text, "(nk)", "(pen)")
 	}
 
 	return formatPlayerLabel(text)
