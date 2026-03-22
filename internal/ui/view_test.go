@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
@@ -294,6 +296,63 @@ func TestRenderLineupRowUsesCenteredSeparatorColumn(t *testing.T) {
 	if strings.Contains(row, "    |    ") {
 		t.Fatalf("expected tighter lineup spacing around center separator, got %q", row)
 	}
+}
+
+func TestRenderLineupHeaderRowUsesBlankCenteredGap(t *testing.T) {
+	row := renderLineupRowWithMarker("Piast Gliwice", "Radomiak Radom", " ", 76)
+	divider := renderMatchDividerRow("HT 1-0", 76)
+
+	if !strings.Contains(row, "Piast Gliwice") || !strings.Contains(row, "Radomiak Radom") {
+		t.Fatalf("expected lineup header row to contain both team names, got %q", row)
+	}
+	if strings.Contains(row, "|") {
+		t.Fatalf("expected lineup header row to omit separator, got %q", row)
+	}
+
+	leftEnd := strings.Index(row, "Piast Gliwice") + len("Piast Gliwice")
+	rightStart := strings.Index(row, "Radomiak Radom")
+	gapMid := leftEnd + ((rightStart - leftEnd) / 2)
+	dividerMid := strings.Index(divider, "HT 1-0") + (len("HT 1-0") / 2)
+	if diff := gapMid - dividerMid; diff < -1 || diff > 1 {
+		t.Fatalf("expected lineup header gap to stay centered\nrow: %q\ndiv: %q", row, divider)
+	}
+}
+
+func TestMatchDetailContentStylesLineupTeamsWithoutSeparator(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := sketchModel()
+	m.match = &site.MatchPage{
+		HomeTeam:   "Piast Gliwice",
+		AwayTeam:   "Radomiak Radom",
+		HomeLineup: []site.PlayerLine{{Name: "K. Szymanski"}},
+		AwayLineup: []site.PlayerLine{{Name: "F. Majchrowicz"}},
+	}
+
+	content := m.matchDetailContent(80)
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if !strings.Contains(ansi.Strip(line), "Lineups") || i+1 >= len(lines) {
+			continue
+		}
+
+		header := lines[i+1]
+		stripped := ansi.Strip(header)
+		if !strings.Contains(stripped, "Piast Gliwice") || !strings.Contains(stripped, "Radomiak Radom") {
+			t.Fatalf("expected lineup team header row after section title, got %q", stripped)
+		}
+		if strings.Contains(stripped, "|") {
+			t.Fatalf("expected lineup team header to omit separator, got %q", stripped)
+		}
+		if !strings.Contains(header, "\x1b[") {
+			t.Fatalf("expected lineup team header to include styling, got %q", header)
+		}
+		return
+	}
+
+	t.Fatal("expected match detail content to include lineup team header row")
 }
 
 func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {

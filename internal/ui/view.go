@@ -512,7 +512,12 @@ func (m Model) matchDetailContent(width int) string {
 		b.WriteString("\n")
 		b.WriteString(title.Render(renderCenteredText("Lineups", width-4)))
 		b.WriteString("\n")
-		b.WriteString(renderLineupRow(m.match.HomeTeam, m.match.AwayTeam, width-4))
+		b.WriteString(renderLineupRowWithMarker(
+			title.Render(m.match.HomeTeam),
+			title.Render(m.match.AwayTeam),
+			" ",
+			width-4,
+		))
 		b.WriteString("\n")
 
 		maxPlayers := len(m.match.HomeLineup)
