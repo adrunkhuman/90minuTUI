@@ -91,6 +91,27 @@ func TestParseMatchPageWithout480Width(t *testing.T) {
 	}
 }
 
+func TestPlayerTimelineEventsKeepsOutgoingAndIncomingSubstitutionPlayers(t *testing.T) {
+	player := PlayerLine{
+		Name:   "Oskar Lesniak",
+		Events: []string{"66' -> Damian Nowak"},
+	}
+
+	events := playerTimelineEvents(player, "home")
+	if len(events) != 1 {
+		t.Fatalf("expected one event, got %d", len(events))
+	}
+	if events[0].Kind != "SUB" {
+		t.Fatalf("expected substitution event, got %#v", events[0])
+	}
+	if events[0].Text != "Oskar Lesniak -> Damian Nowak" {
+		t.Fatalf("unexpected substitution text: %q", events[0].Text)
+	}
+	if events[0].MinuteText != "66" {
+		t.Fatalf("unexpected substitution minute: %q", events[0].MinuteText)
+	}
+}
+
 func TestParseMatchPageSkipsBreadcrumbLikeMeta(t *testing.T) {
 	html := `
 	<html><head><title>Match Test</title></head><body>

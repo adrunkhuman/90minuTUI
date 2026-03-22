@@ -235,7 +235,7 @@ func playerTimelineEvents(player PlayerLine, side string) []MatchEvent {
 		case strings.Contains(marker, "->"):
 			event.Kind = "SUB"
 			event.MinuteText = extractMinute(marker)
-			event.Text = marker
+			event.Text = substitutionEventText(player.Name, marker)
 		default:
 			event.Kind = "EVENT"
 			event.Text = marker
@@ -245,6 +245,25 @@ func playerTimelineEvents(player PlayerLine, side string) []MatchEvent {
 	}
 
 	return events
+}
+
+func substitutionEventText(outgoing, marker string) string {
+	parts := strings.SplitN(marker, "->", 2)
+	if len(parts) != 2 {
+		return normalizeWhitespace(marker)
+	}
+
+	incoming := normalizeWhitespace(parts[1])
+	if incoming == "" {
+		return normalizeWhitespace(marker)
+	}
+
+	outgoing = normalizeWhitespace(outgoing)
+	if outgoing == "" {
+		return incoming
+	}
+
+	return outgoing + " -> " + incoming
 }
 
 func parsePlayerCell(cell *goquery.Selection) *PlayerLine {

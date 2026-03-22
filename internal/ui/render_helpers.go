@@ -37,6 +37,7 @@ var fixtureWhenInfoRe = regexp.MustCompile(`(?i)^(\d{1,2})\s+([\p{L}]+)(?:\s+\d{
 var playerNumberPrefixRe = regexp.MustCompile(`^\(\d+\)\s*`)
 var playerNumberSuffixRe = regexp.MustCompile(`\s+\(\d+\)$`)
 var trailingParenRe = regexp.MustCompile(`^(.*?)(\s+\([^)]*\))$`)
+var substitutionMinutePrefixRe = regexp.MustCompile(`^\d+'?\s*`)
 
 func renderSeasonsWindow(seasons []site.Season, cursor int) []string {
 	if len(seasons) == 0 {
@@ -294,6 +295,10 @@ func atoiOrNeg(s string) int {
 }
 
 func formatEventLabel(event site.MatchEvent) string {
+	if event.Kind == "SUB" {
+		return formatSubstitutionLabel(event)
+	}
+
 	text := trimEventMinute(event)
 	prefix := eventPrefix(event.Kind)
 	if text == "" {
@@ -304,6 +309,54 @@ func formatEventLabel(event site.MatchEvent) string {
 	}
 
 	return formatRightEventLabel(event.Kind, text)
+}
+
+func formatSubstitutionLabel(event site.MatchEvent) string {
+	outgoing, incoming := substitutionPlayers(event.Text)
+	if incoming == "" {
+		fallback := trimEventMinute(event)
+		if fallback == "" {
+			return eventPrefix(event.Kind)
+		}
+		if event.TeamSide == "home" {
+			return formatLeftEventLabel(event.Kind, fallback)
+		}
+		return formatRightEventLabel(event.Kind, fallback)
+	}
+
+	arrow := eventPrefix(event.Kind)
+	if event.TeamSide == "home" {
+		if outgoing == "" {
+			return incoming + " " + arrow
+		}
+		return faintText(outgoing) + " " + arrow + " " + incoming
+	}
+	if outgoing == "" {
+		return arrow + " " + incoming
+	}
+	return incoming + " " + arrow + " " + faintText(outgoing)
+}
+
+func substitutionPlayers(text string) (string, string) {
+	parts := strings.SplitN(normalizeDisplayText(text), "->", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+
+	outgoing := normalizeDisplayText(substitutionMinutePrefixRe.ReplaceAllString(strings.TrimSpace(parts[0]), ""))
+	incoming := normalizeDisplayText(parts[1])
+	if strings.EqualFold(outgoing, "sub") {
+		outgoing = ""
+	}
+
+	return formatPlayerLabel(outgoing), formatPlayerLabel(incoming)
+}
+
+func faintText(text string) string {
+	if text == "" {
+		return ""
+	}
+	return "\x1b[2m" + text + "\x1b[0m"
 }
 
 func formatLeftEventLabel(kind, text string) string {
