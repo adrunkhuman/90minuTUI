@@ -45,12 +45,12 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 			return
 		}
 
-		if strings.Contains(middle, "-") {
-			// Goal rows keep one side empty; non-empty side maps event ownership.
+		if kind, ok := scoreRowEventKind(row); ok {
+			// Incident rows keep one side empty; non-empty side maps event ownership.
 			if left != "" && right == "" {
 				page.Events = append(page.Events, MatchEvent{
 					MinuteText: extractMinute(left),
-					Kind:       "GOAL",
+					Kind:       kind,
 					TeamSide:   "home",
 					Text:       left,
 				})
@@ -59,7 +59,7 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 			if right != "" && left == "" {
 				page.Events = append(page.Events, MatchEvent{
 					MinuteText: extractMinute(right),
-					Kind:       "GOAL",
+					Kind:       kind,
 					TeamSide:   "away",
 					Text:       right,
 				})
@@ -102,6 +102,42 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 	})
 
 	return page
+}
+
+func scoreRowEventKind(row *goquery.Selection) (string, bool) {
+	tds := row.Find("td")
+	if tds.Length() != 3 {
+		return "", false
+	}
+	middle := normalizeWhitespace(tds.Eq(1).Text())
+	if middle == "-" || isScoreLikeText(middle) {
+		return "GOAL", true
+	}
+
+	leftKind := scoreCellEventKind(tds.Eq(0))
+	rightKind := scoreCellEventKind(tds.Eq(2))
+	if leftKind != "" && leftKind == rightKind {
+		return leftKind, true
+	}
+	if leftKind != "" && normalizeWhitespace(tds.Eq(2).Text()) == "" {
+		return leftKind, true
+	}
+	if rightKind != "" && normalizeWhitespace(tds.Eq(0).Text()) == "" {
+		return rightKind, true
+	}
+
+	return "", false
+}
+
+func scoreCellEventKind(cell *goquery.Selection) string {
+	switch {
+	case cell.Find("img[src*='goal.gif']").Length() > 0:
+		return "GOAL"
+	case cell.Find("img[src*='missed.gif']").Length() > 0:
+		return "MISS"
+	default:
+		return ""
+	}
 }
 
 func findMatchMainTable(doc *goquery.Document) *goquery.Selection {

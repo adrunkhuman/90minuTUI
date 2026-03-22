@@ -167,6 +167,7 @@ func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
 		Score:    "2-0",
 		Events: []site.MatchEvent{
 			{MinuteText: "39", Kind: "GOAL", TeamSide: "home", Text: "Wdowiak 39"},
+			{MinuteText: "52", Kind: "MISS", TeamSide: "away", Text: "Barkowskij 52 (nk)"},
 			{MinuteText: "46", Kind: "SUB", TeamSide: "away", Text: "O. Lesniak -> Pllana (4)"},
 			{MinuteText: "46", Kind: "SUB", TeamSide: "home", Text: "Igor Strzalek (86) -> Damian Nowak"},
 			{MinuteText: "60", Kind: "GOAL", TeamSide: "home", Text: "Szkurin 60"},
@@ -185,6 +186,8 @@ func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
 		"I. Strzalek",
 		"D. Nowak",
 		"O. Lesniak",
+		"❌ Barkowskij (pen)",
+		"52'",
 		"Szkurin ⚽",
 		"60'",
 	} {
@@ -194,6 +197,37 @@ func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
 	}
 	if strings.Contains(view, "Wdowiak 39', Szkurin 60'") {
 		t.Fatalf("expected scorers to render as separate rows\n%s", view)
+	}
+	timeline := view[strings.Index(view, "Timeline"):]
+
+	indexes := []int{
+		strings.Index(timeline, "39'"),
+		strings.Index(timeline, "Pllana ↕"),
+		strings.Index(timeline, "D. Nowak"),
+		strings.Index(timeline, "52'"),
+		strings.Index(timeline, "Szkurin ⚽"),
+	}
+	for _, idx := range indexes {
+		if idx < 0 {
+			t.Fatalf("expected ordered timeline markers in view\n%s", timeline)
+		}
+	}
+	for i := 1; i < len(indexes); i++ {
+		if indexes[i-1] >= indexes[i] {
+			t.Fatalf("expected timeline order 39 -> 46 -> 46 -> 52 -> 60\n%s", timeline)
+		}
+	}
+}
+
+func TestFormatEventLabelFormatsMissedPenalty(t *testing.T) {
+	home := formatEventLabel(site.MatchEvent{MinuteText: "52", Kind: "MISS", TeamSide: "home", Text: "Gierman Barkowskij 52 (nk)"})
+	away := formatEventLabel(site.MatchEvent{MinuteText: "52", Kind: "MISS", TeamSide: "away", Text: "Gierman Barkowskij 52 (nk)"})
+
+	if got := ansi.Strip(home); got != "G. Barkowskij (pen) ❌" {
+		t.Fatalf("unexpected home missed penalty label: %q", got)
+	}
+	if got := ansi.Strip(away); got != "❌ G. Barkowskij (pen)" {
+		t.Fatalf("unexpected away missed penalty label: %q", got)
 	}
 }
 

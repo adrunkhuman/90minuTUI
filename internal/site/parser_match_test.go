@@ -12,6 +12,12 @@ var expectedCardSidesByFixture = map[string]map[string]string{
 	},
 }
 
+var expectedMissedPenaltiesByFixture = map[string][]MatchEvent{
+	"match_2022961": {
+		{MinuteText: "52", Kind: "MISS", TeamSide: "home", Text: "Gierman Barkowskij 52 (nk)"},
+	},
+}
+
 func TestParseMatchFixturesFromCorpus(t *testing.T) {
 	m := loadManifest(t)
 	matches := fixturesByKind(m, "match")
@@ -50,11 +56,20 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 			}
 
 			expectedFixtureCards := expectedCardSidesByFixture[fixture.Name]
+			expectedMissedPenalties := expectedMissedPenaltiesByFixture[fixture.Name]
 			seenExpectedCards := map[string]bool{}
+			seenExpectedMissed := make([]bool, len(expectedMissedPenalties))
 
 			for _, event := range page.Events {
 				if event.TeamSide != "home" && event.TeamSide != "away" {
 					t.Fatalf("invalid event side %q in %s", event.TeamSide, fixture.Name)
+				}
+
+				for i, want := range expectedMissedPenalties {
+					if event.Kind != want.Kind || event.TeamSide != want.TeamSide || event.MinuteText != want.MinuteText || event.Text != want.Text {
+						continue
+					}
+					seenExpectedMissed[i] = true
 				}
 
 				if event.Kind != "YC" && event.Kind != "RC" {
@@ -81,6 +96,13 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 					continue
 				}
 				t.Fatalf("expected YC/RC event not found for %q in %s", player, fixture.Name)
+			}
+
+			for i, seen := range seenExpectedMissed {
+				if seen {
+					continue
+				}
+				t.Fatalf("expected missed-penalty event not found in %s: %#v", fixture.Name, expectedMissedPenalties[i])
 			}
 		})
 	}
