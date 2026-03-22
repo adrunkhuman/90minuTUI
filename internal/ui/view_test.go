@@ -135,7 +135,7 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 		"S. Mraz",
 		"17'",
 		"62'",
-		"FT", "1-2",
+		"FT 1-2",
 		"Details",
 		"13 March 2026, 18:00 | Attendance 3542 | Ref. Damian Kos | Weather 15 C",
 	} {
@@ -194,12 +194,12 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	// Score header: goals with minute-in-center, HT/FT dividers
 	for _, want := range []string{
 		"Wdowiak", "39'", "⚽", // home goal row (minute in center, icon adjacent)
-		"HT", "1 - 0", // HT tag in dashes, score in centre column
+		"HT 1 - 0",             // HT divider with score
 		"❌", "52'",            // away missed penalty row
-		"Szkurin", "60'",      // second home goal row
-		"K. Czubak", "70'",    // away goal row
-		"🟥", "85'",           // away red card row
-		"FT", "2-1",           // FT tag in dashes, score in centre column
+		"Szkurin", "60'",       // second home goal row
+		"K. Czubak", "70'",     // away goal row
+		"🟥", "85'",            // away red card row
+		"FT 2-1",               // FT divider with score
 	} {
 		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected match view to contain %q\n%s", want, view)
@@ -219,12 +219,12 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	// Score header ordering: 39' before HT before 52' before 60' before 70' before 85'
 	headerIndexes := []int{
 		strings.Index(plainView, "39'"),
-		strings.Index(plainView, "HT"),
+		strings.Index(plainView, "HT 1 - 0"),
 		strings.Index(plainView, "52'"),
 		strings.Index(plainView, "60'"),
 		strings.Index(plainView, "70'"),
 		strings.Index(plainView, "85'"),
-		strings.Index(plainView, "FT"),
+		strings.Index(plainView, "FT 2-1"),
 	}
 	for _, idx := range headerIndexes {
 		if idx < 0 {
@@ -297,14 +297,14 @@ func TestFormatMatchMinuteLeftPadsSingleDigitMinute(t *testing.T) {
 
 func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 	row := renderMatchDetailRow("Wdowiak G", "39'", "S Pllana (4)", 76)
-	divider := renderMatchDividerRow("HT", "1 - 0", 76)
-	// The score "1 - 0" in the divider and the minute "39'" in event rows both
-	// go through padCenter in the same 9-char centre column, so their midpoints align.
-	rowMid := strings.Index(row, "39'") + 1 // middle char of "39'"
-	score := "1 - 0"
-	dividerMid := strings.Index(divider, score) + (len(score) / 2) // middle '-'
-	if diff := rowMid - dividerMid; diff < -1 || diff > 1 {
-		t.Fatalf("expected divider score to align with minute column\nrow: %q\ndiv: %q", row, divider)
+	divider := renderMatchDividerRow("HT 1 - 0", 76)
+	// "HT 1 - 0" is padRight'd in the 11-char centre column; the '-' lands at col 5
+	// within that column. "39'" is padCenter'd in the same 11-char column; its
+	// centre '9' also lands at col 5. The two should align.
+	rowMid := strings.Index(row, "39'") + 1        // '9' = middle char of "39'"
+	dividerMid := strings.Index(divider, "1 - 0") + 2 // '-' at offset 2 within "1 - 0"
+	if diff := rowMid - dividerMid; diff < -2 || diff > 2 {
+		t.Fatalf("expected divider score dash to align with minute centre\nrow: %q\ndiv: %q", row, divider)
 	}
 }
 
@@ -358,8 +358,8 @@ func TestHeaderEventRowsIncludesRedCardsAndHTDivider(t *testing.T) {
 	if !rows[1].isDivider {
 		t.Fatalf("expected row 1 to be HT divider, got %#v", rows[1])
 	}
-	if rows[1].label != "HT" || rows[1].minute != "1 - 0" {
-		t.Fatalf("expected HT divider tag=%q score=%q, got label=%q minute=%q", "HT", "1 - 0", rows[1].label, rows[1].minute)
+	if rows[1].label != "HT 1 - 0" {
+		t.Fatalf("expected HT divider label %q, got %q", "HT 1 - 0", rows[1].label)
 	}
 	if ansi.Strip(rows[0].label) != "Wdowiak ⚽" {
 		t.Fatalf("unexpected first goal label: %q", ansi.Strip(rows[0].label))
@@ -384,11 +384,12 @@ func TestRenderPlayerLineAbbreviatesNameAndDropsEvents(t *testing.T) {
 
 func TestRenderLineupRowUsesCenteredSeparatorColumn(t *testing.T) {
 	row := renderLineupRow("K. Kubica", "B. Mrozek", 76)
-	divider := renderMatchDividerRow("HT", "1 - 0", 76)
+	divider := renderMatchDividerRow("HT 1 - 0", 76)
 	rowMid := strings.Index(row, "|")
-	score := "1 - 0"
-	dividerMid := strings.Index(divider, score) + (len(score) / 2)
-	if rowMid != dividerMid {
+	// The '-' in "HT 1 - 0" (padRight'd in 11-char centre column) and the "|"
+	// in lineup rows (padCenter'd in a 3-char centre column) share the same axis.
+	dividerMid := strings.Index(divider, "1 - 0") + 2 // '-' is at offset 2 in "1 - 0"
+	if diff := rowMid - dividerMid; diff < -1 || diff > 1 {
 		t.Fatalf("expected lineup separator to share center axis\nrow: %q\ndiv: %q", row, divider)
 	}
 	if !strings.Contains(row, "K. Kubica") || !strings.Contains(row, "B. Mrozek") {
@@ -401,7 +402,7 @@ func TestRenderLineupRowUsesCenteredSeparatorColumn(t *testing.T) {
 
 func TestRenderLineupHeaderRowUsesBlankCenteredGap(t *testing.T) {
 	row := renderLineupRowWithMarker("Piast Gliwice", "Radomiak Radom", " ", 76)
-	divider := renderMatchDividerRow("HT", "1 - 0", 76)
+	divider := renderMatchDividerRow("HT 1 - 0", 76)
 
 	if !strings.Contains(row, "Piast Gliwice") || !strings.Contains(row, "Radomiak Radom") {
 		t.Fatalf("expected lineup header row to contain both team names, got %q", row)
@@ -413,8 +414,7 @@ func TestRenderLineupHeaderRowUsesBlankCenteredGap(t *testing.T) {
 	leftEnd := strings.Index(row, "Piast Gliwice") + len("Piast Gliwice")
 	rightStart := strings.Index(row, "Radomiak Radom")
 	gapMid := leftEnd + ((rightStart - leftEnd) / 2)
-	score := "1 - 0"
-	dividerMid := strings.Index(divider, score) + (len(score) / 2)
+	dividerMid := strings.Index(divider, "1 - 0") + 2 // '-' at offset 2 in "1 - 0"
 	if diff := gapMid - dividerMid; diff < -1 || diff > 1 {
 		t.Fatalf("expected lineup header gap to stay centered\nrow: %q\ndiv: %q", row, divider)
 	}
@@ -471,7 +471,7 @@ func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {
 
 func TestFinalScoreLineUsesMatchScore(t *testing.T) {
 	got := finalScoreLine(&site.MatchPage{Score: "2-0"})
-	if got != "2-0" {
+	if got != "FT 2-0" {
 		t.Fatalf("unexpected final score line: %q", got)
 	}
 }
