@@ -617,50 +617,82 @@ func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.M
 	return idx
 }
 
-// renderAnnotatedPlayer returns the player label with event annotations appended.
-// Goals get ⚽+minute, cards get their glyph+minute.
-// Substitutions show a directional arrow with minute: → for sub-off, ← for sub-on.
-// No dimming is applied — all players share equal visual priority.
-func renderAnnotatedPlayer(player site.PlayerLine, side string, idx map[string][]site.MatchEvent) string {
+// playerEventAnnotation returns the event badge string for a lineup player —
+// cards and sub arrows only (goals are shown in the score header, not lineups).
+// Empty string means no events; the caller renders a wider gap in that case.
+func playerEventAnnotation(player site.PlayerLine, side string, idx map[string][]site.MatchEvent) string {
 	base := formatPlayerLabel(player.Name)
 	key := playerLastName(base)
 	if key == "" {
-		return base
+		return ""
 	}
 
 	matched, ok := idx[key]
 	if !ok {
-		return base
+		return ""
 	}
 
-	annotations := make([]string, 0, 3)
-
+	parts := make([]string, 0, 2)
 	for _, e := range matched {
 		minute := strings.TrimSpace(formatMatchMinute(e.MinuteText))
 		switch e.Kind {
-		case "GOAL":
-			annotations = append(annotations, eventPrefix("GOAL")+" "+minute)
 		case "YC":
-			annotations = append(annotations, eventPrefix("YC")+" "+minute)
+			parts = append(parts, eventPrefix("YC")+" "+minute)
 		case "RC":
-			annotations = append(annotations, eventPrefix("RC")+" "+minute)
+			parts = append(parts, eventPrefix("RC")+" "+minute)
 		case "SUB":
 			out, in := substitutionPlayers(e.Text)
 			outKey := playerLastName(out)
 			inKey := playerLastName(in)
 			if outKey == key {
-				annotations = append(annotations, "→ "+minute)
+				if minute != "" {
+					parts = append(parts, "→ "+minute)
+				} else {
+					parts = append(parts, "→")
+				}
 			} else if inKey == key {
-				annotations = append(annotations, "← "+minute)
+				if minute != "" {
+					parts = append(parts, "← "+minute)
+				} else {
+					parts = append(parts, "←")
+				}
 			}
 		}
 	}
 
-	if len(annotations) == 0 {
-		return base
+	return strings.Join(parts, " ")
+}
+
+// renderAnnotatedLineupRow renders a lineup player row with a dedicated event column
+// between each player name and the centre separator:
+//
+//	[home name →right] [home events →right] | [away events ←left] [away name ←left]
+//
+// When a player has no events the event column is empty, producing a wider gap
+// that keeps the visual centre clean.
+func renderAnnotatedLineupRow(homePlayer, homeEvents, awayPlayer, awayEvents string, width int) string {
+	if width < 36 {
+		home := homePlayer
+		if homeEvents != "" {
+			home += " " + homeEvents
+		}
+		away := awayPlayer
+		if awayEvents != "" {
+			away = awayEvents + " " + away
+		}
+		return renderLineupRow(home, away, width)
 	}
 
-	return base + " " + strings.Join(annotations, " ")
+	const eventWidth = 9
+	const gap = 1
+	playerWidth := max(8, (width-1-2*eventWidth-2*gap)/2)
+
+	leftPlayer := padLeft(truncate(homePlayer, playerWidth), playerWidth)
+	leftEvents := padLeft(truncate(homeEvents, eventWidth), eventWidth)
+	rightEvents := padRight(truncate(awayEvents, eventWidth), eventWidth)
+	rightPlayer := truncate(awayPlayer, playerWidth)
+
+	return leftPlayer + strings.Repeat(" ", gap) + leftEvents + "|" + rightEvents + strings.Repeat(" ", gap) + rightPlayer
 }
 
 func halftimeScore(events []site.MatchEvent) string {
@@ -693,7 +725,7 @@ func halftimeScore(events []site.MatchEvent) string {
 		return ""
 	}
 
-	return fmt.Sprintf("HT %d-%d", homeGoals, awayGoals)
+	return fmt.Sprintf("HT %d - %d", homeGoals, awayGoals)
 }
 
 func finalScoreLine(page *site.MatchPage) string {

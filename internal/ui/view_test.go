@@ -194,7 +194,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	// Score header: goals with minute-in-label, score progression in center, HT/FT dividers
 	for _, want := range []string{
 		"Wdowiak", "39'", "⚽", "(1-0)", // home goal row
-		"HT 1-0",
+		"HT 1 - 0",
 		"❌", "52'",                      // away missed penalty row
 		"Szkurin", "60'", "(2-0)",        // second home goal row
 		"K. Czubak", "70'", "(2-1)",      // away goal row
@@ -219,7 +219,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	// Score header ordering: 39' before HT before 52' before 60' before 70' before 85'
 	headerIndexes := []int{
 		strings.Index(plainView, "39'"),
-		strings.Index(plainView, "HT 1-0"),
+		strings.Index(plainView, "HT 1 - 0"),
 		strings.Index(plainView, "52'"),
 		strings.Index(plainView, "60'"),
 		strings.Index(plainView, "70'"),
@@ -237,18 +237,25 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		}
 	}
 
-	// Lineup annotations: goal, sub arrows, red card
+	// Lineup event columns: cards and sub arrows visible; no goals in lineup
 	for _, want := range []string{
-		"Wdowiak", "⚽",      // scorer annotated
-		"→",                  // sub-off arrow
-		"←",                  // sub-on arrow
-		"🟥",                 // red card annotation on player
+		"→",   // sub-off arrow in event column
+		"←",   // sub-on arrow in event column
+		"🟥",  // red card badge in event column
 	} {
 		if !strings.Contains(plainView, want) {
-			t.Fatalf("expected lineup annotation %q in view\n%s", want, view)
+			t.Fatalf("expected lineup event column to contain %q\n%s", want, view)
 		}
 	}
-	// Lineup sub-off player must NOT be dimmed (equal visual priority)
+	// Goals must NOT be annotated in the lineup (they belong to the score header)
+	lineupIdx := strings.Index(plainView, "Lineups")
+	if lineupIdx >= 0 {
+		lineupSection := plainView[lineupIdx:]
+		if strings.Contains(lineupSection, "⚽") {
+			t.Fatalf("expected lineup section to omit goal annotations\n%s", lineupSection)
+		}
+	}
+	// Sub-off player must NOT be dimmed (equal visual priority with sub-on)
 	if strings.Contains(view, "\x1b[2mI. Strzalek") {
 		t.Fatalf("expected sub-off player to not be dimmed\n%s", view)
 	}

@@ -501,14 +501,17 @@ func (m Model) matchDetailContent(width int) string {
 		maxPlayers := max(len(m.match.HomeLineup), len(m.match.AwayLineup))
 
 		for i := 0; i < maxPlayers; i++ {
-			homeText, awayText := "", ""
+			homeName, homeEvents := "", ""
+			awayName, awayEvents := "", ""
 			if i < len(m.match.HomeLineup) {
-				homeText = renderAnnotatedPlayer(m.match.HomeLineup[i], "home", homeIdx)
+				homeName = formatPlayerLabel(m.match.HomeLineup[i].Name)
+				homeEvents = playerEventAnnotation(m.match.HomeLineup[i], "home", homeIdx)
 			}
 			if i < len(m.match.AwayLineup) {
-				awayText = renderAnnotatedPlayer(m.match.AwayLineup[i], "away", awayIdx)
+				awayName = formatPlayerLabel(m.match.AwayLineup[i].Name)
+				awayEvents = playerEventAnnotation(m.match.AwayLineup[i], "away", awayIdx)
 			}
-			b.WriteString(renderLineupRow(homeText, awayText, width-4))
+			b.WriteString(renderAnnotatedLineupRow(homeName, homeEvents, awayName, awayEvents, width-4))
 			b.WriteString("\n")
 		}
 	}
