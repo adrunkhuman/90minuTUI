@@ -677,9 +677,9 @@ func renderMatchDetailRow(left, middle, right string, width int) string {
 	return leftText + strings.Repeat(" ", gap) + midText + strings.Repeat(" ", gap) + rightText
 }
 
-func renderLineupRow(left, right string, width int) string {
+func renderLineupRowWithMarker(left, right, marker string, width int) string {
 	if width < 30 {
-		return renderSideBySide(left, "|", right, width)
+		return renderSideBySide(left, marker, right, width)
 	}
 
 	midWidth := 3
@@ -687,10 +687,14 @@ func renderLineupRow(left, right string, width int) string {
 	sideWidth := max(8, (width-midWidth-(gap*2))/2)
 
 	leftText := padLeft(truncate(left, sideWidth), sideWidth)
-	midText := padCenter("|", midWidth)
+	midText := padCenter(truncate(marker, midWidth), midWidth)
 	rightText := truncate(right, sideWidth)
 
 	return leftText + strings.Repeat(" ", gap) + midText + strings.Repeat(" ", gap) + rightText
+}
+
+func renderLineupRow(left, right string, width int) string {
+	return renderLineupRowWithMarker(left, right, "|", width)
 }
 
 func renderCenteredText(text string, width int) string {
