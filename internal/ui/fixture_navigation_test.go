@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -188,9 +189,9 @@ func TestMatchViewScrollKeysDoNotChangeFixture(t *testing.T) {
 		t.Fatalf("expected match load command on enter")
 	}
 	m, _ = updateModelWithMsg(t, m, cmd())
-	m.match.Events = make([]site.MatchEvent, 0, 60)
+	m.match.HomeLineup = make([]site.PlayerLine, 0, 60)
 	for i := 1; i <= 60; i++ {
-		m.match.Events = append(m.match.Events, site.MatchEvent{MinuteText: "1", TeamSide: "home", Kind: "SUB", Text: "event"})
+		m.match.HomeLineup = append(m.match.HomeLineup, site.PlayerLine{Name: fmt.Sprintf("Player%02d", i)})
 	}
 
 	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyPgDown})

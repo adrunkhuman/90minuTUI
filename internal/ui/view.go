@@ -455,56 +455,32 @@ func (m Model) matchDetailContent(width int) string {
 	b.WriteString("\n")
 
 	status := matchStatus(m.match)
-	scorers := scorerTimeline(m.match.Events)
-	if len(scorers) > 0 || status != "" {
+	headerEvents := headerEventRows(m.match.Events)
+	if len(headerEvents) > 0 || status != "" {
 		if status != "" {
 			b.WriteString(renderMatchDetailRow("", status, "", width-4))
 			b.WriteString("\n")
 		}
-		for _, scorer := range scorers {
-			homeText, awayText := "", ""
-			if scorer.side == "home" {
-				homeText = scorer.label
-			} else {
-				awayText = scorer.label
-			}
-			b.WriteString(renderMatchDetailRow(homeText, scorer.minute, awayText, width-4))
-			b.WriteString("\n")
-		}
-	}
-
-	if len(m.match.Events) > 0 {
-		b.WriteString("\n")
-		b.WriteString(title.Render(renderCenteredText("Timeline", width-4)))
-		b.WriteString("\n")
-		htDivider := halftimeScore(m.match.Events)
-		insertedDivider := false
-		for _, event := range sortedEvents(m.match.Events) {
-			// Cards without minute data render as detached badges, so the compact timeline omits them.
-			if strings.TrimSpace(event.MinuteText) == "" && (event.Kind == "YC" || event.Kind == "RC") {
+		for _, row := range headerEvents {
+			if row.isDivider {
+				b.WriteString(renderMatchDividerRow(row.label, width-4))
+				b.WriteString("\n")
 				continue
 			}
-			if !insertedDivider && htDivider != "" {
-				if minute, ok := minuteSortKey(event.MinuteText); ok && minute > 4599 {
-					b.WriteString(renderMatchDividerRow(htDivider, width-4))
-					b.WriteString("\n")
-					insertedDivider = true
-				}
-			}
-
 			homeText, awayText := "", ""
-			eventText := formatEventLabel(event)
-			if event.TeamSide == "home" {
-				homeText = eventText
+			if row.side == "home" {
+				homeText = row.label
 			} else {
-				awayText = eventText
+				awayText = row.label
 			}
-			b.WriteString(renderMatchDetailRow(homeText, formatMatchMinute(event.MinuteText), awayText, width-4))
+			b.WriteString(renderMatchDetailRow(homeText, row.minute, awayText, width-4))
 			b.WriteString("\n")
 		}
-		if ftDivider := finalScoreLine(m.match); ftDivider != "" {
-			b.WriteString(renderMatchDividerRow(ftDivider, width-4))
-			b.WriteString("\n")
+		if len(headerEvents) > 0 {
+			if ftDivider := finalScoreLine(m.match); ftDivider != "" {
+				b.WriteString(renderMatchDividerRow(ftDivider, width-4))
+				b.WriteString("\n")
+			}
 		}
 	}
 
@@ -520,18 +496,17 @@ func (m Model) matchDetailContent(width int) string {
 		))
 		b.WriteString("\n")
 
-		maxPlayers := len(m.match.HomeLineup)
-		if len(m.match.AwayLineup) > maxPlayers {
-			maxPlayers = len(m.match.AwayLineup)
-		}
+		homeIdx := playerEventIndex(m.match.Events, "home")
+		awayIdx := playerEventIndex(m.match.Events, "away")
+		maxPlayers := max(len(m.match.HomeLineup), len(m.match.AwayLineup))
 
 		for i := 0; i < maxPlayers; i++ {
 			homeText, awayText := "", ""
 			if i < len(m.match.HomeLineup) {
-				homeText = renderPlayerLine(m.match.HomeLineup[i])
+				homeText = renderAnnotatedPlayer(m.match.HomeLineup[i], "home", homeIdx)
 			}
 			if i < len(m.match.AwayLineup) {
-				awayText = renderPlayerLine(m.match.AwayLineup[i])
+				awayText = renderAnnotatedPlayer(m.match.AwayLineup[i], "away", awayIdx)
 			}
 			b.WriteString(renderLineupRow(homeText, awayText, width-4))
 			b.WriteString("\n")
