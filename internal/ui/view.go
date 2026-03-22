@@ -463,7 +463,7 @@ func (m Model) matchDetailContent(width int) string {
 		}
 		for _, row := range headerEvents {
 			if row.isDivider {
-				b.WriteString(renderMatchDividerRow(row.label, width-4))
+				b.WriteString(renderMatchDividerRow(row.label, row.minute, width-4))
 				b.WriteString("\n")
 				continue
 			}
@@ -477,8 +477,8 @@ func (m Model) matchDetailContent(width int) string {
 			b.WriteString("\n")
 		}
 		if len(headerEvents) > 0 {
-			if ftDivider := finalScoreLine(m.match); ftDivider != "" {
-				b.WriteString(renderMatchDividerRow(ftDivider, width-4))
+			if ftScore := finalScoreLine(m.match); ftScore != "" {
+				b.WriteString(renderMatchDividerRow("FT", ftScore, width-4))
 				b.WriteString("\n")
 			}
 		}

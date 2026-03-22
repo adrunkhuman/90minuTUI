@@ -449,18 +449,37 @@ func renderDividerLabel(label string, width int) string {
 	return strings.Repeat("-", left) + " " + cleaned + " " + strings.Repeat("-", right)
 }
 
-func renderMatchDividerRow(label string, width int) string {
+// renderMatchDividerRow renders a dash-line divider with the score in the
+// shared centre column (aligning it with minutes on event rows) and the
+// period tag (e.g. "HT", "FT") embedded in the left dash run.
+func renderMatchDividerRow(tag, score string, width int) string {
 	if width < 30 {
+		label := score
+		if tag != "" {
+			label = tag + " " + score
+		}
 		return renderDividerLabel(label, width)
 	}
 
 	midWidth := 9
 	gap := 1
 	sideWidth := max(8, (width-midWidth-(gap*2))/2)
-	left := strings.Repeat("-", sideWidth)
+
+	// Embed tag centred within the left dash run so the score occupies the
+	// shared centre column and aligns with event-row minutes.
+	var left string
+	if tag != "" {
+		tagDisplay := " " + tag + " "
+		dashCount := max(0, sideWidth-len(tagDisplay))
+		leading := dashCount / 2
+		trailing := dashCount - leading
+		left = strings.Repeat("-", leading) + tagDisplay + strings.Repeat("-", trailing)
+	} else {
+		left = strings.Repeat("-", sideWidth)
+	}
 	right := strings.Repeat("-", sideWidth)
 
-	return left + strings.Repeat(" ", gap) + padCenter(truncate(label, midWidth), midWidth) + strings.Repeat(" ", gap) + right
+	return left + strings.Repeat(" ", gap) + padCenter(truncate(score, midWidth), midWidth) + strings.Repeat(" ", gap) + right
 }
 
 func matchStatus(page *site.MatchPage) string {
@@ -494,7 +513,7 @@ type scorerLine struct {
 func headerEventRows(events []site.MatchEvent) []scorerLine {
 	ordered := sortedEvents(events)
 	home, away := 0, 0
-	htLabel := halftimeScore(events)
+	htScore := halftimeScore(events) // "X - Y" — goes in centre column
 	insertedHT := false
 	lines := make([]scorerLine, 0, 8)
 
@@ -508,9 +527,9 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 			continue
 		}
 
-		if !insertedHT && htLabel != "" {
+		if !insertedHT && htScore != "" {
 			if key, ok := minuteSortKey(event.MinuteText); ok && key > 4599 {
-				lines = append(lines, scorerLine{label: htLabel, isDivider: true})
+				lines = append(lines, scorerLine{label: "HT", minute: htScore, isDivider: true})
 				insertedHT = true
 			}
 		}
@@ -772,7 +791,7 @@ func halftimeScore(events []site.MatchEvent) string {
 		return ""
 	}
 
-	return fmt.Sprintf("HT %d - %d", homeGoals, awayGoals)
+	return fmt.Sprintf("%d - %d", homeGoals, awayGoals)
 }
 
 func finalScoreLine(page *site.MatchPage) string {
@@ -785,7 +804,7 @@ func finalScoreLine(page *site.MatchPage) string {
 		return ""
 	}
 
-	return "FT " + normalizeScore(score)
+	return normalizeScore(score)
 }
 
 func matchMetaParts(meta, weather string) []string {
