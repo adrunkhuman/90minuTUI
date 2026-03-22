@@ -734,7 +734,7 @@ func renderAnnotatedLineupRow(homePlayer, homeEvents, awayPlayer, awayEvents str
 	}
 
 	const eventWidth = 2 // one emoji wide (YC/RC or empty)
-	const gap = 1
+	const gap = 0        // names sit directly against the event column
 	playerWidth := max(8, (width-1-2*eventWidth-2*gap)/2)
 
 	leftPlayer := padLeft(truncate(homePlayer, playerWidth), playerWidth)
@@ -844,8 +844,11 @@ func renderMatchDetailRow(left, middle, right string, width int) string {
 		return renderSideBySide(left, middle, right, width)
 	}
 
-	midWidth := 11
-	gap := 1
+	// midWidth=7 with gap=0: padCenter of a 3-char minute leaves exactly 2 leading
+	// spaces between the icon and the first digit, while keeping the minute centre
+	// aligned with the dash in the HT/FT divider (which uses midWidth=11, gap=1).
+	midWidth := 7
+	gap := 0
 	sideWidth := max(8, (width-midWidth-(gap*2))/2)
 
 	leftText := padLeft(truncate(left, sideWidth), sideWidth)
