@@ -72,7 +72,8 @@ type MatchEvent struct {
 	MinuteText string
 	Kind       string
 	TeamSide   string
-	Text       string
+	// SUB events carry "<outgoing> -> <incoming>" so renderers can place both players.
+	Text string
 }
 
 type PlayerLine struct {

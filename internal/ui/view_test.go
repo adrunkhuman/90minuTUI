@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
@@ -164,8 +165,8 @@ func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
 		Score:    "2-0",
 		Events: []site.MatchEvent{
 			{MinuteText: "39", Kind: "GOAL", TeamSide: "home", Text: "Wdowiak 39"},
-			{MinuteText: "46", Kind: "SUB", TeamSide: "away", Text: "46' -> Pllana (4)"},
-			{MinuteText: "46", Kind: "SUB", TeamSide: "home", Text: "46' -> Igor Strzalek (86)"},
+			{MinuteText: "46", Kind: "SUB", TeamSide: "away", Text: "O. Lesniak -> Pllana (4)"},
+			{MinuteText: "46", Kind: "SUB", TeamSide: "home", Text: "Igor Strzalek (86) -> Damian Nowak"},
 			{MinuteText: "60", Kind: "GOAL", TeamSide: "home", Text: "Szkurin 60"},
 		},
 	}
@@ -178,8 +179,10 @@ func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
 		"39'",
 		"HT 1-0",
 		"FT 2-0",
-		"↕ Pllana",
-		"I. Strzalek ↕",
+		"Pllana ↕",
+		"I. Strzalek",
+		"D. Nowak",
+		"O. Lesniak",
 		"Szkurin ⚽",
 		"60'",
 	} {
@@ -189,6 +192,24 @@ func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
 	}
 	if strings.Contains(view, "Wdowiak 39', Szkurin 60'") {
 		t.Fatalf("expected scorers to render as separate rows\n%s", view)
+	}
+}
+
+func TestFormatEventLabelFormatsSubstitutionOrderAndStyles(t *testing.T) {
+	home := formatEventLabel(site.MatchEvent{MinuteText: "66", Kind: "SUB", TeamSide: "home", Text: "Oskar Lesniak -> Damian Nowak"})
+	away := formatEventLabel(site.MatchEvent{MinuteText: "66", Kind: "SUB", TeamSide: "away", Text: "Oskar Lesniak -> Damian Nowak"})
+
+	if got := ansi.Strip(home); got != "O. Lesniak ↕ D. Nowak" {
+		t.Fatalf("unexpected home substitution label: %q", got)
+	}
+	if got := ansi.Strip(away); got != "D. Nowak ↕ O. Lesniak" {
+		t.Fatalf("unexpected away substitution label: %q", got)
+	}
+	if !strings.Contains(home, "\x1b[2mO. Lesniak") {
+		t.Fatalf("expected outgoing home player to be dimmed, got %q", home)
+	}
+	if !strings.Contains(away, "\x1b[2mO. Lesniak") {
+		t.Fatalf("expected outgoing away player to be dimmed, got %q", away)
 	}
 }
 
