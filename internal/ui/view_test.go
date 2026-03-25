@@ -135,7 +135,7 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 		"S. Mraz",
 		"17'",
 		"62'",
-		"FT 1-2",
+		"FT 1 - 2",
 		"Details",
 		"13 March 2026, 18:00 | Attendance 3542 | Ref. Damian Kos | Weather 15 C",
 	} {
@@ -157,7 +157,7 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 	}
 }
 
-func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
+func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	m := sketchModel()
 	m.width = 140
 	m.matchView = true
@@ -167,118 +167,104 @@ func TestMatchTimelineShowsSymbolsAndHalftimeDivider(t *testing.T) {
 		Score:    "2-1",
 		Events: []site.MatchEvent{
 			{MinuteText: "39", Kind: "GOAL", TeamSide: "home", Text: "Wdowiak 39"},
-			{MinuteText: "52", Kind: "MISS", TeamSide: "away", Text: "Barkowskij 52 (nk)"},
-			{MinuteText: "46", Kind: "SUB", TeamSide: "away", Text: "O. Lesniak -> Pllana (4)"},
 			{MinuteText: "46", Kind: "SUB", TeamSide: "home", Text: "Igor Strzalek (86) -> Damian Nowak"},
+			{MinuteText: "46", Kind: "SUB", TeamSide: "away", Text: "O. Lesniak -> Pllana"},
+			{MinuteText: "52", Kind: "MISS", TeamSide: "away", Text: "Barkowskij 52 (nk)"},
 			{MinuteText: "60", Kind: "GOAL", TeamSide: "home", Text: "Szkurin 60"},
 			{MinuteText: "70", Kind: "GOAL", TeamSide: "away", Text: "Karol Czubak (k) 70"},
+			{MinuteText: "85", Kind: "RC", TeamSide: "away", Text: "Pllana 85"},
+		},
+		HomeLineup: []site.PlayerLine{
+			{Name: "Wdowiak"},
+			{Name: "Igor Strzalek (86)"},
+			{Name: "Szkurin"},
+			{Name: "Damian Nowak"},
+		},
+		AwayLineup: []site.PlayerLine{
+			{Name: "Karol Czubak (k)"},
+			{Name: "Barkowskij"},
+			{Name: "O. Lesniak"},
+			{Name: "Pllana"},
 		},
 	}
 
 	view := m.View()
 	plainView := ansi.Strip(view)
+	_, centerWidth, _ := matchLayoutWidths(m.width)
+	content := ansi.Strip(m.matchDetailContent(centerWidth))
+	scoreHeader := renderMatchDetailRow("GKS Katowice", "2-1", "Lechia Gdansk", centerWidth-4)
+	spacerRow := renderMatchDetailRow("", "", "", centerWidth-4)
+	if !strings.Contains(content, scoreHeader+"\n"+spacerRow+"\n") {
+		t.Fatalf("expected spacer row between score header and event log\n%s", content)
+	}
+
+	// Score header: goals with minute-in-center, HT/FT dividers
 	for _, want := range []string{
-		"Wdowiak",
-		"Szkurin",
-		"Wdowiak ⚽",
-		"39'",
-		"HT 1-0",
-		"FT 2-1",
-		"Pllana ↕",
-		"I. Strzalek",
-		"D. Nowak",
-		"O. Lesniak",
-		"❌ Barkowskij (pen)",
-		"52'",
-		"Szkurin ⚽",
-		"60'",
-		"⚽ K. Czubak (pen)",
-		"70'",
+		"Wdowiak", "39'", "⚽", // home goal row (minute in center, icon adjacent)
+		"HT 1 - 0", // HT divider with score
+		"❌", "52'", // away missed penalty row
+		"Szkurin", "60'", // second home goal row
+		"K. Czubak", "70'", // away goal row
+		"🟥", "85'", // away red card row
+		"FT 2 - 1", // FT divider with score
 	} {
 		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected match view to contain %q\n%s", want, view)
 		}
 	}
-	if !strings.Contains(view, "\x1b[2m(pen)\x1b[0m") {
-		t.Fatalf("expected rendered match view to dim penalty suffixes\n%s", view)
-	}
-	if strings.Contains(plainView, "Wdowiak 39', Szkurin 60'") {
-		t.Fatalf("expected scorers to render as separate rows\n%s", view)
-	}
-	timeline := plainView[strings.Index(plainView, "Timeline"):]
 
-	indexes := []int{
-		strings.Index(timeline, "39'"),
-		strings.Index(timeline, "Pllana ↕"),
-		strings.Index(timeline, "D. Nowak"),
-		strings.Index(timeline, "52'"),
-		strings.Index(timeline, "Szkurin ⚽"),
-		strings.Index(timeline, "70'"),
-		strings.Index(timeline, "⚽ K. Czubak (pen)"),
+	// No Timeline section, no sub glyph in score header
+	for _, unwanted := range []string{
+		"Timeline",
+		"↕",
+	} {
+		if strings.Contains(plainView, unwanted) {
+			t.Fatalf("expected view to omit %q\n%s", unwanted, view)
+		}
 	}
-	for _, idx := range indexes {
+
+	// Score header ordering: 39' before HT before 52' before 60' before 70' before 85'
+	headerIndexes := []int{
+		strings.Index(plainView, "39'"),
+		strings.Index(plainView, "HT 1 - 0"),
+		strings.Index(plainView, "52'"),
+		strings.Index(plainView, "60'"),
+		strings.Index(plainView, "70'"),
+		strings.Index(plainView, "85'"),
+		strings.Index(plainView, "FT 2 - 1"),
+	}
+	for _, idx := range headerIndexes {
 		if idx < 0 {
-			t.Fatalf("expected ordered timeline markers in view\n%s", timeline)
+			t.Fatalf("expected ordered score header in view\n%s", plainView)
 		}
 	}
-	for i := 1; i < len(indexes); i++ {
-		if indexes[i-1] >= indexes[i] {
-			t.Fatalf("expected timeline order 39 -> 46 -> 46 -> 52 -> 60 -> 70\n%s", timeline)
+	for i := 1; i < len(headerIndexes); i++ {
+		if headerIndexes[i-1] >= headerIndexes[i] {
+			t.Fatalf("expected score header order 39 -> HT -> 52 -> 60 -> 70 -> 85 -> FT\n%s", plainView)
 		}
 	}
-}
 
-func TestFormatEventLabelFormatsScoredPenalty(t *testing.T) {
-	home := formatEventLabel(site.MatchEvent{MinuteText: "70", Kind: "GOAL", TeamSide: "home", Text: "Karol Czubak (k) 70"})
-	away := formatEventLabel(site.MatchEvent{MinuteText: "70", Kind: "GOAL", TeamSide: "away", Text: "Karol Czubak (k) 70"})
-
-	if got := ansi.Strip(home); got != "K. Czubak (pen) ⚽" {
-		t.Fatalf("unexpected home scored penalty label: %q", got)
+	// Lineup section: sub minutes at outer edge, sub-on player visible, cards in event column
+	for _, want := range []string{
+		"46'",      // sub minute visible at outer edge of player name
+		"D. Nowak", // sub-on player visible immediately after sub-off
+		"🟥",        // red card badge in event column
+	} {
+		if !strings.Contains(plainView, want) {
+			t.Fatalf("expected lineup section to contain %q\n%s", want, view)
+		}
 	}
-	if got := ansi.Strip(away); got != "⚽ K. Czubak (pen)" {
-		t.Fatalf("unexpected away scored penalty label: %q", got)
+	// Goals must NOT be annotated in the lineup (they belong to the score header)
+	lineupIdx := strings.Index(plainView, "Lineups")
+	if lineupIdx >= 0 {
+		lineupSection := plainView[lineupIdx:]
+		if strings.Contains(lineupSection, "⚽") {
+			t.Fatalf("expected lineup section to omit goal annotations\n%s", lineupSection)
+		}
 	}
-	if !strings.Contains(home, "\x1b[2m(pen)\x1b[0m") {
-		t.Fatalf("expected home scored penalty suffix to be dimmed, got %q", home)
-	}
-	if !strings.Contains(away, "\x1b[2m(pen)\x1b[0m") {
-		t.Fatalf("expected away scored penalty suffix to be dimmed, got %q", away)
-	}
-}
-
-func TestFormatEventLabelFormatsMissedPenalty(t *testing.T) {
-	home := formatEventLabel(site.MatchEvent{MinuteText: "52", Kind: "MISS", TeamSide: "home", Text: "Gierman Barkowskij 52 (nk)"})
-	away := formatEventLabel(site.MatchEvent{MinuteText: "52", Kind: "MISS", TeamSide: "away", Text: "Gierman Barkowskij 52 (nk)"})
-
-	if got := ansi.Strip(home); got != "G. Barkowskij (pen) ❌" {
-		t.Fatalf("unexpected home missed penalty label: %q", got)
-	}
-	if got := ansi.Strip(away); got != "❌ G. Barkowskij (pen)" {
-		t.Fatalf("unexpected away missed penalty label: %q", got)
-	}
-	if !strings.Contains(home, "\x1b[2m(pen)\x1b[0m") {
-		t.Fatalf("expected home missed penalty suffix to be dimmed, got %q", home)
-	}
-	if !strings.Contains(away, "\x1b[2m(pen)\x1b[0m") {
-		t.Fatalf("expected away missed penalty suffix to be dimmed, got %q", away)
-	}
-}
-
-func TestFormatEventLabelFormatsSubstitutionOrderAndStyles(t *testing.T) {
-	home := formatEventLabel(site.MatchEvent{MinuteText: "66", Kind: "SUB", TeamSide: "home", Text: "Oskar Lesniak -> Damian Nowak"})
-	away := formatEventLabel(site.MatchEvent{MinuteText: "66", Kind: "SUB", TeamSide: "away", Text: "Oskar Lesniak -> Damian Nowak"})
-
-	if got := ansi.Strip(home); got != "O. Lesniak ↕ D. Nowak" {
-		t.Fatalf("unexpected home substitution label: %q", got)
-	}
-	if got := ansi.Strip(away); got != "D. Nowak ↕ O. Lesniak" {
-		t.Fatalf("unexpected away substitution label: %q", got)
-	}
-	if !strings.Contains(home, "\x1b[2mO. Lesniak") {
-		t.Fatalf("expected outgoing home player to be dimmed, got %q", home)
-	}
-	if !strings.Contains(away, "\x1b[2mO. Lesniak") {
-		t.Fatalf("expected outgoing away player to be dimmed, got %q", away)
+	// Sub-off player must NOT be dimmed (equal visual priority with sub-on)
+	if strings.Contains(view, "\x1b[2mI. Strzalek") {
+		t.Fatalf("expected sub-off player to not be dimmed\n%s", view)
 	}
 }
 
@@ -317,31 +303,127 @@ func TestFormatMatchMinuteLeftPadsSingleDigitMinute(t *testing.T) {
 
 func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 	row := renderMatchDetailRow("Wdowiak G", "39'", "S Pllana (4)", 76)
-	divider := renderMatchDividerRow("HT 1-0", 76)
-	rowMid := strings.Index(row, "39'") + (len("39'") / 2)
-	dividerMid := strings.Index(divider, "HT 1-0") + (len("HT 1-0") / 2)
-	if rowMid != dividerMid {
-		t.Fatalf("expected divider label to align with minute column\nrow: %q\ndiv: %q", row, divider)
+	divider := renderMatchDividerRow("HT 1 - 0", 76)
+	// The divider label stays visually centered, and its score dash should remain close
+	// to the minute center used by event rows.
+	rowMid := strings.Index(row, "39'") + 1           // '9' = middle char of "39'"
+	dividerMid := strings.Index(divider, "1 - 0") + 2 // '-' at offset 2 within "1 - 0"
+	if diff := rowMid - dividerMid; diff < -2 || diff > 2 {
+		t.Fatalf("expected divider score dash to align with minute centre\nrow: %q\ndiv: %q", row, divider)
 	}
 }
 
-func TestScorerTimelineUsesCenteredMinuteColumn(t *testing.T) {
-	rows := scorerTimeline([]site.MatchEvent{{MinuteText: "17", Kind: "GOAL", TeamSide: "home", Text: "Krzysztof Kubica 17"}, {MinuteText: "30", Kind: "GOAL", TeamSide: "away", Text: "Karol Czubak (k) 30"}})
+func TestMatchDividerFillsCenterPaddingWithDashes(t *testing.T) {
+	divider := renderMatchDividerRow("HT 0 - 0", 76)
+	if strings.Contains(divider, "HT 0 - 0   ") {
+		t.Fatalf("expected divider to avoid wide trailing spaces after label, got %q", divider)
+	}
+	if !strings.Contains(divider, " HT 0 - 0 ") {
+		t.Fatalf("expected divider to keep single spaces around label, got %q", divider)
+	}
+}
+
+func TestHeaderEventRowsMinuteInCenterColumn(t *testing.T) {
+	rows := headerEventRows([]site.MatchEvent{
+		{MinuteText: "17", Kind: "GOAL", TeamSide: "home", Text: "Krzysztof Kubica 17"},
+		{MinuteText: "30", Kind: "GOAL", TeamSide: "away", Text: "Karol Czubak (k) 30"},
+	})
+	// Two goal rows only (no HT divider — all events in same half)
 	if len(rows) != 2 {
-		t.Fatalf("expected two scorer rows, got %d", len(rows))
+		t.Fatalf("expected two header rows, got %d: %#v", len(rows), rows)
 	}
-	if ansi.Strip(rows[0].label) != "K. Kubica ⚽" || ansi.Strip(rows[1].label) != "⚽ K. Czubak (pen)" {
-		t.Fatalf("unexpected scorer labels: %#v", rows)
+	// Label has name + icon only; no minute embedded in label
+	if ansi.Strip(rows[0].label) != "K. Kubica ⚽" {
+		t.Fatalf("unexpected home scorer label: %q", ansi.Strip(rows[0].label))
 	}
+	if ansi.Strip(rows[1].label) != "⚽ K. Czubak (pen)" {
+		t.Fatalf("unexpected away scorer label: %q", ansi.Strip(rows[1].label))
+	}
+	// Penalty suffix must still be dimmed
 	if !strings.Contains(rows[1].label, "\x1b[2m(pen)\x1b[0m") {
 		t.Fatalf("expected scored penalty suffix to be dimmed, got %q", rows[1].label)
 	}
+	// Center column carries the minute
+	if strings.TrimSpace(rows[0].minute) != "17'" {
+		t.Fatalf("expected home center to carry minute 17', got %q", rows[0].minute)
+	}
+	if strings.TrimSpace(rows[1].minute) != "30'" {
+		t.Fatalf("expected away center to carry minute 30', got %q", rows[1].minute)
+	}
+	// Minutes align on the same center axis
 	home := renderMatchDetailRow(rows[0].label, rows[0].minute, "", 76)
 	away := renderMatchDetailRow("", rows[1].minute, rows[1].label, 76)
-	homeMid := strings.Index(home, "17'") + (len("17'") / 2)
-	awayMid := strings.Index(away, "30'") + (len("30'") / 2)
+	homeMid := strings.Index(home, "17'")
+	awayMid := strings.Index(away, "30'")
 	if diff := homeMid - awayMid; diff < -1 || diff > 1 {
-		t.Fatalf("expected scorer minutes to share centered column\nhome: %q\naway: %q", home, away)
+		t.Fatalf("expected minutes to share centered column\nhome: %q\naway: %q", home, away)
+	}
+}
+
+func TestHeaderEventRowsIncludesRedCardsAndHTDivider(t *testing.T) {
+	rows := headerEventRows([]site.MatchEvent{
+		{MinuteText: "39", Kind: "GOAL", TeamSide: "home", Text: "Wdowiak 39"},
+		{MinuteText: "60", Kind: "GOAL", TeamSide: "home", Text: "Szkurin 60"},
+		{MinuteText: "85", Kind: "RC", TeamSide: "away", Text: "Pllana 85"},
+	})
+	// Expect: goal (39'), HT divider, goal (60'), red card (85')
+	if len(rows) != 4 {
+		t.Fatalf("expected 4 rows (goal, HT, goal, RC), got %d: %#v", len(rows), rows)
+	}
+	if !rows[1].isDivider {
+		t.Fatalf("expected row 1 to be HT divider, got %#v", rows[1])
+	}
+	if rows[1].label != "HT 1 - 0" {
+		t.Fatalf("expected HT divider label %q, got %q", "HT 1 - 0", rows[1].label)
+	}
+	if ansi.Strip(rows[0].label) != "Wdowiak ⚽" {
+		t.Fatalf("unexpected first goal label: %q", ansi.Strip(rows[0].label))
+	}
+	if strings.TrimSpace(rows[0].minute) != "39'" {
+		t.Fatalf("expected first goal minute 39' in center, got %q", rows[0].minute)
+	}
+	if !strings.Contains(ansi.Strip(rows[3].label), "🟥") {
+		t.Fatalf("expected red card row to contain 🟥, got %q", ansi.Strip(rows[3].label))
+	}
+	if rows[3].minute != "85'" {
+		t.Fatalf("expected red card minute 85', got %q", rows[3].minute)
+	}
+}
+
+func TestHeaderEventRowsIncludesGoallessHTDividerBeforeSecondHalfEvents(t *testing.T) {
+	rows := headerEventRows([]site.MatchEvent{
+		{MinuteText: "60", Kind: "RC", TeamSide: "away", Text: "Pllana 60"},
+	})
+
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (HT, RC), got %d: %#v", len(rows), rows)
+	}
+	if !rows[0].isDivider {
+		t.Fatalf("expected row 0 to be HT divider, got %#v", rows[0])
+	}
+	if rows[0].label != "HT 0 - 0" {
+		t.Fatalf("expected HT divider label %q, got %q", "HT 0 - 0", rows[0].label)
+	}
+	if rows[1].minute != "60'" {
+		t.Fatalf("expected second-half event minute 60', got %q", rows[1].minute)
+	}
+}
+
+func TestHeaderEventRowsKeepsHTDividerWhenSecondHalfHasOnlyHiddenEvents(t *testing.T) {
+	rows := headerEventRows([]site.MatchEvent{
+		{MinuteText: "39", Kind: "GOAL", TeamSide: "home", Text: "Wdowiak 39"},
+		{MinuteText: "60", Kind: "SUB", TeamSide: "home", Text: "Igor Strzalek -> Damian Nowak"},
+		{MinuteText: "72", Kind: "YC", TeamSide: "away", Text: "Pllana 72"},
+	})
+
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (goal, HT), got %d: %#v", len(rows), rows)
+	}
+	if rows[0].isDivider {
+		t.Fatalf("expected first row to be visible event, got %#v", rows[0])
+	}
+	if !rows[1].isDivider || rows[1].label != "HT 1 - 0" {
+		t.Fatalf("expected final row to be HT divider, got %#v", rows[1])
 	}
 }
 
@@ -352,13 +434,75 @@ func TestRenderPlayerLineAbbreviatesNameAndDropsEvents(t *testing.T) {
 	}
 }
 
+func TestCardAnnotationPrefersRedCardOverEarlierYellow(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{
+		{MinuteText: "20", Kind: "YC", TeamSide: "home", Text: "Pllana 20"},
+		{MinuteText: "85", Kind: "RC", TeamSide: "home", Text: "Pllana 85"},
+	}, "home")
+
+	if got := cardAnnotation(site.PlayerLine{Name: "Pllana"}, idx); got != eventPrefix("RC") {
+		t.Fatalf("expected red-card badge, got %q", got)
+	}
+}
+
+func TestReorderedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{{
+		MinuteText: "60",
+		Kind:       "SUB",
+		TeamSide:   "home",
+		Text:       "Jan Kowalski -> Piotr Kowalski",
+	}}, "home")
+
+	players := []site.PlayerLine{
+		{Name: "Adam Kowalski"},
+		{Name: "Jan Kowalski"},
+		{Name: "Piotr Kowalski"},
+	}
+
+	got := reorderedLineup(players, idx)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 lineup entries, got %d", len(got))
+	}
+	if got[0].player.Name != "Adam Kowalski" {
+		t.Fatalf("expected unrelated Kowalski to stay first, got %#v", got)
+	}
+	if got[1].player.Name != "Jan Kowalski" || got[2].player.Name != "Piotr Kowalski" {
+		t.Fatalf("expected substitute to follow substituted player, got %#v", got)
+	}
+}
+
+func TestReorderedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{{
+		MinuteText: "60",
+		Kind:       "SUB",
+		TeamSide:   "home",
+		Text:       "Jan Kowalski -> Piotr Kowalski",
+	}}, "home")
+
+	players := []site.PlayerLine{
+		{Name: "Jerzy Kowalski"},
+		{Name: "Jan Kowalski"},
+		{Name: "Piotr Kowalski"},
+	}
+
+	got := reorderedLineup(players, idx)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 lineup entries, got %d", len(got))
+	}
+	if got[0].player.Name != "Jerzy Kowalski" {
+		t.Fatalf("expected same-initial teammate to stay in place, got %#v", got)
+	}
+	if got[1].player.Name != "Jan Kowalski" || got[2].player.Name != "Piotr Kowalski" {
+		t.Fatalf("expected substitution to match full name, got %#v", got)
+	}
+}
+
 func TestRenderLineupRowUsesCenteredSeparatorColumn(t *testing.T) {
 	row := renderLineupRow("K. Kubica", "B. Mrozek", 76)
-	divider := renderMatchDividerRow("HT 1-0", 76)
 	rowMid := strings.Index(row, "|")
-	dividerMid := strings.Index(divider, "HT 1-0") + (len("HT 1-0") / 2)
-	if rowMid != dividerMid {
-		t.Fatalf("expected lineup separator to share center axis\nrow: %q\ndiv: %q", row, divider)
+	dividerMid := 76 / 2
+	if diff := rowMid - dividerMid; diff < -1 || diff > 1 {
+		t.Fatalf("expected lineup separator to share center axis\nrow: %q", row)
 	}
 	if !strings.Contains(row, "K. Kubica") || !strings.Contains(row, "B. Mrozek") {
 		t.Fatalf("expected lineup row to contain both players, got %q", row)
@@ -370,7 +514,6 @@ func TestRenderLineupRowUsesCenteredSeparatorColumn(t *testing.T) {
 
 func TestRenderLineupHeaderRowUsesBlankCenteredGap(t *testing.T) {
 	row := renderLineupRowWithMarker("Piast Gliwice", "Radomiak Radom", " ", 76)
-	divider := renderMatchDividerRow("HT 1-0", 76)
 
 	if !strings.Contains(row, "Piast Gliwice") || !strings.Contains(row, "Radomiak Radom") {
 		t.Fatalf("expected lineup header row to contain both team names, got %q", row)
@@ -382,9 +525,9 @@ func TestRenderLineupHeaderRowUsesBlankCenteredGap(t *testing.T) {
 	leftEnd := strings.Index(row, "Piast Gliwice") + len("Piast Gliwice")
 	rightStart := strings.Index(row, "Radomiak Radom")
 	gapMid := leftEnd + ((rightStart - leftEnd) / 2)
-	dividerMid := strings.Index(divider, "HT 1-0") + (len("HT 1-0") / 2)
+	dividerMid := 76 / 2
 	if diff := gapMid - dividerMid; diff < -1 || diff > 1 {
-		t.Fatalf("expected lineup header gap to stay centered\nrow: %q\ndiv: %q", row, divider)
+		t.Fatalf("expected lineup header gap to stay centered\nrow: %q", row)
 	}
 }
 
@@ -425,6 +568,24 @@ func TestMatchDetailContentStylesLineupTeamsWithoutSeparator(t *testing.T) {
 	t.Fatal("expected match detail content to include lineup team header row")
 }
 
+func TestMatchDetailContentShowsFTDividerWithoutVisibleHeaderEvents(t *testing.T) {
+	m := sketchModel()
+	m.match = &site.MatchPage{
+		HomeTeam: "Motor Lublin",
+		AwayTeam: "Zaglebie Lubin",
+		Score:    "1-0",
+		Events: []site.MatchEvent{
+			{MinuteText: "46", Kind: "SUB", TeamSide: "home", Text: "Jan Kowalski -> Piotr Kowalski"},
+			{MinuteText: "72", Kind: "YC", TeamSide: "away", Text: "Nowak 72"},
+		},
+	}
+
+	content := ansi.Strip(m.matchDetailContent(80))
+	if !strings.Contains(content, "FT 1 - 0") {
+		t.Fatalf("expected FT divider even without visible header events\n%s", content)
+	}
+}
+
 func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {
 	centered := renderCenteredText("Timeline", 21)
 	leftPad := strings.Index(centered, "Timeline")
@@ -439,7 +600,7 @@ func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {
 
 func TestFinalScoreLineUsesMatchScore(t *testing.T) {
 	got := finalScoreLine(&site.MatchPage{Score: "2-0"})
-	if got != "FT 2-0" {
+	if got != "FT 2 - 0" {
 		t.Fatalf("unexpected final score line: %q", got)
 	}
 }
@@ -622,14 +783,14 @@ func TestMatchViewScrollsLongContent(t *testing.T) {
 		Competition: "Ekstraklasa",
 	}
 	for i := 1; i <= 20; i++ {
-		m.match.Events = append(m.match.Events, site.MatchEvent{MinuteText: fmt.Sprintf("%d", i), TeamSide: "home", Kind: "SUB", Text: fmt.Sprintf("event-%02d", i)})
+		m.match.HomeLineup = append(m.match.HomeLineup, site.PlayerLine{Name: fmt.Sprintf("Player%02d", i)})
 	}
 
 	view := m.View()
 	if got := strings.Count(view, "\n") + 1; got > m.height {
 		t.Fatalf("expected match view to fit terminal height, got %d lines for height %d\n%s", got, m.height, view)
 	}
-	if !strings.Contains(view, "event-01") {
+	if !strings.Contains(view, "Player01") {
 		t.Fatalf("expected initial match view to show top content\n%s", view)
 	}
 	for _, want := range []string{"Standings", "Fixtures", "LEG 2-1 LEC"} {
@@ -638,13 +799,13 @@ func TestMatchViewScrollsLongContent(t *testing.T) {
 		}
 	}
 
-	m.matchScroll = 12
+	m.matchScroll = m.matchScrollLimit()
 	view = m.View()
-	if !strings.Contains(view, "event-13") {
-		t.Fatalf("expected scrolled match view to show later content\n%s", view)
-	}
-	if strings.Contains(view, "event-01") {
+	if strings.Contains(view, "Player01") {
 		t.Fatalf("expected scrolled match view to hide top content\n%s", view)
+	}
+	if !strings.Contains(view, "Player20") {
+		t.Fatalf("expected scrolled match view to show later content\n%s", view)
 	}
 	for _, want := range []string{"Standings", "Fixtures", "LEG 2-1 LEC"} {
 		if !strings.Contains(view, want) {
@@ -682,7 +843,7 @@ func TestMatchViewScrollLimitIsClamped(t *testing.T) {
 	m.matchView = true
 	m.match = &site.MatchPage{Title: "Compact match"}
 	for i := 1; i <= 20; i++ {
-		m.match.Events = append(m.match.Events, site.MatchEvent{MinuteText: fmt.Sprintf("%d", i), TeamSide: "home", Kind: "SUB", Text: fmt.Sprintf("event-%02d", i)})
+		m.match.HomeLineup = append(m.match.HomeLineup, site.PlayerLine{Name: fmt.Sprintf("Player%02d", i)})
 	}
 
 	limit := m.matchScrollLimit()

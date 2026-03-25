@@ -296,49 +296,6 @@ func atoiOrNeg(s string) int {
 	return value
 }
 
-func formatEventLabel(event site.MatchEvent) string {
-	if event.Kind == "SUB" {
-		return formatSubstitutionLabel(event)
-	}
-
-	text := trimEventMinute(event)
-	prefix := eventPrefix(event.Kind)
-	if text == "" {
-		return prefix
-	}
-	if event.TeamSide == "home" {
-		return formatLeftEventLabel(event.Kind, text)
-	}
-
-	return formatRightEventLabel(event.Kind, text)
-}
-
-func formatSubstitutionLabel(event site.MatchEvent) string {
-	outgoing, incoming := substitutionPlayers(event.Text)
-	if incoming == "" {
-		fallback := trimEventMinute(event)
-		if fallback == "" {
-			return eventPrefix(event.Kind)
-		}
-		if event.TeamSide == "home" {
-			return formatLeftEventLabel(event.Kind, fallback)
-		}
-		return formatRightEventLabel(event.Kind, fallback)
-	}
-
-	arrow := eventPrefix(event.Kind)
-	if event.TeamSide == "home" {
-		if outgoing == "" {
-			return incoming + " " + arrow
-		}
-		return faintText(outgoing) + " " + arrow + " " + incoming
-	}
-	if outgoing == "" {
-		return arrow + " " + incoming
-	}
-	return incoming + " " + arrow + " " + faintText(outgoing)
-}
-
 func substitutionPlayers(text string) (string, string) {
 	parts := strings.SplitN(normalizeDisplayText(text), "->", 2)
 	if len(parts) != 2 {
@@ -351,7 +308,7 @@ func substitutionPlayers(text string) (string, string) {
 		outgoing = ""
 	}
 
-	return formatPlayerLabel(outgoing), formatPlayerLabel(incoming)
+	return canonicalPlayerName(outgoing), canonicalPlayerName(incoming)
 }
 
 func faintText(text string) string {
@@ -402,14 +359,10 @@ func eventPrefix(kind string) string {
 }
 
 func formatPlayerLabel(value string) string {
-	cleaned := normalizeDisplayText(value)
+	cleaned := canonicalPlayerName(value)
 	if cleaned == "" {
 		return ""
 	}
-
-	// Compact match rows drop shirt numbers but keep semantic suffixes like (k).
-	cleaned = playerNumberPrefixRe.ReplaceAllString(cleaned, "")
-	cleaned = playerNumberSuffixRe.ReplaceAllString(cleaned, "")
 
 	suffixes := make([]string, 0, 2)
 	for {
@@ -417,12 +370,8 @@ func formatPlayerLabel(value string) string {
 		if len(matches) != 3 {
 			break
 		}
-		inner := strings.TrimSpace(strings.Trim(matches[2], " ()"))
-		cleaned = normalizeDisplayText(matches[1])
-		if digitsOnly(inner) {
-			continue
-		}
 		suffixes = append([]string{strings.TrimSpace(matches[2])}, suffixes...)
+		cleaned = normalizeDisplayText(matches[1])
 	}
 
 	words := strings.Fields(cleaned)
@@ -444,6 +393,36 @@ func formatPlayerLabel(value string) string {
 	}
 
 	return faintPenaltySuffix(cleaned)
+}
+
+func canonicalPlayerName(value string) string {
+	cleaned := normalizeDisplayText(value)
+	if cleaned == "" {
+		return ""
+	}
+
+	cleaned = playerNumberPrefixRe.ReplaceAllString(cleaned, "")
+	cleaned = playerNumberSuffixRe.ReplaceAllString(cleaned, "")
+
+	suffixes := make([]string, 0, 2)
+	for {
+		matches := trailingParenRe.FindStringSubmatch(cleaned)
+		if len(matches) != 3 {
+			break
+		}
+		inner := strings.TrimSpace(strings.Trim(matches[2], " ()"))
+		cleaned = normalizeDisplayText(matches[1])
+		if digitsOnly(inner) {
+			continue
+		}
+		suffixes = append([]string{strings.TrimSpace(matches[2])}, suffixes...)
+	}
+
+	if len(suffixes) > 0 {
+		cleaned += " " + strings.Join(suffixes, " ")
+	}
+
+	return cleaned
 }
 
 func digitsOnly(value string) bool {
@@ -491,18 +470,24 @@ func renderDividerLabel(label string, width int) string {
 	return strings.Repeat("-", left) + " " + cleaned + " " + strings.Repeat("-", right)
 }
 
+// renderMatchDividerRow renders a full-width dash-line divider with label
+// (e.g. "HT 1 - 0") positioned so the score dash shares the event-minute axis.
 func renderMatchDividerRow(label string, width int) string {
 	if width < 30 {
 		return renderDividerLabel(label, width)
 	}
 
-	midWidth := 9
-	gap := 1
-	sideWidth := max(8, (width-midWidth-(gap*2))/2)
-	left := strings.Repeat("-", sideWidth)
-	right := strings.Repeat("-", sideWidth)
+	label = truncate(label, max(1, width-2))
+	dashOffset := strings.Index(label, " - ") + 1
+	if dashOffset < 1 {
+		return renderDividerLabel(label, width)
+	}
 
-	return left + strings.Repeat(" ", gap) + padCenter(truncate(label, midWidth), midWidth) + strings.Repeat(" ", gap) + right
+	minuteAxis := max(0, (width-7)/2+3)
+	leftWidth := max(0, minuteAxis-1-dashOffset)
+	rightWidth := max(0, width-leftWidth-ansi.StringWidth(label)-2)
+
+	return strings.Repeat("-", leftWidth) + " " + label + " " + strings.Repeat("-", rightWidth)
 }
 
 func matchStatus(page *site.MatchPage) string {
@@ -524,65 +509,275 @@ func matchStatus(page *site.MatchPage) string {
 }
 
 type scorerLine struct {
-	label  string
-	minute string
-	side   string
+	label     string
+	minute    string
+	side      string
+	isDivider bool
 }
 
-func scorerLines(events []site.MatchEvent, side string) []scorerLine {
-
+// headerEventRows returns goal, missed-penalty, and red-card events sorted by minute,
+// with an HT divider injected between halves when both exist.
+// All events carry the minute in the center column; the side label holds name + icon.
+func headerEventRows(events []site.MatchEvent) []scorerLine {
 	ordered := sortedEvents(events)
-	lines := make([]scorerLine, 0, 4)
+	htLabel := halftimeScore(events)
+	firstSecondHalfKey := 0
+	hasSecondHalfEvent := false
 	for _, event := range ordered {
-		if event.Kind != "GOAL" || event.TeamSide != side {
+		key, ok := minuteSortKey(event.MinuteText)
+		if !ok || key <= 4599 {
+			continue
+		}
+		firstSecondHalfKey = key
+		hasSecondHalfEvent = true
+		break
+	}
+
+	insertedHT := false
+	lines := make([]scorerLine, 0, 8)
+
+	for _, event := range ordered {
+		key, ok := minuteSortKey(event.MinuteText)
+		if !ok {
+			continue
+		}
+		if !insertedHT && htLabel != "" && hasSecondHalfEvent && key >= firstSecondHalfKey {
+			lines = append(lines, scorerLine{label: htLabel, isDivider: true})
+			insertedHT = true
+		}
+
+		switch event.Kind {
+		case "GOAL", "MISS", "RC":
+		default:
+			continue
+		}
+		if strings.TrimSpace(event.MinuteText) == "" {
 			continue
 		}
 
 		name := trimEventMinute(event)
-		if name == "" {
-			continue
+		switch event.Kind {
+		case "GOAL":
+			if name == "" {
+				continue
+			}
+			lines = append(lines, scorerLine{
+				label:  formatGoalLabel(name, event.TeamSide),
+				minute: formatMatchMinute(event.MinuteText),
+				side:   event.TeamSide,
+			})
+		case "MISS":
+			var label string
+			if event.TeamSide == "home" {
+				label = formatLeftEventLabel("MISS", name)
+			} else {
+				label = formatRightEventLabel("MISS", name)
+			}
+			lines = append(lines, scorerLine{
+				label:  label,
+				minute: formatMatchMinute(event.MinuteText),
+				side:   event.TeamSide,
+			})
+		case "RC":
+			var label string
+			if event.TeamSide == "home" {
+				label = formatLeftEventLabel("RC", name)
+			} else {
+				label = formatRightEventLabel("RC", name)
+			}
+			lines = append(lines, scorerLine{
+				label:  label,
+				minute: formatMatchMinute(event.MinuteText),
+				side:   event.TeamSide,
+			})
 		}
-		lines = append(lines, scorerLine{label: name, minute: formatMatchMinute(event.MinuteText), side: side})
+	}
+
+	if !insertedHT && htLabel != "" && hasSecondHalfEvent {
+		lines = append(lines, scorerLine{label: htLabel, isDivider: true})
 	}
 
 	return lines
 }
 
-func scorerTimeline(events []site.MatchEvent) []scorerLine {
-	ordered := sortedEvents(events)
-	lines := make([]scorerLine, 0, 4)
-	for _, event := range ordered {
-		if event.Kind != "GOAL" {
-			continue
-		}
-
-		name := trimEventMinute(event)
-		if name == "" {
-			continue
-		}
-
-		lines = append(lines, scorerLine{
-			label:  formatScorerLabel(name, event.TeamSide),
-			minute: formatMatchMinute(event.MinuteText),
-			side:   event.TeamSide,
-		})
-	}
-
-	return lines
-}
-
-func formatScorerLabel(name, side string) string {
+// formatGoalLabel builds a goal side-label with the icon adjacent to the center column.
+// "Name ⚽" (home, icon on right nearest center) or "⚽ Name" (away, icon on left nearest center).
+func formatGoalLabel(name, side string) string {
+	glyph := eventPrefix("GOAL")
 	if side == "home" {
-		return name + " " + eventPrefix("GOAL")
+		return name + " " + glyph
 	}
-	return eventPrefix("GOAL") + " " + name
+	return glyph + " " + name
+}
+
+func playerMatchKey(label string) string {
+	formatted := normalizeDisplayText(canonicalPlayerName(label))
+	if formatted == "" {
+		return ""
+	}
+	return strings.ToLower(formatted)
+}
+
+// playerEventIndex maps normalized compact player labels to events for the given side.
+// SUB events are indexed under both outgoing and incoming player names.
+func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.MatchEvent {
+	idx := make(map[string][]site.MatchEvent)
+	for _, e := range events {
+		if e.TeamSide != side {
+			continue
+		}
+		if e.Kind == "SUB" {
+			out, in := substitutionPlayers(e.Text)
+			if key := playerMatchKey(out); key != "" {
+				idx[key] = append(idx[key], e)
+			}
+			if key := playerMatchKey(in); key != "" {
+				idx[key] = append(idx[key], e)
+			}
+			continue
+		}
+		name := eventPlayerText(e)
+		if key := playerMatchKey(name); key != "" {
+			idx[key] = append(idx[key], e)
+		}
+	}
+	return idx
+}
+
+// cardAnnotation returns the YC/RC badge string for a lineup player, intended
+// for the dedicated event column next to the centre separator. Empty when clean.
+func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) string {
+	key := playerMatchKey(player.Name)
+	if key == "" {
+		return ""
+	}
+
+	matched, ok := idx[key]
+	if !ok {
+		return ""
+	}
+
+	hasYellow := false
+	for _, e := range matched {
+		switch e.Kind {
+		case "RC":
+			return eventPrefix("RC")
+		case "YC":
+			hasYellow = true
+		}
+	}
+	if hasYellow {
+		return eventPrefix("YC")
+	}
+	return ""
+}
+
+// lineupEntry is a display-ready lineup row entry.
+// subMinute is non-empty for sub-on players and carries the substitution minute.
+type lineupEntry struct {
+	player    site.PlayerLine
+	subMinute string
+}
+
+// reorderedLineup returns lineup entries with each sub-on player inserted
+// immediately after the player they replaced. Sub-on players are identified
+// via the event index; those that cannot be matched are appended at the end.
+func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
+	if len(players) == 0 {
+		return nil
+	}
+
+	type subInfo struct{ onKey, minute string }
+	subOffMap := make(map[string]subInfo, 4)
+	subOnSet := make(map[string]bool, 4)
+
+	for _, player := range players {
+		key := playerMatchKey(player.Name)
+		for _, e := range idx[key] {
+			if e.Kind != "SUB" {
+				continue
+			}
+			out, in := substitutionPlayers(e.Text)
+			outKey := playerMatchKey(out)
+			inKey := playerMatchKey(in)
+			minute := strings.TrimSpace(formatMatchMinute(e.MinuteText))
+			if outKey == key && inKey != "" {
+				subOffMap[key] = subInfo{onKey: inKey, minute: minute}
+				subOnSet[inKey] = true
+			}
+		}
+	}
+
+	// Build key → PlayerLine lookup
+	byKey := make(map[string]site.PlayerLine, len(players))
+	for _, p := range players {
+		byKey[playerMatchKey(p.Name)] = p
+	}
+
+	result := make([]lineupEntry, 0, len(players))
+	insertedSubOns := make(map[string]bool, len(subOnSet))
+
+	for _, player := range players {
+		key := playerMatchKey(player.Name)
+		if subOnSet[key] {
+			continue // will be placed after their sub-off player
+		}
+		result = append(result, lineupEntry{player: player})
+		if info, ok := subOffMap[key]; ok {
+			if onPlayer, exists := byKey[info.onKey]; exists {
+				result = append(result, lineupEntry{player: onPlayer, subMinute: info.minute})
+				insertedSubOns[info.onKey] = true
+			}
+		}
+	}
+
+	// Append unmatched sub-on players (name mismatch between event and lineup)
+	for _, player := range players {
+		key := playerMatchKey(player.Name)
+		if subOnSet[key] && !insertedSubOns[key] {
+			result = append(result, lineupEntry{player: player})
+		}
+	}
+
+	return result
+}
+
+// renderAnnotatedLineupRow renders a lineup player row with a dedicated event column
+// between each player name and the centre separator:
+//
+//	[home name →right] [home events →right] | [away events ←left] [away name ←left]
+//
+// When a player has no events the event column is empty, producing a wider gap
+// that keeps the visual centre clean.
+func renderAnnotatedLineupRow(homePlayer, homeEvents, awayPlayer, awayEvents string, width int) string {
+	if width < 36 {
+		home := homePlayer
+		if homeEvents != "" {
+			home += " " + homeEvents
+		}
+		away := awayPlayer
+		if awayEvents != "" {
+			away = awayEvents + " " + away
+		}
+		return renderLineupRow(home, away, width)
+	}
+
+	const eventWidth = 2 // one emoji wide (YC/RC or empty)
+	const gap = 0        // names sit directly against the event column
+	playerWidth := max(8, (width-1-2*eventWidth-2*gap)/2)
+
+	leftPlayer := padLeft(truncate(homePlayer, playerWidth), playerWidth)
+	leftEvents := padLeft(truncate(homeEvents, eventWidth), eventWidth)
+	rightEvents := padRight(truncate(awayEvents, eventWidth), eventWidth)
+	rightPlayer := truncate(awayPlayer, playerWidth)
+
+	return leftPlayer + strings.Repeat(" ", gap) + leftEvents + "|" + rightEvents + strings.Repeat(" ", gap) + rightPlayer
 }
 
 func halftimeScore(events []site.MatchEvent) string {
 	homeGoals := 0
 	awayGoals := 0
 	hasSecondHalf := false
-	hasFirstHalf := false
 
 	for _, event := range sortedEvents(events) {
 		minute, ok := minuteSortKey(event.MinuteText)
@@ -591,7 +786,6 @@ func halftimeScore(events []site.MatchEvent) string {
 		}
 		// minuteSortKey encodes stoppage as MM*100+extra, so 45:59 is the first-half ceiling.
 		if minute <= 4599 {
-			hasFirstHalf = true
 			if event.Kind == "GOAL" {
 				if event.TeamSide == "home" {
 					homeGoals++
@@ -604,11 +798,11 @@ func halftimeScore(events []site.MatchEvent) string {
 		hasSecondHalf = true
 	}
 
-	if !hasFirstHalf || !hasSecondHalf {
+	if !hasSecondHalf {
 		return ""
 	}
 
-	return fmt.Sprintf("HT %d-%d", homeGoals, awayGoals)
+	return fmt.Sprintf("HT %d - %d", homeGoals, awayGoals)
 }
 
 func finalScoreLine(page *site.MatchPage) string {
@@ -621,7 +815,27 @@ func finalScoreLine(page *site.MatchPage) string {
 		return ""
 	}
 
-	return "FT " + normalizeScore(score)
+	return "FT " + dividerScore(score)
+}
+
+func dividerScore(score string) string {
+	trimmed := strings.TrimSpace(score)
+	if trimmed == "" {
+		return "?-?"
+	}
+
+	parts := strings.SplitN(trimmed, "-", 2)
+	if len(parts) != 2 {
+		return normalizeScore(trimmed)
+	}
+
+	left := strings.TrimSpace(parts[0])
+	right := strings.TrimSpace(parts[1])
+	if left == "" || right == "" {
+		return normalizeScore(trimmed)
+	}
+
+	return left + " - " + right
 }
 
 func matchMetaParts(meta, weather string) []string {
@@ -677,8 +891,11 @@ func renderMatchDetailRow(left, middle, right string, width int) string {
 		return renderSideBySide(left, middle, right, width)
 	}
 
-	midWidth := 9
-	gap := 1
+	// midWidth=7 with gap=0: padCenter of a 3-char minute leaves exactly 2 leading
+	// spaces between the icon and the first digit, while keeping the minute centre
+	// aligned with the dash in the HT/FT divider (which uses midWidth=11, gap=1).
+	midWidth := 7
+	gap := 0
 	sideWidth := max(8, (width-midWidth-(gap*2))/2)
 
 	leftText := padLeft(truncate(left, sideWidth), sideWidth)
@@ -967,6 +1184,11 @@ func displayMatchMeta(meta, weather string) string {
 }
 
 func trimEventMinute(event site.MatchEvent) string {
+	text := eventPlayerText(event)
+	return formatPlayerLabel(text)
+}
+
+func eventPlayerText(event site.MatchEvent) string {
 	text := normalizeDisplayText(event.Text)
 	if text == "" || event.MinuteText == "" {
 		return text
@@ -989,7 +1211,7 @@ func trimEventMinute(event site.MatchEvent) string {
 		text = strings.ReplaceAll(text, "(nk)", "(pen)")
 	}
 
-	return formatPlayerLabel(text)
+	return canonicalPlayerName(text)
 }
 
 func normalizeSubstitutionText(text string) string {
