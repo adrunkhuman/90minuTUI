@@ -190,16 +190,23 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 
 	view := m.View()
 	plainView := ansi.Strip(view)
+	_, centerWidth, _ := matchLayoutWidths(m.width)
+	content := ansi.Strip(m.matchDetailContent(centerWidth))
+	scoreHeader := renderMatchDetailRow("GKS Katowice", "2-1", "Lechia Gdansk", centerWidth-4)
+	spacerRow := renderMatchDetailRow("", "", "", centerWidth-4)
+	if !strings.Contains(content, scoreHeader+"\n"+spacerRow+"\n") {
+		t.Fatalf("expected spacer row between score header and event log\n%s", content)
+	}
 
 	// Score header: goals with minute-in-center, HT/FT dividers
 	for _, want := range []string{
 		"Wdowiak", "39'", "⚽", // home goal row (minute in center, icon adjacent)
-		"HT 1 - 0",             // HT divider with score
-		"❌", "52'",            // away missed penalty row
-		"Szkurin", "60'",       // second home goal row
-		"K. Czubak", "70'",     // away goal row
-		"🟥", "85'",            // away red card row
-		"FT 2-1",               // FT divider with score
+		"HT 1 - 0", // HT divider with score
+		"❌", "52'", // away missed penalty row
+		"Szkurin", "60'", // second home goal row
+		"K. Czubak", "70'", // away goal row
+		"🟥", "85'", // away red card row
+		"FT 2-1", // FT divider with score
 	} {
 		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected match view to contain %q\n%s", want, view)
@@ -241,7 +248,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	for _, want := range []string{
 		"46'",      // sub minute visible at outer edge of player name
 		"D. Nowak", // sub-on player visible immediately after sub-off
-		"🟥",       // red card badge in event column
+		"🟥",        // red card badge in event column
 	} {
 		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected lineup section to contain %q\n%s", want, view)
@@ -260,7 +267,6 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		t.Fatalf("expected sub-off player to not be dimmed\n%s", view)
 	}
 }
-
 
 func TestMatchDetailRowsAnchorTowardCenteredMinuteColumn(t *testing.T) {
 	line := renderMatchDetailRow("Wdowiak ⚽", "39'", "↕ Pllana (4)", 76)
@@ -298,13 +304,22 @@ func TestFormatMatchMinuteLeftPadsSingleDigitMinute(t *testing.T) {
 func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 	row := renderMatchDetailRow("Wdowiak G", "39'", "S Pllana (4)", 76)
 	divider := renderMatchDividerRow("HT 1 - 0", 76)
-	// "HT 1 - 0" is padRight'd in the 11-char centre column; the '-' lands at col 5
-	// within that column. "39'" is padCenter'd in the same 11-char column; its
-	// centre '9' also lands at col 5. The two should align.
-	rowMid := strings.Index(row, "39'") + 1        // '9' = middle char of "39'"
+	// The divider label stays visually centered, and its score dash should remain close
+	// to the minute center used by event rows.
+	rowMid := strings.Index(row, "39'") + 1           // '9' = middle char of "39'"
 	dividerMid := strings.Index(divider, "1 - 0") + 2 // '-' at offset 2 within "1 - 0"
 	if diff := rowMid - dividerMid; diff < -2 || diff > 2 {
 		t.Fatalf("expected divider score dash to align with minute centre\nrow: %q\ndiv: %q", row, divider)
+	}
+}
+
+func TestMatchDividerFillsCenterPaddingWithDashes(t *testing.T) {
+	divider := renderMatchDividerRow("HT 0 - 0", 76)
+	if strings.Contains(divider, "HT 0 - 0   ") {
+		t.Fatalf("expected divider to avoid wide trailing spaces after label, got %q", divider)
+	}
+	if !strings.Contains(divider, " HT 0 - 0 ") {
+		t.Fatalf("expected divider to keep single spaces around label, got %q", divider)
 	}
 }
 
@@ -375,6 +390,25 @@ func TestHeaderEventRowsIncludesRedCardsAndHTDivider(t *testing.T) {
 	}
 }
 
+func TestHeaderEventRowsIncludesGoallessHTDividerBeforeSecondHalfEvents(t *testing.T) {
+	rows := headerEventRows([]site.MatchEvent{
+		{MinuteText: "60", Kind: "RC", TeamSide: "away", Text: "Pllana 60"},
+	})
+
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (HT, RC), got %d: %#v", len(rows), rows)
+	}
+	if !rows[0].isDivider {
+		t.Fatalf("expected row 0 to be HT divider, got %#v", rows[0])
+	}
+	if rows[0].label != "HT 0 - 0" {
+		t.Fatalf("expected HT divider label %q, got %q", "HT 0 - 0", rows[0].label)
+	}
+	if rows[1].minute != "60'" {
+		t.Fatalf("expected second-half event minute 60', got %q", rows[1].minute)
+	}
+}
+
 func TestRenderPlayerLineAbbreviatesNameAndDropsEvents(t *testing.T) {
 	got := renderPlayerLine(site.PlayerLine{Name: "(86) Igor Strzalek", Events: []string{"YC", "RC"}})
 	if got != "I. Strzalek" {
@@ -384,13 +418,10 @@ func TestRenderPlayerLineAbbreviatesNameAndDropsEvents(t *testing.T) {
 
 func TestRenderLineupRowUsesCenteredSeparatorColumn(t *testing.T) {
 	row := renderLineupRow("K. Kubica", "B. Mrozek", 76)
-	divider := renderMatchDividerRow("HT 1 - 0", 76)
 	rowMid := strings.Index(row, "|")
-	// The '-' in "HT 1 - 0" (padRight'd in 11-char centre column) and the "|"
-	// in lineup rows (padCenter'd in a 3-char centre column) share the same axis.
-	dividerMid := strings.Index(divider, "1 - 0") + 2 // '-' is at offset 2 in "1 - 0"
+	dividerMid := 76 / 2
 	if diff := rowMid - dividerMid; diff < -1 || diff > 1 {
-		t.Fatalf("expected lineup separator to share center axis\nrow: %q\ndiv: %q", row, divider)
+		t.Fatalf("expected lineup separator to share center axis\nrow: %q", row)
 	}
 	if !strings.Contains(row, "K. Kubica") || !strings.Contains(row, "B. Mrozek") {
 		t.Fatalf("expected lineup row to contain both players, got %q", row)
@@ -402,7 +433,6 @@ func TestRenderLineupRowUsesCenteredSeparatorColumn(t *testing.T) {
 
 func TestRenderLineupHeaderRowUsesBlankCenteredGap(t *testing.T) {
 	row := renderLineupRowWithMarker("Piast Gliwice", "Radomiak Radom", " ", 76)
-	divider := renderMatchDividerRow("HT 1 - 0", 76)
 
 	if !strings.Contains(row, "Piast Gliwice") || !strings.Contains(row, "Radomiak Radom") {
 		t.Fatalf("expected lineup header row to contain both team names, got %q", row)
@@ -414,9 +444,9 @@ func TestRenderLineupHeaderRowUsesBlankCenteredGap(t *testing.T) {
 	leftEnd := strings.Index(row, "Piast Gliwice") + len("Piast Gliwice")
 	rightStart := strings.Index(row, "Radomiak Radom")
 	gapMid := leftEnd + ((rightStart - leftEnd) / 2)
-	dividerMid := strings.Index(divider, "1 - 0") + 2 // '-' at offset 2 in "1 - 0"
+	dividerMid := 76 / 2
 	if diff := gapMid - dividerMid; diff < -1 || diff > 1 {
-		t.Fatalf("expected lineup header gap to stay centered\nrow: %q\ndiv: %q", row, divider)
+		t.Fatalf("expected lineup header gap to stay centered\nrow: %q", row)
 	}
 }
 

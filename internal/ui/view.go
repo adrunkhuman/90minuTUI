@@ -457,6 +457,8 @@ func (m Model) matchDetailContent(width int) string {
 	status := matchStatus(m.match)
 	headerEvents := headerEventRows(m.match.Events)
 	if len(headerEvents) > 0 || status != "" {
+		b.WriteString(renderMatchDetailRow("", "", "", width-4))
+		b.WriteString("\n")
 		if status != "" {
 			b.WriteString(renderMatchDetailRow("", status, "", width-4))
 			b.WriteString("\n")

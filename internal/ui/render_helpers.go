@@ -296,7 +296,6 @@ func atoiOrNeg(s string) int {
 	return value
 }
 
-
 func substitutionPlayers(text string) (string, string) {
 	parts := strings.SplitN(normalizeDisplayText(text), "->", 2)
 	if len(parts) != 2 {
@@ -449,21 +448,24 @@ func renderDividerLabel(label string, width int) string {
 	return strings.Repeat("-", left) + " " + cleaned + " " + strings.Repeat("-", right)
 }
 
-// renderMatchDividerRow renders a dash-line divider with label (e.g. "HT 1 - 0")
-// in the shared centre column, left-aligned within that column so the dash in
-// "X - Y" sits at the same position as the centre of a padCenter'd minute string.
+// renderMatchDividerRow renders a full-width dash-line divider with label
+// (e.g. "HT 1 - 0") positioned so the score dash shares the event-minute axis.
 func renderMatchDividerRow(label string, width int) string {
 	if width < 30 {
 		return renderDividerLabel(label, width)
 	}
 
-	midWidth := 11
-	gap := 1
-	sideWidth := max(8, (width-midWidth-(gap*2))/2)
-	left := strings.Repeat("-", sideWidth)
-	right := strings.Repeat("-", sideWidth)
+	label = truncate(label, max(1, width-2))
+	dashOffset := strings.Index(label, " - ") + 1
+	if dashOffset < 1 {
+		return renderDividerLabel(label, width)
+	}
 
-	return left + strings.Repeat(" ", gap) + padRight(truncate(label, midWidth), midWidth) + strings.Repeat(" ", gap) + right
+	minuteAxis := max(0, (width-7)/2+3)
+	leftWidth := max(0, minuteAxis-1-dashOffset)
+	rightWidth := max(0, width-leftWidth-ansi.StringWidth(label)-2)
+
+	return strings.Repeat("-", leftWidth) + " " + label + " " + strings.Repeat("-", rightWidth)
 }
 
 func matchStatus(page *site.MatchPage) string {
@@ -749,7 +751,6 @@ func halftimeScore(events []site.MatchEvent) string {
 	homeGoals := 0
 	awayGoals := 0
 	hasSecondHalf := false
-	hasFirstHalf := false
 
 	for _, event := range sortedEvents(events) {
 		minute, ok := minuteSortKey(event.MinuteText)
@@ -758,7 +759,6 @@ func halftimeScore(events []site.MatchEvent) string {
 		}
 		// minuteSortKey encodes stoppage as MM*100+extra, so 45:59 is the first-half ceiling.
 		if minute <= 4599 {
-			hasFirstHalf = true
 			if event.Kind == "GOAL" {
 				if event.TeamSide == "home" {
 					homeGoals++
@@ -771,7 +771,7 @@ func halftimeScore(events []site.MatchEvent) string {
 		hasSecondHalf = true
 	}
 
-	if !hasFirstHalf || !hasSecondHalf {
+	if !hasSecondHalf {
 		return ""
 	}
 
