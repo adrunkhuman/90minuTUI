@@ -456,7 +456,8 @@ func (m Model) matchDetailContent(width int) string {
 
 	status := matchStatus(m.match)
 	headerEvents := headerEventRows(m.match.Events)
-	if len(headerEvents) > 0 || status != "" {
+	ftDivider := finalScoreLine(m.match)
+	if len(headerEvents) > 0 || status != "" || ftDivider != "" {
 		b.WriteString(renderMatchDetailRow("", "", "", width-4))
 		b.WriteString("\n")
 		if status != "" {
@@ -478,11 +479,9 @@ func (m Model) matchDetailContent(width int) string {
 			b.WriteString(renderMatchDetailRow(homeText, row.minute, awayText, width-4))
 			b.WriteString("\n")
 		}
-		if len(headerEvents) > 0 {
-			if ftDivider := finalScoreLine(m.match); ftDivider != "" {
-				b.WriteString(renderMatchDividerRow(ftDivider, width-4))
-				b.WriteString("\n")
-			}
+		if ftDivider != "" {
+			b.WriteString(renderMatchDividerRow(ftDivider, width-4))
+			b.WriteString("\n")
 		}
 	}
 

@@ -135,7 +135,7 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 		"S. Mraz",
 		"17'",
 		"62'",
-		"FT 1-2",
+		"FT 1 - 2",
 		"Details",
 		"13 March 2026, 18:00 | Attendance 3542 | Ref. Damian Kos | Weather 15 C",
 	} {
@@ -206,7 +206,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		"Szkurin", "60'", // second home goal row
 		"K. Czubak", "70'", // away goal row
 		"🟥", "85'", // away red card row
-		"FT 2-1", // FT divider with score
+		"FT 2 - 1", // FT divider with score
 	} {
 		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected match view to contain %q\n%s", want, view)
@@ -231,7 +231,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		strings.Index(plainView, "60'"),
 		strings.Index(plainView, "70'"),
 		strings.Index(plainView, "85'"),
-		strings.Index(plainView, "FT 2-1"),
+		strings.Index(plainView, "FT 2 - 1"),
 	}
 	for _, idx := range headerIndexes {
 		if idx < 0 {
@@ -409,10 +409,91 @@ func TestHeaderEventRowsIncludesGoallessHTDividerBeforeSecondHalfEvents(t *testi
 	}
 }
 
+func TestHeaderEventRowsKeepsHTDividerWhenSecondHalfHasOnlyHiddenEvents(t *testing.T) {
+	rows := headerEventRows([]site.MatchEvent{
+		{MinuteText: "39", Kind: "GOAL", TeamSide: "home", Text: "Wdowiak 39"},
+		{MinuteText: "60", Kind: "SUB", TeamSide: "home", Text: "Igor Strzalek -> Damian Nowak"},
+		{MinuteText: "72", Kind: "YC", TeamSide: "away", Text: "Pllana 72"},
+	})
+
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (goal, HT), got %d: %#v", len(rows), rows)
+	}
+	if rows[0].isDivider {
+		t.Fatalf("expected first row to be visible event, got %#v", rows[0])
+	}
+	if !rows[1].isDivider || rows[1].label != "HT 1 - 0" {
+		t.Fatalf("expected final row to be HT divider, got %#v", rows[1])
+	}
+}
+
 func TestRenderPlayerLineAbbreviatesNameAndDropsEvents(t *testing.T) {
 	got := renderPlayerLine(site.PlayerLine{Name: "(86) Igor Strzalek", Events: []string{"YC", "RC"}})
 	if got != "I. Strzalek" {
 		t.Fatalf("unexpected player line: %q", got)
+	}
+}
+
+func TestCardAnnotationPrefersRedCardOverEarlierYellow(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{
+		{MinuteText: "20", Kind: "YC", TeamSide: "home", Text: "Pllana 20"},
+		{MinuteText: "85", Kind: "RC", TeamSide: "home", Text: "Pllana 85"},
+	}, "home")
+
+	if got := cardAnnotation(site.PlayerLine{Name: "Pllana"}, idx); got != eventPrefix("RC") {
+		t.Fatalf("expected red-card badge, got %q", got)
+	}
+}
+
+func TestReorderedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{{
+		MinuteText: "60",
+		Kind:       "SUB",
+		TeamSide:   "home",
+		Text:       "Jan Kowalski -> Piotr Kowalski",
+	}}, "home")
+
+	players := []site.PlayerLine{
+		{Name: "Adam Kowalski"},
+		{Name: "Jan Kowalski"},
+		{Name: "Piotr Kowalski"},
+	}
+
+	got := reorderedLineup(players, idx)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 lineup entries, got %d", len(got))
+	}
+	if got[0].player.Name != "Adam Kowalski" {
+		t.Fatalf("expected unrelated Kowalski to stay first, got %#v", got)
+	}
+	if got[1].player.Name != "Jan Kowalski" || got[2].player.Name != "Piotr Kowalski" {
+		t.Fatalf("expected substitute to follow substituted player, got %#v", got)
+	}
+}
+
+func TestReorderedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{{
+		MinuteText: "60",
+		Kind:       "SUB",
+		TeamSide:   "home",
+		Text:       "Jan Kowalski -> Piotr Kowalski",
+	}}, "home")
+
+	players := []site.PlayerLine{
+		{Name: "Jerzy Kowalski"},
+		{Name: "Jan Kowalski"},
+		{Name: "Piotr Kowalski"},
+	}
+
+	got := reorderedLineup(players, idx)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 lineup entries, got %d", len(got))
+	}
+	if got[0].player.Name != "Jerzy Kowalski" {
+		t.Fatalf("expected same-initial teammate to stay in place, got %#v", got)
+	}
+	if got[1].player.Name != "Jan Kowalski" || got[2].player.Name != "Piotr Kowalski" {
+		t.Fatalf("expected substitution to match full name, got %#v", got)
 	}
 }
 
@@ -487,6 +568,24 @@ func TestMatchDetailContentStylesLineupTeamsWithoutSeparator(t *testing.T) {
 	t.Fatal("expected match detail content to include lineup team header row")
 }
 
+func TestMatchDetailContentShowsFTDividerWithoutVisibleHeaderEvents(t *testing.T) {
+	m := sketchModel()
+	m.match = &site.MatchPage{
+		HomeTeam: "Motor Lublin",
+		AwayTeam: "Zaglebie Lubin",
+		Score:    "1-0",
+		Events: []site.MatchEvent{
+			{MinuteText: "46", Kind: "SUB", TeamSide: "home", Text: "Jan Kowalski -> Piotr Kowalski"},
+			{MinuteText: "72", Kind: "YC", TeamSide: "away", Text: "Nowak 72"},
+		},
+	}
+
+	content := ansi.Strip(m.matchDetailContent(80))
+	if !strings.Contains(content, "FT 1 - 0") {
+		t.Fatalf("expected FT divider even without visible header events\n%s", content)
+	}
+}
+
 func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {
 	centered := renderCenteredText("Timeline", 21)
 	leftPad := strings.Index(centered, "Timeline")
@@ -501,7 +600,7 @@ func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {
 
 func TestFinalScoreLineUsesMatchScore(t *testing.T) {
 	got := finalScoreLine(&site.MatchPage{Score: "2-0"})
-	if got != "FT 2-0" {
+	if got != "FT 2 - 0" {
 		t.Fatalf("unexpected final score line: %q", got)
 	}
 }

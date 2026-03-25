@@ -308,7 +308,7 @@ func substitutionPlayers(text string) (string, string) {
 		outgoing = ""
 	}
 
-	return formatPlayerLabel(outgoing), formatPlayerLabel(incoming)
+	return canonicalPlayerName(outgoing), canonicalPlayerName(incoming)
 }
 
 func faintText(text string) string {
@@ -359,14 +359,10 @@ func eventPrefix(kind string) string {
 }
 
 func formatPlayerLabel(value string) string {
-	cleaned := normalizeDisplayText(value)
+	cleaned := canonicalPlayerName(value)
 	if cleaned == "" {
 		return ""
 	}
-
-	// Compact match rows drop shirt numbers but keep semantic suffixes like (k).
-	cleaned = playerNumberPrefixRe.ReplaceAllString(cleaned, "")
-	cleaned = playerNumberSuffixRe.ReplaceAllString(cleaned, "")
 
 	suffixes := make([]string, 0, 2)
 	for {
@@ -374,12 +370,8 @@ func formatPlayerLabel(value string) string {
 		if len(matches) != 3 {
 			break
 		}
-		inner := strings.TrimSpace(strings.Trim(matches[2], " ()"))
-		cleaned = normalizeDisplayText(matches[1])
-		if digitsOnly(inner) {
-			continue
-		}
 		suffixes = append([]string{strings.TrimSpace(matches[2])}, suffixes...)
+		cleaned = normalizeDisplayText(matches[1])
 	}
 
 	words := strings.Fields(cleaned)
@@ -401,6 +393,36 @@ func formatPlayerLabel(value string) string {
 	}
 
 	return faintPenaltySuffix(cleaned)
+}
+
+func canonicalPlayerName(value string) string {
+	cleaned := normalizeDisplayText(value)
+	if cleaned == "" {
+		return ""
+	}
+
+	cleaned = playerNumberPrefixRe.ReplaceAllString(cleaned, "")
+	cleaned = playerNumberSuffixRe.ReplaceAllString(cleaned, "")
+
+	suffixes := make([]string, 0, 2)
+	for {
+		matches := trailingParenRe.FindStringSubmatch(cleaned)
+		if len(matches) != 3 {
+			break
+		}
+		inner := strings.TrimSpace(strings.Trim(matches[2], " ()"))
+		cleaned = normalizeDisplayText(matches[1])
+		if digitsOnly(inner) {
+			continue
+		}
+		suffixes = append([]string{strings.TrimSpace(matches[2])}, suffixes...)
+	}
+
+	if len(suffixes) > 0 {
+		cleaned += " " + strings.Join(suffixes, " ")
+	}
+
+	return cleaned
 }
 
 func digitsOnly(value string) bool {
@@ -498,12 +520,32 @@ type scorerLine struct {
 // All events carry the minute in the center column; the side label holds name + icon.
 func headerEventRows(events []site.MatchEvent) []scorerLine {
 	ordered := sortedEvents(events)
-	home, away := 0, 0
 	htLabel := halftimeScore(events)
+	firstSecondHalfKey := 0
+	hasSecondHalfEvent := false
+	for _, event := range ordered {
+		key, ok := minuteSortKey(event.MinuteText)
+		if !ok || key <= 4599 {
+			continue
+		}
+		firstSecondHalfKey = key
+		hasSecondHalfEvent = true
+		break
+	}
+
 	insertedHT := false
 	lines := make([]scorerLine, 0, 8)
 
 	for _, event := range ordered {
+		key, ok := minuteSortKey(event.MinuteText)
+		if !ok {
+			continue
+		}
+		if !insertedHT && htLabel != "" && hasSecondHalfEvent && key >= firstSecondHalfKey {
+			lines = append(lines, scorerLine{label: htLabel, isDivider: true})
+			insertedHT = true
+		}
+
 		switch event.Kind {
 		case "GOAL", "MISS", "RC":
 		default:
@@ -513,21 +555,9 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 			continue
 		}
 
-		if !insertedHT && htLabel != "" {
-			if key, ok := minuteSortKey(event.MinuteText); ok && key > 4599 {
-				lines = append(lines, scorerLine{label: htLabel, isDivider: true})
-				insertedHT = true
-			}
-		}
-
 		name := trimEventMinute(event)
 		switch event.Kind {
 		case "GOAL":
-			if event.TeamSide == "home" {
-				home++
-			} else if event.TeamSide == "away" {
-				away++
-			}
 			if name == "" {
 				continue
 			}
@@ -563,6 +593,10 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 		}
 	}
 
+	if !insertedHT && htLabel != "" && hasSecondHalfEvent {
+		lines = append(lines, scorerLine{label: htLabel, isDivider: true})
+	}
+
 	return lines
 }
 
@@ -576,26 +610,16 @@ func formatGoalLabel(name, side string) string {
 	return glyph + " " + name
 }
 
-// playerLastName returns a lowercase last-name key for fuzzy event-to-player matching.
-// Strips trailing parentheticals, then takes the last whitespace-delimited word.
-func playerLastName(label string) string {
-	s := strings.TrimSpace(label)
-	for {
-		m := trailingParenRe.FindStringSubmatch(s)
-		if len(m) != 3 {
-			break
-		}
-		s = strings.TrimSpace(m[1])
-	}
-	fields := strings.Fields(s)
-	if len(fields) == 0 {
+func playerMatchKey(label string) string {
+	formatted := normalizeDisplayText(canonicalPlayerName(label))
+	if formatted == "" {
 		return ""
 	}
-	return strings.ToLower(fields[len(fields)-1])
+	return strings.ToLower(formatted)
 }
 
-// playerEventIndex maps lowercase last name → events for the given side.
-// SUB events are indexed under both outgoing and incoming player last names.
+// playerEventIndex maps normalized compact player labels to events for the given side.
+// SUB events are indexed under both outgoing and incoming player names.
 func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.MatchEvent {
 	idx := make(map[string][]site.MatchEvent)
 	for _, e := range events {
@@ -604,16 +628,16 @@ func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.M
 		}
 		if e.Kind == "SUB" {
 			out, in := substitutionPlayers(e.Text)
-			if key := playerLastName(out); key != "" {
+			if key := playerMatchKey(out); key != "" {
 				idx[key] = append(idx[key], e)
 			}
-			if key := playerLastName(in); key != "" {
+			if key := playerMatchKey(in); key != "" {
 				idx[key] = append(idx[key], e)
 			}
 			continue
 		}
-		name := trimEventMinute(e)
-		if key := playerLastName(name); key != "" {
+		name := eventPlayerText(e)
+		if key := playerMatchKey(name); key != "" {
 			idx[key] = append(idx[key], e)
 		}
 	}
@@ -623,8 +647,7 @@ func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.M
 // cardAnnotation returns the YC/RC badge string for a lineup player, intended
 // for the dedicated event column next to the centre separator. Empty when clean.
 func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) string {
-	base := formatPlayerLabel(player.Name)
-	key := playerLastName(base)
+	key := playerMatchKey(player.Name)
 	if key == "" {
 		return ""
 	}
@@ -634,13 +657,17 @@ func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) st
 		return ""
 	}
 
+	hasYellow := false
 	for _, e := range matched {
 		switch e.Kind {
-		case "YC":
-			return eventPrefix("YC")
 		case "RC":
 			return eventPrefix("RC")
+		case "YC":
+			hasYellow = true
 		}
+	}
+	if hasYellow {
+		return eventPrefix("YC")
 	}
 	return ""
 }
@@ -665,14 +692,14 @@ func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 	subOnSet := make(map[string]bool, 4)
 
 	for _, player := range players {
-		key := playerLastName(formatPlayerLabel(player.Name))
+		key := playerMatchKey(player.Name)
 		for _, e := range idx[key] {
 			if e.Kind != "SUB" {
 				continue
 			}
 			out, in := substitutionPlayers(e.Text)
-			outKey := playerLastName(out)
-			inKey := playerLastName(in)
+			outKey := playerMatchKey(out)
+			inKey := playerMatchKey(in)
 			minute := strings.TrimSpace(formatMatchMinute(e.MinuteText))
 			if outKey == key && inKey != "" {
 				subOffMap[key] = subInfo{onKey: inKey, minute: minute}
@@ -684,14 +711,14 @@ func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 	// Build key → PlayerLine lookup
 	byKey := make(map[string]site.PlayerLine, len(players))
 	for _, p := range players {
-		byKey[playerLastName(formatPlayerLabel(p.Name))] = p
+		byKey[playerMatchKey(p.Name)] = p
 	}
 
 	result := make([]lineupEntry, 0, len(players))
 	insertedSubOns := make(map[string]bool, len(subOnSet))
 
 	for _, player := range players {
-		key := playerLastName(formatPlayerLabel(player.Name))
+		key := playerMatchKey(player.Name)
 		if subOnSet[key] {
 			continue // will be placed after their sub-off player
 		}
@@ -706,7 +733,7 @@ func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 
 	// Append unmatched sub-on players (name mismatch between event and lineup)
 	for _, player := range players {
-		key := playerLastName(formatPlayerLabel(player.Name))
+		key := playerMatchKey(player.Name)
 		if subOnSet[key] && !insertedSubOns[key] {
 			result = append(result, lineupEntry{player: player})
 		}
@@ -788,7 +815,27 @@ func finalScoreLine(page *site.MatchPage) string {
 		return ""
 	}
 
-	return "FT " + normalizeScore(score)
+	return "FT " + dividerScore(score)
+}
+
+func dividerScore(score string) string {
+	trimmed := strings.TrimSpace(score)
+	if trimmed == "" {
+		return "?-?"
+	}
+
+	parts := strings.SplitN(trimmed, "-", 2)
+	if len(parts) != 2 {
+		return normalizeScore(trimmed)
+	}
+
+	left := strings.TrimSpace(parts[0])
+	right := strings.TrimSpace(parts[1])
+	if left == "" || right == "" {
+		return normalizeScore(trimmed)
+	}
+
+	return left + " - " + right
 }
 
 func matchMetaParts(meta, weather string) []string {
@@ -1137,6 +1184,11 @@ func displayMatchMeta(meta, weather string) string {
 }
 
 func trimEventMinute(event site.MatchEvent) string {
+	text := eventPlayerText(event)
+	return formatPlayerLabel(text)
+}
+
+func eventPlayerText(event site.MatchEvent) string {
 	text := normalizeDisplayText(event.Text)
 	if text == "" || event.MinuteText == "" {
 		return text
@@ -1159,7 +1211,7 @@ func trimEventMinute(event site.MatchEvent) string {
 		text = strings.ReplaceAll(text, "(nk)", "(pen)")
 	}
 
-	return formatPlayerLabel(text)
+	return canonicalPlayerName(text)
 }
 
 func normalizeSubstitutionText(text string) string {
