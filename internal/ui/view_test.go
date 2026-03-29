@@ -262,9 +262,65 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 			t.Fatalf("expected lineup section to omit goal annotations\n%s", lineupSection)
 		}
 	}
-	// Sub-off player must NOT be dimmed (equal visual priority with sub-on)
-	if strings.Contains(view, "\x1b[2mI. Strzalek") {
-		t.Fatalf("expected sub-off player to not be dimmed\n%s", view)
+	if strings.Contains(plainView, "Substitutions") {
+		t.Fatalf("expected substitution pane to be omitted\n%s", view)
+	}
+	if !strings.Contains(view, "\x1b[2m(46' D. Nowak)\x1b[0m") {
+		t.Fatalf("expected lineup substitution note to be dimmed\n%s", view)
+	}
+}
+
+func TestFormatLineupPlayerMirrorsSubstitutionNote(t *testing.T) {
+	home := formatLineupPlayer(lineupEntry{
+		player:     site.PlayerLine{Name: "Igor Strzalek"},
+		subMinute:  "46'",
+		replacedBy: "Damian Nowak",
+	}, "home")
+	away := formatLineupPlayer(lineupEntry{
+		player:     site.PlayerLine{Name: "J. Wilson-Esbrand"},
+		subMinute:  "46'",
+		replacedBy: "J. Grzesik",
+	}, "away")
+
+	if got := ansi.Strip(home); got != "(46' D. Nowak) I. Strzalek" {
+		t.Fatalf("unexpected home lineup substitution label: %q", got)
+	}
+	if got := ansi.Strip(away); got != "J. Wilson-Esbrand (J. Grzesik 46')" {
+		t.Fatalf("unexpected away lineup substitution label: %q", got)
+	}
+	if !strings.Contains(home, "\x1b[2m(46' D. Nowak)\x1b[0m") {
+		t.Fatalf("expected home substitution note to be dimmed, got %q", home)
+	}
+	if !strings.Contains(away, "\x1b[2m(J. Grzesik 46')\x1b[0m") {
+		t.Fatalf("expected away substitution note to be dimmed, got %q", away)
+	}
+}
+
+func TestMatchDetailKeepsSubstitutionsOnlyInLineups(t *testing.T) {
+	m := sketchModel()
+	m.width = 140
+	m.matchView = true
+	m.match = &site.MatchPage{
+		HomeTeam: "Piast Gliwice",
+		AwayTeam: "Radomiak Radom",
+		Score:    "3-1",
+		Events: []site.MatchEvent{
+			{MinuteText: "66", Kind: "SUB", TeamSide: "home", Text: "Jason Lokilo -> Oskar Lesniak"},
+			{MinuteText: "46", Kind: "SUB", TeamSide: "away", Text: "J. Wilson-Esbrand -> J. Grzesik"},
+		},
+		HomeLineup: []site.PlayerLine{{Name: "Jason Lokilo"}},
+		AwayLineup: []site.PlayerLine{{Name: "J. Wilson-Esbrand"}},
+	}
+
+	view := m.View()
+	plainView := ansi.Strip(view)
+	if strings.Contains(plainView, "Substitutions") {
+		t.Fatalf("expected substitutions pane to be omitted\n%s", view)
+	}
+	for _, want := range []string{"(66' O. Lesniak) J. Lokilo", "J. Wilson-Esbrand (J. Grzesik 46')"} {
+		if !strings.Contains(plainView, want) {
+			t.Fatalf("expected lineup to contain %q\n%s", want, view)
+		}
 	}
 }
 

@@ -311,6 +311,68 @@ func substitutionPlayers(text string) (string, string) {
 	return canonicalPlayerName(outgoing), canonicalPlayerName(incoming)
 }
 
+type lineupSubstitution struct {
+	label  string
+	minute string
+	side   string
+}
+
+func lineupSubstitutions(events []site.MatchEvent) []lineupSubstitution {
+	ordered := sortedEvents(events)
+	rows := make([]lineupSubstitution, 0, 8)
+	for _, event := range ordered {
+		if event.Kind != "SUB" {
+			continue
+		}
+
+		label := formatLineupSubstitution(event)
+		if label == "" {
+			continue
+		}
+
+		rows = append(rows, lineupSubstitution{
+			label:  label,
+			minute: strings.TrimSpace(formatMatchMinute(event.MinuteText)),
+			side:   event.TeamSide,
+		})
+	}
+
+	return rows
+}
+
+func formatLineupSubstitution(event site.MatchEvent) string {
+	outgoing, incoming := substitutionPlayers(event.Text)
+
+	if outgoing == "" && incoming == "" {
+		return strings.TrimSpace(trimEventMinute(event))
+	}
+
+	outLabel := formatPlayerLabel(outgoing)
+	inLabel := formatPlayerLabel(incoming)
+	dimOutLabel := faintText(outLabel)
+
+	if event.TeamSide == "away" {
+		label := inLabel
+		if outLabel != "" {
+			if label != "" {
+				label += " <-> "
+			}
+			label += dimOutLabel
+		}
+		return label
+	}
+
+	label := dimOutLabel
+	if inLabel != "" {
+		if label != "" {
+			label += " <-> "
+		}
+		label += inLabel
+	}
+
+	return label
+}
+
 func faintText(text string) string {
 	if text == "" {
 		return ""
@@ -675,8 +737,98 @@ func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) st
 // lineupEntry is a display-ready lineup row entry.
 // subMinute is non-empty for sub-on players and carries the substitution minute.
 type lineupEntry struct {
-	player    site.PlayerLine
-	subMinute string
+	player     site.PlayerLine
+	subMinute  string
+	subFor     string
+	replacedBy string
+}
+
+func formatLineupPlayer(entry lineupEntry, side string) string {
+	name := formatPlayerLabel(entry.player.Name)
+	if entry.subMinute == "" && entry.replacedBy == "" {
+		return name
+	}
+
+	if entry.replacedBy != "" {
+		replacement := "("
+		if side == "home" && entry.subMinute != "" {
+			replacement += entry.subMinute + " "
+		}
+		replacement += formatPlayerLabel(entry.replacedBy)
+		if side != "home" && entry.subMinute != "" {
+			replacement += " " + entry.subMinute
+		}
+		replacement = faintText(replacement + ")")
+		if side == "home" {
+			parts := []string{replacement, name}
+			return strings.Join(parts, " ")
+		}
+
+		parts := []string{name, replacement}
+		return strings.Join(parts, " ")
+	}
+
+	parts := make([]string, 0, 3)
+	if side == "home" {
+		if entry.subFor != "" {
+			parts = append(parts, "["+formatPlayerLabel(entry.subFor)+"]")
+		}
+		parts = append(parts, entry.subMinute, name)
+		return strings.Join(parts, " ")
+	}
+
+	parts = append(parts, name, entry.subMinute)
+	if entry.subFor != "" {
+		parts = append(parts, "["+formatPlayerLabel(entry.subFor)+"]")
+	}
+
+	return strings.Join(parts, " ")
+}
+
+func subOnDetails(key string, idx map[string][]site.MatchEvent) (string, string) {
+	for _, event := range idx[key] {
+		if event.Kind != "SUB" {
+			continue
+		}
+
+		out, in := substitutionPlayers(event.Text)
+		if playerMatchKey(in) != key {
+			continue
+		}
+
+		return strings.TrimSpace(formatMatchMinute(event.MinuteText)), out
+	}
+
+	return "", ""
+}
+
+func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
+	if len(players) == 0 {
+		return nil
+	}
+
+	entries := make([]lineupEntry, 0, len(players))
+	for _, player := range players {
+		entry := lineupEntry{player: player}
+		key := playerMatchKey(player.Name)
+		for _, event := range idx[key] {
+			if event.Kind != "SUB" {
+				continue
+			}
+
+			out, in := substitutionPlayers(event.Text)
+			if playerMatchKey(out) != key {
+				continue
+			}
+
+			entry.subMinute = strings.TrimSpace(formatMatchMinute(event.MinuteText))
+			entry.replacedBy = in
+			break
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries
 }
 
 // reorderedLineup returns lineup entries with each sub-on player inserted
@@ -687,7 +839,12 @@ func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 		return nil
 	}
 
-	type subInfo struct{ onKey, minute string }
+	type subInfo struct {
+		onKey   string
+		onName  string
+		minute  string
+		outName string
+	}
 	subOffMap := make(map[string]subInfo, 4)
 	subOnSet := make(map[string]bool, 4)
 
@@ -702,7 +859,7 @@ func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 			inKey := playerMatchKey(in)
 			minute := strings.TrimSpace(formatMatchMinute(e.MinuteText))
 			if outKey == key && inKey != "" {
-				subOffMap[key] = subInfo{onKey: inKey, minute: minute}
+				subOffMap[key] = subInfo{onKey: inKey, onName: in, minute: minute, outName: out}
 				subOnSet[inKey] = true
 			}
 		}
@@ -722,10 +879,19 @@ func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 		if subOnSet[key] {
 			continue // will be placed after their sub-off player
 		}
-		result = append(result, lineupEntry{player: player})
+		entry := lineupEntry{player: player}
+		if info, ok := subOffMap[key]; ok {
+			entry.subMinute = info.minute
+			if onPlayer, exists := byKey[info.onKey]; exists {
+				entry.replacedBy = onPlayer.Name
+			} else {
+				entry.replacedBy = info.onName
+			}
+		}
+		result = append(result, entry)
 		if info, ok := subOffMap[key]; ok {
 			if onPlayer, exists := byKey[info.onKey]; exists {
-				result = append(result, lineupEntry{player: onPlayer, subMinute: info.minute})
+				result = append(result, lineupEntry{player: onPlayer, subMinute: info.minute, subFor: info.outName})
 				insertedSubOns[info.onKey] = true
 			}
 		}
@@ -735,7 +901,8 @@ func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 	for _, player := range players {
 		key := playerMatchKey(player.Name)
 		if subOnSet[key] && !insertedSubOns[key] {
-			result = append(result, lineupEntry{player: player})
+			minute, subFor := subOnDetails(key, idx)
+			result = append(result, lineupEntry{player: player, subMinute: minute, subFor: subFor})
 		}
 	}
 
