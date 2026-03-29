@@ -13,6 +13,7 @@ type Competition struct {
 	LeagueKey string
 }
 
+// CompetitionMenu is an intermediate archive node that expands into more competitions.
 type CompetitionMenu struct {
 	Title string
 	URL   string
@@ -20,12 +21,15 @@ type CompetitionMenu struct {
 }
 
 type Fixture struct {
-	Home     string
-	Away     string
-	Score    string
+	Home  string
+	Away  string
+	Score string
+	// WhenInfo keeps date/time text and any trailing source metadata that does not belong in the score cell.
 	WhenInfo string
+	// MatchURL stays empty when 90minut publishes a fixture row without a drillable match page.
 	MatchURL string
-	MatchID  string
+	// MatchID stays empty when MatchURL is empty.
+	MatchID string
 }
 
 // Round fixtures are normalized to ascending parsed date/time when available;
