@@ -228,6 +228,11 @@ func fixtureScoreCell(row *goquery.Selection, tds *goquery.Selection) (*goquery.
 		if !isFixtureScoreText(tds.Eq(idx).Text()) {
 			continue
 		}
+		home, _ := nearestTeamCellText(tds, idx-1, -1)
+		away, _ := nearestTeamCellText(tds, idx+1, 1)
+		if home == "" || away == "" || isScoreLikeText(home) || isScoreLikeText(away) {
+			continue
+		}
 		if scoreIdx >= 0 {
 			return nil, -1, "", false
 		}

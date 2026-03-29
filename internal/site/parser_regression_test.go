@@ -220,6 +220,32 @@ func TestParseFixturesTableFallsBackToPlainTextScoresWithoutMatchLinks(t *testin
 	}
 }
 
+func TestParseLeaguePageHandlesSavedAmbiguousLinklessFixture(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_ambiguous_linkless.html")
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga99998.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Rounds) != 1 {
+		t.Fatalf("expected 1 round, got %d", len(page.Rounds))
+	}
+	if len(page.Rounds[0].Fixtures) != 2 {
+		t.Fatalf("expected 2 fixtures, got %d", len(page.Rounds[0].Fixtures))
+	}
+
+	first := page.Rounds[0].Fixtures[0]
+	if first.Home != "Team A" || first.Away != "Team B" || first.Score != "1-0" {
+		t.Fatalf("unexpected first fixture: %+v", first)
+	}
+	if first.WhenInfo != "walkower 3-0 24 lipca, 18:00" {
+		t.Fatalf("unexpected first fixture metadata: %+v", first)
+	}
+	if first.MatchURL != "" || first.MatchID != "" {
+		t.Fatalf("expected linkless fixture, got %+v", first)
+	}
+}
+
 func TestRoundNameFromTableSkipsNavigationBlocks(t *testing.T) {
 	html := `
 	<table>

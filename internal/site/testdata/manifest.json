@@ -1,5 +1,5 @@
 {
-  "generated_at": "sha256:276c39a498ea913d81dd24bb49316f4e5ca7bd0232baf795f1860f96bc030ca8",
+  "generated_at": "sha256:280abfa7e319aa9300e56579033fd8b362fa84ca80aa38d3115c5358711a6c46",
   "source": "http://www.90minut.pl/archsezon.php",
   "fixtures": [
     {
@@ -159,6 +159,14 @@
       "url": "http://www.90minut.pl/mecz.php?id_mecz=1666308",
       "season": "2020/21",
       "file": "fixtures/match_1666308.html"
+    },
+    {
+      "name": "league_ambiguous_linkless",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga99998.html",
+      "season": "synthetic",
+      "file": "fixtures/league_ambiguous_linkless.html",
+      "note": "plain-text score plus extra score-like metadata"
     }
   ]
 }
