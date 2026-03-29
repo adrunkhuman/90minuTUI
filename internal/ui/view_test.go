@@ -798,6 +798,7 @@ func TestRenderFixtureWindowUsesFullNamesOutsideMatchSidebar(t *testing.T) {
 		Away:     "Lech Poznan",
 		Score:    "2-1",
 		WhenInfo: "24 stycznia, 20:30 (16 580)",
+		MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1",
 	}}, 0, 5, 80, false)
 
 	if len(lines) != 1 || !strings.Contains(lines[0], "Legia Warszawa") || !strings.Contains(lines[0], "Lech Poznan") || !strings.Contains(lines[0], "| 24/01 20:30") {
@@ -811,6 +812,7 @@ func TestRenderFixtureWindowUsesCompactNamesInMatchSidebar(t *testing.T) {
 		Away:     "Lech Poznan",
 		Score:    "2-1",
 		WhenInfo: "24 stycznia, 20:30 (16 580)",
+		MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1",
 	}}, 0, 5, 40, true)
 
 	if len(lines) != 1 || !strings.Contains(lines[0], "LEG 2-1 LEC | 24/01 20:30") {
@@ -818,10 +820,40 @@ func TestRenderFixtureWindowUsesCompactNamesInMatchSidebar(t *testing.T) {
 	}
 }
 
+func TestRenderFixtureWindowMarksNonDrillableFixturesWhenSpaceAllows(t *testing.T) {
+	lines := renderFixtureWindow([]site.Fixture{{
+		Home:     "Legia Warszawa",
+		Away:     "Lech Poznan",
+		Score:    "-",
+		WhenInfo: "24 stycznia, 20:30",
+	}}, 0, 5, 120, false)
+
+	if len(lines) != 1 || !strings.Contains(lines[0], "[no details]") {
+		t.Fatalf("expected non-drillable marker, got %v", lines)
+	}
+}
+
+func TestStatusBarViewReflectsFixtureDrillability(t *testing.T) {
+	m := sketchModel()
+	m.width = 120
+
+	status := m.statusBarView()
+	if !strings.Contains(status, "enter: details") {
+		t.Fatalf("expected drillable status hint, got %q", status)
+	}
+
+	m.league.Rounds[0].Fixtures[0].MatchURL = ""
+	m.league.Rounds[0].Fixtures[0].MatchID = ""
+	status = m.statusBarView()
+	if !strings.Contains(status, "enter: unavailable") {
+		t.Fatalf("expected non-drillable status hint, got %q", status)
+	}
+}
+
 func TestRenderFixtureWindowAlignsFullFixtureColumns(t *testing.T) {
 	fixtures := []site.Fixture{
-		{Home: "Bruk-Bet Termalica Nieciecza", Away: "Motor Lublin", Score: "1-2", WhenInfo: "13 marca, 18:00 (3542)"},
-		{Home: "Jagiellonia Bialystok", Away: "Piast Gliwice", Score: "1-2", WhenInfo: "14 marca, 14:45 (16 580)"},
+		{Home: "Bruk-Bet Termalica Nieciecza", Away: "Motor Lublin", Score: "1-2", WhenInfo: "13 marca, 18:00 (3542)", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1"},
+		{Home: "Jagiellonia Bialystok", Away: "Piast Gliwice", Score: "1-2", WhenInfo: "14 marca, 14:45 (16 580)", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=2"},
 	}
 	lines := renderFixtureWindow(fixtures, 0, 5, 84, false)
 	if len(lines) != 2 {

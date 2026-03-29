@@ -28,6 +28,15 @@ func (m Model) loadSeasonCompetitionsCmd(url, seasonKey string) tea.Cmd {
 	}
 }
 
+func (m Model) loadCompetitionCmd(url, competitionKey string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		menu, league, err := m.service.LoadCompetition(ctx, url)
+		return competitionMenuLoadedMsg{competitionKey: competitionKey, menu: menu, league: league, err: err}
+	}
+}
+
 func (m Model) loadLeagueCmd(url, competitionKey string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

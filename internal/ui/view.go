@@ -87,7 +87,11 @@ func (m Model) selectorPopupView(width int) string {
 	b.WriteString(title.Render("Season + league"))
 	b.WriteString("\n\n")
 	left := selectorPaneView(leftWidth, "Season", m.focus == focusSeasons, seasonLines, title, focusStyle)
-	right := selectorPaneView(rightWidth, "Leagues", m.focus == focusCompetitions, renderCompetitionWindow(m.competitions, m.competitionCursor), title, focusStyle)
+	rightHeading := "Leagues"
+	if strings.TrimSpace(m.competitionTitle) != "" {
+		rightHeading = m.competitionTitle
+	}
+	right := selectorPaneView(rightWidth, rightHeading, m.focus == focusCompetitions, renderCompetitionWindow(m.competitions, m.competitionCursor), title, focusStyle)
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, left, right))
 
 	if m.loading {
@@ -418,7 +422,11 @@ func (m Model) matchDetailPaneView(width int) string {
 }
 
 func (m Model) statusBarView() string {
-	parts := []string{"j/k: move", "left/right: round", "enter: open", "esc: selector", "q: quit"}
+	enterHint := "enter: unavailable"
+	if m.currentFixtureDrillable() {
+		enterHint = "enter: details"
+	}
+	parts := []string{"j/k: move", "left/right: round", enterHint, "esc: selector", "q: quit"}
 	if m.matchView {
 		parts = []string{"h/l: round", "j/k: fixture", "pgup/pgdn: scroll", "ctrl+u/d: scroll", "esc: league", "r: reload", "q: quit"}
 	}
@@ -426,6 +434,9 @@ func (m Model) statusBarView() string {
 		parts = []string{"tab: focus", "j/k: move", "enter: load", "q: quit"}
 		if m.league != nil {
 			parts = []string{"tab: focus", "j/k: move", "enter: load", "esc: close", "q: quit"}
+		}
+		if len(m.competitionStack) > 0 {
+			parts = []string{"tab: focus", "j/k: move", "enter: open", "esc: back", "q: quit"}
 		}
 	}
 

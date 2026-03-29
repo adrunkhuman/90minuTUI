@@ -161,43 +161,88 @@ func parseFixturesTable(table *goquery.Selection) []Fixture {
 	fixtures := make([]Fixture, 0, 16)
 
 	table.Find("tr").Each(func(_ int, row *goquery.Selection) {
-		matchLinks := row.Find("a[href*='mecz.php']")
-		if matchLinks.Length() != 1 {
+		fixture, ok := parseFixtureRow(row)
+		if !ok {
 			return
 		}
 
-		scoreCell := matchLinks.First().Closest("td")
-		if scoreCell.Length() == 0 {
-			return
-		}
-
-		tds := row.Find("td")
-		scoreIdx := scoreCell.Index()
-		home, _ := nearestTeamCellText(tds, scoreIdx-1, -1)
-		away, awayIdx := nearestTeamCellText(tds, scoreIdx+1, 1)
-		if home == "" || away == "" || isScoreLikeText(home) || isScoreLikeText(away) {
-			return
-		}
-
-		matchLink := strings.TrimSpace(scoreCell.Find("a[href*='mecz.php']").First().AttrOr("href", ""))
-		score := normalizeWhitespace(scoreCell.Text())
-		whenInfo := joinNonEmptyCells(tds, awayIdx+1)
-
-		if score == "" || matchLink == "" {
-			return
-		}
-
-		fixtures = append(fixtures, Fixture{
-			Home:     home,
-			Away:     away,
-			Score:    score,
-			WhenInfo: whenInfo,
-			MatchURL: matchLink,
-			MatchID:  extractMatchID(matchLink),
-		})
+		fixtures = append(fixtures, fixture)
 	})
 
 	return fixtures
+}
+
+func parseFixtureRow(row *goquery.Selection) (Fixture, bool) {
+	tds := row.Find("td")
+	if tds.Length() < 3 {
+		return Fixture{}, false
+	}
+
+	scoreCell, scoreIdx, matchLink, ok := fixtureScoreCell(row, tds)
+	if !ok {
+		return Fixture{}, false
+	}
+
+	home, _ := nearestTeamCellText(tds, scoreIdx-1, -1)
+	away, awayIdx := nearestTeamCellText(tds, scoreIdx+1, 1)
+	if home == "" || away == "" || isScoreLikeText(home) || isScoreLikeText(away) {
+		return Fixture{}, false
+	}
+
+	score := normalizeWhitespace(scoreCell.Text())
+	if !isFixtureScoreText(score) {
+		return Fixture{}, false
+	}
+
+	return Fixture{
+		Home:     home,
+		Away:     away,
+		Score:    score,
+		WhenInfo: joinNonEmptyCells(tds, awayIdx+1),
+		MatchURL: matchLink,
+		MatchID:  extractMatchID(matchLink),
+	}, true
+}
+
+func fixtureScoreCell(row *goquery.Selection, tds *goquery.Selection) (*goquery.Selection, int, string, bool) {
+	matchLinks := row.Find("a[href*='mecz.php']")
+	if matchLinks.Length() > 1 {
+		return nil, -1, "", false
+	}
+	if matchLinks.Length() == 1 {
+		scoreCell := matchLinks.First().Closest("td")
+		if scoreCell.Length() == 0 {
+			return nil, -1, "", false
+		}
+
+		matchLink := strings.TrimSpace(matchLinks.First().AttrOr("href", ""))
+		if matchLink == "" {
+			return nil, -1, "", false
+		}
+
+		return scoreCell, scoreCell.Index(), matchLink, true
+	}
+
+	scoreIdx := -1
+	for idx := 0; idx < tds.Length(); idx++ {
+		if !isFixtureScoreText(tds.Eq(idx).Text()) {
+			continue
+		}
+		if scoreIdx >= 0 {
+			return nil, -1, "", false
+		}
+		scoreIdx = idx
+	}
+	if scoreIdx < 0 {
+		return nil, -1, "", false
+	}
+
+	return tds.Eq(scoreIdx), scoreIdx, "", true
+}
+
+func isFixtureScoreText(text string) bool {
+	cleaned := normalizeWhitespace(text)
+	return cleaned == "-" || isScoreLikeText(cleaned)
 }
 
 func parseStandings(doc *goquery.Document) []StandingRow {

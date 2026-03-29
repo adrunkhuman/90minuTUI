@@ -17,14 +17,17 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 		"league_14073": {firstRoundName: "Kolejka 1 - 19-20 lipca", firstRoundFixtures: 9},
 	}
 	leagues := fixturesByKind(m, "league")
-	if len(leagues) < 6 {
-		t.Fatalf("expected at least 6 league fixtures, got %d", len(leagues))
+	if len(leagues) < 7 {
+		t.Fatalf("expected at least 7 league fixtures, got %d", len(leagues))
 	}
 	if !containsFixtureName(leagues, "league_14072") {
 		t.Fatalf("expected league fixture for liga14072")
 	}
 	if !containsFixtureName(leagues, "league_14073") {
 		t.Fatalf("expected league fixture for liga14073")
+	}
+	if !containsFixtureName(leagues, "league_14141") {
+		t.Fatalf("expected league fixture for liga14141")
 	}
 
 	for _, fixture := range leagues {
@@ -60,6 +63,12 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 					}
 					if isScoreLikeText(match.Home) || isScoreLikeText(match.Away) {
 						t.Fatalf("fixture side parsed as score token in %s: home=%q away=%q", fixture.Name, match.Home, match.Away)
+					}
+					if match.MatchURL == "" {
+						if match.MatchID != "" {
+							t.Fatalf("fixture without match url should keep empty match id in %s: %q", fixture.Name, match.MatchID)
+						}
+						continue
 					}
 					if !strings.Contains(match.MatchURL, "mecz.php") {
 						t.Fatalf("fixture match url is not a match link in %s: %q", fixture.Name, match.MatchURL)
@@ -99,6 +108,37 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseLeagueFixturesWithoutMatchLinksFromCorpus(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_14141.html")
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga14141.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Rounds) == 0 {
+		t.Fatalf("expected rounds for linkless fixture league")
+	}
+
+	linklessFixtures := 0
+	for _, round := range page.Rounds {
+		for _, fixture := range round.Fixtures {
+			if fixture.MatchURL != "" {
+				continue
+			}
+			linklessFixtures++
+			if fixture.MatchID != "" {
+				t.Fatalf("expected empty match id for linkless fixture, got %q", fixture.MatchID)
+			}
+			if fixture.Home == "" || fixture.Away == "" || fixture.Score == "" {
+				t.Fatalf("expected sides and score for linkless fixture, got %+v", fixture)
+			}
+		}
+	}
+
+	if linklessFixtures == 0 {
+		t.Fatalf("expected at least one linkless fixture in liga14141")
 	}
 }
 

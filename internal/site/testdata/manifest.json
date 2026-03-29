@@ -1,5 +1,5 @@
 {
-  "generated_at": "sha256:969307a13d9cda4b3df5545eb17073087987b5fed3fb53026767851fa12c67de",
+  "generated_at": "sha256:276c39a498ea913d81dd24bb49316f4e5ca7bd0232baf795f1860f96bc030ca8",
   "source": "http://www.90minut.pl/archsezon.php",
   "fixtures": [
     {
@@ -52,6 +52,14 @@
       "season": "2025/26",
       "file": "fixtures/league_14073.html",
       "note": "round text annotations"
+    },
+    {
+      "name": "league_14141",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga14141.html",
+      "season": "2025/26",
+      "file": "fixtures/league_14141.html",
+      "note": "current women league page without match links"
     },
     {
       "name": "league_liga11233",

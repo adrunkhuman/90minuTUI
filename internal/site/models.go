@@ -13,6 +13,12 @@ type Competition struct {
 	LeagueKey string
 }
 
+type CompetitionMenu struct {
+	Title string
+	URL   string
+	Items []Competition
+}
+
 type Fixture struct {
 	Home     string
 	Away     string
