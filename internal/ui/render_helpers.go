@@ -470,8 +470,7 @@ func renderDividerLabel(label string, width int) string {
 	return strings.Repeat("-", left) + " " + cleaned + " " + strings.Repeat("-", right)
 }
 
-// renderMatchDividerRow renders a full-width dash-line divider with label
-// (e.g. "HT 1 - 0") positioned so the score dash shares the event-minute axis.
+// Align the divider score dash with the event-minute column when width allows.
 func renderMatchDividerRow(label string, width int) string {
 	if width < 30 {
 		return renderDividerLabel(label, width)
@@ -515,9 +514,7 @@ type scorerLine struct {
 	isDivider bool
 }
 
-// headerEventRows returns goal, missed-penalty, and red-card events sorted by minute,
-// with an HT divider injected between halves when both exist.
-// All events carry the minute in the center column; the side label holds name + icon.
+// Return visible score-header events in minute order; insert HT when play continues after halftime.
 func headerEventRows(events []site.MatchEvent) []scorerLine {
 	ordered := sortedEvents(events)
 	htLabel := halftimeScore(events)
@@ -672,8 +669,6 @@ func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) st
 	return ""
 }
 
-// lineupEntry is a display-ready lineup row entry.
-// subMinute is non-empty for sub-on players and carries the substitution minute.
 type lineupEntry struct {
 	player     site.PlayerLine
 	subMinute  string
@@ -762,13 +757,9 @@ func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 	return entries
 }
 
-// renderAnnotatedLineupRow renders a lineup player row with a dedicated event column
-// between each player name and the centre separator:
+// Keep a dedicated event column next to the centre separator:
 //
 //	[home name →right] [home events →right] | [away events ←left] [away name ←left]
-//
-// When a player has no events the event column is empty, producing a wider gap
-// that keeps the visual centre clean.
 func renderAnnotatedLineupRow(homePlayer, homeEvents, awayPlayer, awayEvents string, width int) string {
 	if width < 36 {
 		home := homePlayer

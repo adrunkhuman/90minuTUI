@@ -198,7 +198,6 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		t.Fatalf("expected spacer row between score header and event log\n%s", content)
 	}
 
-	// Score header: goals with minute-in-center, HT/FT dividers
 	for _, want := range []string{
 		"Wdowiak", "39'", "⚽", // home goal row (minute in center, icon adjacent)
 		"HT 1 - 0", // HT divider with score
@@ -213,7 +212,6 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		}
 	}
 
-	// No Timeline section, no sub glyph in score header
 	for _, unwanted := range []string{
 		"Timeline",
 		"↕",
@@ -223,7 +221,6 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		}
 	}
 
-	// Score header ordering: 39' before HT before 52' before 60' before 70' before 85'
 	headerIndexes := []int{
 		strings.Index(plainView, "39'"),
 		strings.Index(plainView, "HT 1 - 0"),
@@ -244,7 +241,6 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		}
 	}
 
-	// Lineup section: sub minutes at outer edge, sub-on player visible, cards in event column
 	for _, want := range []string{
 		"46'",      // sub minute visible at outer edge of player name
 		"D. Nowak", // sub-on player visible immediately after sub-off
@@ -254,7 +250,6 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 			t.Fatalf("expected lineup section to contain %q\n%s", want, view)
 		}
 	}
-	// Goals must NOT be annotated in the lineup (they belong to the score header)
 	lineupIdx := strings.Index(plainView, "Lineups")
 	if lineupIdx >= 0 {
 		lineupSection := plainView[lineupIdx:]
