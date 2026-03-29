@@ -501,7 +501,7 @@ func TestCardAnnotationPrefersRedCardOverEarlierYellow(t *testing.T) {
 	}
 }
 
-func TestReorderedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testing.T) {
+func TestAnnotatedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{{
 		MinuteText: "60",
 		Kind:       "SUB",
@@ -515,19 +515,22 @@ func TestReorderedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testin
 		{Name: "Piotr Kowalski"},
 	}
 
-	got := reorderedLineup(players, idx)
+	got := annotatedLineup(players, idx)
 	if len(got) != 3 {
 		t.Fatalf("expected 3 lineup entries, got %d", len(got))
 	}
 	if got[0].player.Name != "Adam Kowalski" {
 		t.Fatalf("expected unrelated Kowalski to stay first, got %#v", got)
 	}
-	if got[1].player.Name != "Jan Kowalski" || got[2].player.Name != "Piotr Kowalski" {
-		t.Fatalf("expected substitute to follow substituted player, got %#v", got)
+	if got[1].player.Name != "Jan Kowalski" || got[1].replacedBy != "Piotr Kowalski" || got[1].subMinute != "60'" {
+		t.Fatalf("expected substituted player to carry entrant note, got %#v", got)
+	}
+	if got[2].player.Name != "Piotr Kowalski" || got[2].replacedBy != "" {
+		t.Fatalf("expected entrant row to stay untouched when already present, got %#v", got)
 	}
 }
 
-func TestReorderedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
+func TestAnnotatedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{{
 		MinuteText: "60",
 		Kind:       "SUB",
@@ -541,15 +544,50 @@ func TestReorderedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
 		{Name: "Piotr Kowalski"},
 	}
 
-	got := reorderedLineup(players, idx)
+	got := annotatedLineup(players, idx)
 	if len(got) != 3 {
 		t.Fatalf("expected 3 lineup entries, got %d", len(got))
 	}
 	if got[0].player.Name != "Jerzy Kowalski" {
 		t.Fatalf("expected same-initial teammate to stay in place, got %#v", got)
 	}
-	if got[1].player.Name != "Jan Kowalski" || got[2].player.Name != "Piotr Kowalski" {
+	if got[1].player.Name != "Jan Kowalski" || got[1].replacedBy != "Piotr Kowalski" {
 		t.Fatalf("expected substitution to match full name, got %#v", got)
+	}
+}
+
+func TestAnnotatedLineupAddsMissingEntrantWhenTheyHaveCardEvent(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{
+		{MinuteText: "66", Kind: "SUB", TeamSide: "home", Text: "Jason Lokilo -> Oskar Lesniak"},
+		{MinuteText: "84", Kind: "YC", TeamSide: "home", Text: "Oskar Lesniak 84"},
+	}, "home")
+
+	got := annotatedLineup([]site.PlayerLine{{Name: "Jason Lokilo"}}, idx)
+	if len(got) != 2 {
+		t.Fatalf("expected starter plus synthetic entrant, got %#v", got)
+	}
+	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || got[0].subMinute != "66'" {
+		t.Fatalf("expected starter row to retain substitution note, got %#v", got)
+	}
+	if got[1].player.Name != "Oskar Lesniak" || got[1].replacedBy != "" {
+		t.Fatalf("expected entrant row added for card badge visibility, got %#v", got)
+	}
+}
+
+func TestAnnotatedLineupSkipsMissingEntrantWithoutBadgeEvent(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{{
+		MinuteText: "66",
+		Kind:       "SUB",
+		TeamSide:   "home",
+		Text:       "Jason Lokilo -> Oskar Lesniak",
+	}}, "home")
+
+	got := annotatedLineup([]site.PlayerLine{{Name: "Jason Lokilo"}}, idx)
+	if len(got) != 1 {
+		t.Fatalf("expected only starter row when entrant has no lineup badge event, got %#v", got)
+	}
+	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || got[0].subMinute != "66'" {
+		t.Fatalf("expected starter row to retain substitution note, got %#v", got)
 	}
 }
 

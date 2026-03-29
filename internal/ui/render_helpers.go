@@ -311,68 +311,6 @@ func substitutionPlayers(text string) (string, string) {
 	return canonicalPlayerName(outgoing), canonicalPlayerName(incoming)
 }
 
-type lineupSubstitution struct {
-	label  string
-	minute string
-	side   string
-}
-
-func lineupSubstitutions(events []site.MatchEvent) []lineupSubstitution {
-	ordered := sortedEvents(events)
-	rows := make([]lineupSubstitution, 0, 8)
-	for _, event := range ordered {
-		if event.Kind != "SUB" {
-			continue
-		}
-
-		label := formatLineupSubstitution(event)
-		if label == "" {
-			continue
-		}
-
-		rows = append(rows, lineupSubstitution{
-			label:  label,
-			minute: strings.TrimSpace(formatMatchMinute(event.MinuteText)),
-			side:   event.TeamSide,
-		})
-	}
-
-	return rows
-}
-
-func formatLineupSubstitution(event site.MatchEvent) string {
-	outgoing, incoming := substitutionPlayers(event.Text)
-
-	if outgoing == "" && incoming == "" {
-		return strings.TrimSpace(trimEventMinute(event))
-	}
-
-	outLabel := formatPlayerLabel(outgoing)
-	inLabel := formatPlayerLabel(incoming)
-	dimOutLabel := faintText(outLabel)
-
-	if event.TeamSide == "away" {
-		label := inLabel
-		if outLabel != "" {
-			if label != "" {
-				label += " <-> "
-			}
-			label += dimOutLabel
-		}
-		return label
-	}
-
-	label := dimOutLabel
-	if inLabel != "" {
-		if label != "" {
-			label += " <-> "
-		}
-		label += inLabel
-	}
-
-	return label
-}
-
 func faintText(text string) string {
 	if text == "" {
 		return ""
@@ -739,7 +677,6 @@ func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) st
 type lineupEntry struct {
 	player     site.PlayerLine
 	subMinute  string
-	subFor     string
 	replacedBy string
 }
 
@@ -768,43 +705,28 @@ func formatLineupPlayer(entry lineupEntry, side string) string {
 		return strings.Join(parts, " ")
 	}
 
-	parts := make([]string, 0, 3)
-	if side == "home" {
-		if entry.subFor != "" {
-			parts = append(parts, "["+formatPlayerLabel(entry.subFor)+"]")
-		}
-		parts = append(parts, entry.subMinute, name)
-		return strings.Join(parts, " ")
-	}
-
-	parts = append(parts, name, entry.subMinute)
-	if entry.subFor != "" {
-		parts = append(parts, "["+formatPlayerLabel(entry.subFor)+"]")
-	}
-
-	return strings.Join(parts, " ")
+	return name
 }
 
-func subOnDetails(key string, idx map[string][]site.MatchEvent) (string, string) {
+func hasLineupBadgeEvent(key string, idx map[string][]site.MatchEvent) bool {
 	for _, event := range idx[key] {
-		if event.Kind != "SUB" {
-			continue
+		switch event.Kind {
+		case "YC", "RC":
+			return true
 		}
-
-		out, in := substitutionPlayers(event.Text)
-		if playerMatchKey(in) != key {
-			continue
-		}
-
-		return strings.TrimSpace(formatMatchMinute(event.MinuteText)), out
 	}
 
-	return "", ""
+	return false
 }
 
 func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
 	if len(players) == 0 {
 		return nil
+	}
+
+	byKey := make(map[string]site.PlayerLine, len(players))
+	for _, player := range players {
+		byKey[playerMatchKey(player.Name)] = player
 	}
 
 	entries := make([]lineupEntry, 0, len(players))
@@ -823,90 +745,21 @@ func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 
 			entry.subMinute = strings.TrimSpace(formatMatchMinute(event.MinuteText))
 			entry.replacedBy = in
+			inKey := playerMatchKey(in)
+			if _, exists := byKey[inKey]; !exists && hasLineupBadgeEvent(inKey, idx) {
+				entries = append(entries, entry)
+				entries = append(entries, lineupEntry{player: site.PlayerLine{Name: in}})
+				entry = lineupEntry{}
+			}
 			break
+		}
+		if entry.player.Name == "" {
+			continue
 		}
 		entries = append(entries, entry)
 	}
 
 	return entries
-}
-
-// reorderedLineup returns lineup entries with each sub-on player inserted
-// immediately after the player they replaced. Sub-on players are identified
-// via the event index; those that cannot be matched are appended at the end.
-func reorderedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
-	if len(players) == 0 {
-		return nil
-	}
-
-	type subInfo struct {
-		onKey   string
-		onName  string
-		minute  string
-		outName string
-	}
-	subOffMap := make(map[string]subInfo, 4)
-	subOnSet := make(map[string]bool, 4)
-
-	for _, player := range players {
-		key := playerMatchKey(player.Name)
-		for _, e := range idx[key] {
-			if e.Kind != "SUB" {
-				continue
-			}
-			out, in := substitutionPlayers(e.Text)
-			outKey := playerMatchKey(out)
-			inKey := playerMatchKey(in)
-			minute := strings.TrimSpace(formatMatchMinute(e.MinuteText))
-			if outKey == key && inKey != "" {
-				subOffMap[key] = subInfo{onKey: inKey, onName: in, minute: minute, outName: out}
-				subOnSet[inKey] = true
-			}
-		}
-	}
-
-	// Build key → PlayerLine lookup
-	byKey := make(map[string]site.PlayerLine, len(players))
-	for _, p := range players {
-		byKey[playerMatchKey(p.Name)] = p
-	}
-
-	result := make([]lineupEntry, 0, len(players))
-	insertedSubOns := make(map[string]bool, len(subOnSet))
-
-	for _, player := range players {
-		key := playerMatchKey(player.Name)
-		if subOnSet[key] {
-			continue // will be placed after their sub-off player
-		}
-		entry := lineupEntry{player: player}
-		if info, ok := subOffMap[key]; ok {
-			entry.subMinute = info.minute
-			if onPlayer, exists := byKey[info.onKey]; exists {
-				entry.replacedBy = onPlayer.Name
-			} else {
-				entry.replacedBy = info.onName
-			}
-		}
-		result = append(result, entry)
-		if info, ok := subOffMap[key]; ok {
-			if onPlayer, exists := byKey[info.onKey]; exists {
-				result = append(result, lineupEntry{player: onPlayer, subMinute: info.minute, subFor: info.outName})
-				insertedSubOns[info.onKey] = true
-			}
-		}
-	}
-
-	// Append unmatched sub-on players (name mismatch between event and lineup)
-	for _, player := range players {
-		key := playerMatchKey(player.Name)
-		if subOnSet[key] && !insertedSubOns[key] {
-			minute, subFor := subOnDetails(key, idx)
-			result = append(result, lineupEntry{player: player, subMinute: minute, subFor: subFor})
-		}
-	}
-
-	return result
 }
 
 // renderAnnotatedLineupRow renders a lineup player row with a dedicated event column
