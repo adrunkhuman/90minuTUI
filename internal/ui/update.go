@@ -147,6 +147,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case competitionMenuLoadedMsg:
 		m.loading = false
 		competition := m.currentCompetition()
+		// Drop stale async submenu results after the selected competition changes.
 		if competition == nil || msg.competitionKey != competitionRequestKey(*competition) {
 			return m, nil
 		}

@@ -204,6 +204,9 @@ func parseFixtureRow(row *goquery.Selection) (Fixture, bool) {
 	}, true
 }
 
+// Some result tables omit `mecz.php` links entirely, so the fallback accepts
+// only one unambiguous score-like cell with team-like neighbors and drops rows
+// that still look ambiguous.
 func fixtureScoreCell(row *goquery.Selection, tds *goquery.Selection) (*goquery.Selection, int, string, bool) {
 	matchLinks := row.Find("a[href*='mecz.php']")
 	if matchLinks.Length() > 1 {

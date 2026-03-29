@@ -36,6 +36,10 @@ func (s *Service) LoadArchive(ctx context.Context, archiveURL string) ([]Season,
 	return seasons, selectedIdx, competitions, nil
 }
 
+// LoadCompetition resolves one archive competition node into either a submenu or a terminal league page.
+// Successful results are mutually exclusive: exactly one of menu or league is non-nil.
+// League fixtures keep empty MatchURL and MatchID values when the source row has no match page.
+// It returns an error when the page cannot be classified as a supported submenu or a valid league.
 func (s *Service) LoadCompetition(ctx context.Context, competitionURL string) (*CompetitionMenu, *LeaguePage, error) {
 	doc, err := s.client.Document(ctx, competitionURL)
 	if err != nil {
@@ -76,9 +80,11 @@ func (s *Service) LoadCompetition(ctx context.Context, competitionURL string) (*
 	return menu, nil, nil
 }
 
-// LoadLeague fetches and parses a league page into a normalized LeaguePage.
+// LoadLeague resolves only terminal league pages into a normalized LeaguePage.
+// Submenu-style competition URLs return `league parse: competition is a submenu`.
 // Rounds are ordered by detected round number when available, and fixtures
 // inside each round are ordered by parsed date/time in the site layer.
+// Fixtures without a drillable match page keep empty MatchURL and MatchID values.
 func (s *Service) LoadLeague(ctx context.Context, leagueURL string) (*LeaguePage, error) {
 	_, league, err := s.LoadCompetition(ctx, leagueURL)
 	if err != nil {
@@ -215,6 +221,9 @@ func parseCompetitions(doc *goquery.Document, c *Client) []Competition {
 	return links
 }
 
+// Regional archive pages reuse similar central markup, so URL taxonomy is the
+// stable discriminator between III liga selectors, regional roots, association
+// pages, and regional cup trees.
 func parseCompetitionMenu(doc *goquery.Document, resolvedURL string, c *Client) *CompetitionMenu {
 	switch {
 	case isIIIligaSelectorURL(resolvedURL):
@@ -294,6 +303,8 @@ func parseRegionalLeagueMenu(doc *goquery.Document, resolvedURL string, c *Clien
 }
 
 func parseRegionalCupMenu(doc *goquery.Document, resolvedURL string, c *Client) *CompetitionMenu {
+	// The cups overview mixes national and regional branches; the submenu only
+	// exposes drill-down paths that lead to regional cup competitions.
 	items := parseCompetitionLinks(doc.Find("a.main"), c, func(name string) bool {
 		if name == "" || name == "Puchar Polski" || name == "Superpuchar Polski" {
 			return false
