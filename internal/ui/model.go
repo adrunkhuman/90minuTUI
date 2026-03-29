@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,8 +17,14 @@ const (
 	focusFixtures
 )
 
+const unavailableCompetitionMatchDetailsMessage = "Match details unavailable for this competition"
+const unavailableFixtureMatchDetailsMessage = "Match details unavailable for this fixture"
+
+var fixtureResultRe = regexp.MustCompile(`^\d+\s*-\s*\d+$`)
+
 type archiveLoader interface {
 	LoadArchive(ctx context.Context, archiveURL string) ([]site.Season, int, []site.Competition, error)
+	LoadCompetition(ctx context.Context, competitionURL string) (*site.CompetitionMenu, *site.LeaguePage, error)
 	LoadLeague(ctx context.Context, leagueURL string) (*site.LeaguePage, error)
 	LoadMatch(ctx context.Context, matchURL string) (*site.MatchPage, error)
 }
@@ -33,6 +40,19 @@ type competitionsLoadedMsg struct {
 	seasonKey    string
 	competitions []site.Competition
 	err          error
+}
+
+type competitionMenuLoadedMsg struct {
+	competitionKey string
+	menu           *site.CompetitionMenu
+	league         *site.LeaguePage
+	err            error
+}
+
+type competitionMenuState struct {
+	title  string
+	items  []site.Competition
+	cursor int
 }
 
 type leagueLoadedMsg struct {
@@ -62,6 +82,8 @@ type Model struct {
 
 	competitions      []site.Competition
 	competitionCursor int
+	competitionTitle  string
+	competitionStack  []competitionMenuState
 
 	league        *site.LeaguePage
 	roundCursor   int
@@ -129,6 +151,36 @@ func (m Model) currentCompetition() *site.Competition {
 	return &m.competitions[m.competitionCursor]
 }
 
+func (m *Model) resetCompetitionMenu(title string, items []site.Competition) {
+	m.competitionTitle = title
+	m.competitions = items
+	m.competitionCursor = m.preferredCompetitionIndex()
+	m.competitionStack = nil
+}
+
+func (m *Model) pushCompetitionMenu(title string, items []site.Competition) {
+	m.competitionStack = append(m.competitionStack, competitionMenuState{
+		title:  m.competitionTitle,
+		items:  append([]site.Competition(nil), m.competitions...),
+		cursor: m.competitionCursor,
+	})
+	m.competitionTitle = title
+	m.competitions = items
+	m.competitionCursor = 0
+}
+
+func (m *Model) popCompetitionMenu() bool {
+	if len(m.competitionStack) == 0 {
+		return false
+	}
+	prev := m.competitionStack[len(m.competitionStack)-1]
+	m.competitionStack = m.competitionStack[:len(m.competitionStack)-1]
+	m.competitionTitle = prev.title
+	m.competitions = prev.items
+	m.competitionCursor = clamp(prev.cursor, 0, len(prev.items)-1)
+	return true
+}
+
 func (m Model) currentFixture() *site.Fixture {
 	round := m.currentRound()
 	if round == nil || len(round.Fixtures) == 0 {
@@ -138,6 +190,66 @@ func (m Model) currentFixture() *site.Fixture {
 		return nil
 	}
 	return &round.Fixtures[m.fixtureCursor]
+}
+
+func (m Model) currentFixtureDrillable() bool {
+	fixture := m.currentFixture()
+	return fixture != nil && strings.TrimSpace(fixture.MatchURL) != ""
+}
+
+func (m Model) unavailableMatchDetailsMessage() string {
+	if m.leagueHasDrillableFixtures() {
+		return unavailableFixtureMatchDetailsMessage
+	}
+	return unavailableCompetitionMatchDetailsMessage
+}
+
+func (m Model) initialFixtureSelection() (int, int) {
+	if m.league == nil || len(m.league.Rounds) == 0 {
+		return 0, 0
+	}
+
+	if m.leagueHasDrillableFixtures() {
+		for roundIdx := len(m.league.Rounds) - 1; roundIdx >= 0; roundIdx-- {
+			fixtures := m.league.Rounds[roundIdx].Fixtures
+			for fixtureIdx := len(fixtures) - 1; fixtureIdx >= 0; fixtureIdx-- {
+				if strings.TrimSpace(fixtures[fixtureIdx].MatchURL) == "" {
+					continue
+				}
+				return roundIdx, fixtureIdx
+			}
+		}
+	}
+
+	for roundIdx := len(m.league.Rounds) - 1; roundIdx >= 0; roundIdx-- {
+		fixtures := m.league.Rounds[roundIdx].Fixtures
+		for fixtureIdx := len(fixtures) - 1; fixtureIdx >= 0; fixtureIdx-- {
+			if !fixtureHasResult(fixtures[fixtureIdx]) {
+				continue
+			}
+			return roundIdx, fixtureIdx
+		}
+	}
+
+	return clamp(len(m.league.Rounds)-1, 0, len(m.league.Rounds)-1), 0
+}
+
+func (m Model) leagueHasDrillableFixtures() bool {
+	if m.league == nil {
+		return false
+	}
+	for _, round := range m.league.Rounds {
+		for _, fixture := range round.Fixtures {
+			if strings.TrimSpace(fixture.MatchURL) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func fixtureHasResult(fixture site.Fixture) bool {
+	return fixtureResultRe.MatchString(strings.TrimSpace(fixture.Score))
 }
 
 func (m Model) preferredCompetitionIndex() int {

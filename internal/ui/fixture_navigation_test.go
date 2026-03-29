@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -13,11 +14,13 @@ import (
 type recordingLoader struct {
 	archiveCalls int
 	leagueCalls  int
+	menuCalls    int
 	matchCalls   int
 
 	seasons      []site.Season
 	selectedIdx  int
 	competitions []site.Competition
+	menus        map[string]*site.CompetitionMenu
 	league       *site.LeaguePage
 	match        *site.MatchPage
 }
@@ -30,6 +33,15 @@ func (l *recordingLoader) LoadArchive(context.Context, string) ([]site.Season, i
 func (l *recordingLoader) LoadLeague(context.Context, string) (*site.LeaguePage, error) {
 	l.leagueCalls++
 	return l.league, nil
+}
+
+func (l *recordingLoader) LoadCompetition(_ context.Context, rawURL string) (*site.CompetitionMenu, *site.LeaguePage, error) {
+	l.menuCalls++
+	if menu, ok := l.menus[rawURL]; ok {
+		return menu, nil, nil
+	}
+	l.leagueCalls++
+	return nil, l.league, nil
 }
 
 func (l *recordingLoader) LoadMatch(context.Context, string) (*site.MatchPage, error) {
@@ -81,6 +93,178 @@ func TestFixtureNavigationDoesNotReloadLeague(t *testing.T) {
 	}
 }
 
+func TestLeagueLoadPrefersLatestCompletedFixtureWhenLeagueHasNoMatchLinks(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.league.Rounds = []site.Round{
+		{
+			Name: "1. kolejka",
+			Fixtures: []site.Fixture{
+				{Home: "Team A", Away: "Team B", Score: "1-0"},
+				{Home: "Team C", Away: "Team D", Score: "2-2"},
+			},
+		},
+		{
+			Name: "2. kolejka",
+			Fixtures: []site.Fixture{
+				{Home: "Team E", Away: "Team F", Score: "-"},
+				{Home: "Team G", Away: "Team H", Score: "-"},
+			},
+		},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	if m.roundCursor != 0 {
+		t.Fatalf("expected latest completed round selected, got %d", m.roundCursor)
+	}
+	if m.fixtureCursor != 1 {
+		t.Fatalf("expected latest completed fixture selected, got %d", m.fixtureCursor)
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.Home != "Team C" || fixture.Score != "2-2" {
+		t.Fatalf("expected latest completed fixture selected, got %+v", fixture)
+	}
+}
+
+func TestLeagueLoadPrefersLatestDrillableFixtureWhenLeagueHasMixedLinks(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.league.Rounds = []site.Round{
+		{
+			Name:     "1. kolejka",
+			Fixtures: []site.Fixture{{Home: "Team A", Away: "Team B", Score: "1-0", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1", MatchID: "1"}},
+		},
+		{
+			Name: "2. kolejka",
+			Fixtures: []site.Fixture{
+				{Home: "Team C", Away: "Team D", Score: "-"},
+				{Home: "Team E", Away: "Team F", Score: "2-1", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=2", MatchID: "2"},
+			},
+		},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	if m.roundCursor != 1 {
+		t.Fatalf("expected latest round with drillable fixture selected, got %d", m.roundCursor)
+	}
+	if m.fixtureCursor != 1 {
+		t.Fatalf("expected latest drillable fixture selected, got %d", m.fixtureCursor)
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "2" {
+		t.Fatalf("expected latest drillable fixture selected, got %+v", fixture)
+	}
+}
+
+func TestCompetitionEnterOpensIIILigaSubmenu(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.competitions = []site.Competition{
+		{Name: "PKO Bank Polski Ekstraklasa 2025/2026", URL: "http://www.90minut.pl/liga/1/liga14072.html", LeagueKey: "liga14072"},
+		{Name: "III liga 2025/26", URL: "http://www.90minut.pl/ligireg.php?poziom=4&id_sezon=107", LeagueKey: "www.90minut.pl/ligireg.php?id_sezon=107&poziom=4"},
+	}
+	loader.menus = map[string]*site.CompetitionMenu{
+		"http://www.90minut.pl/ligireg.php?poziom=4&id_sezon=107": {
+			Title: "III liga 2025/26",
+			Items: []site.Competition{{Name: "III liga 2025/26, gr. I", URL: "http://www.90minut.pl/liga/1/liga14154.html", LeagueKey: "liga14154"}},
+		},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m.competitionCursor = 1
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected submenu load command")
+	}
+	m, cmd = updateModelWithMsg(t, m, cmd())
+	if cmd != nil {
+		t.Fatalf("expected submenu load to settle without chained command")
+	}
+	if !m.selectorVisible {
+		t.Fatalf("expected selector to stay visible on submenu open")
+	}
+	if got := m.competitionTitle; got != "III liga 2025/26" {
+		t.Fatalf("unexpected submenu title: %q", got)
+	}
+	if len(m.competitions) != 1 || m.competitions[0].Name != "III liga 2025/26, gr. I" {
+		t.Fatalf("unexpected submenu items: %+v", m.competitions)
+	}
+	if len(m.competitionStack) != 1 {
+		t.Fatalf("expected one previous menu on stack, got %d", len(m.competitionStack))
+	}
+	if loader.menuCalls < 2 {
+		t.Fatalf("expected startup load plus submenu load, got %d", loader.menuCalls)
+	}
+}
+
+func TestCompetitionSubmenuEscReturnsToPreviousMenu(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.competitions = []site.Competition{
+		{Name: "PKO Bank Polski Ekstraklasa 2025/2026", URL: "http://www.90minut.pl/liga/1/liga14072.html", LeagueKey: "liga14072"},
+		{Name: "Ligi regionalne 2025/26", URL: "http://www.90minut.pl/ligireg.php?id_sezon=107", LeagueKey: "www.90minut.pl/ligireg.php?id_sezon=107"},
+	}
+	loader.menus = map[string]*site.CompetitionMenu{
+		"http://www.90minut.pl/ligireg.php?id_sezon=107": {
+			Title: "Ligi regionalne 2025/26",
+			Items: []site.Competition{{Name: "Dolnoslaski ZPN", URL: "http://www.90minut.pl/ligireg-16.html", LeagueKey: "www.90minut.pl/ligireg-16.html"}},
+		},
+		"http://www.90minut.pl/ligireg-16.html": {
+			Title: "Ligi regionalne 2025/26 - Dolnoslaski ZPN",
+			Items: []site.Competition{{Name: "IV liga 2025/2026, grupa: dolnoslaska", URL: "http://www.90minut.pl/liga/1/liga14169.html", LeagueKey: "liga14169"}},
+		},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m.competitionCursor = 1
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = updateModelWithMsg(t, m, cmd())
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = updateModelWithMsg(t, m, cmd())
+
+	if got := m.competitionTitle; got != "Ligi regionalne 2025/26 - Dolnoslaski ZPN" {
+		t.Fatalf("unexpected nested submenu title: %q", got)
+	}
+
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("expected esc in submenu to pop without command")
+	}
+	if got := m.competitionTitle; got != "Ligi regionalne 2025/26" {
+		t.Fatalf("expected previous submenu title, got %q", got)
+	}
+	if len(m.competitions) != 1 || m.competitions[0].Name != "Dolnoslaski ZPN" {
+		t.Fatalf("expected previous submenu items restored, got %+v", m.competitions)
+	}
+}
+
+func TestStaleCompetitionLoadErrorDoesNotOverwriteCurrentSelection(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.competitions = []site.Competition{
+		{Name: "Ekstraklasa", URL: "http://www.90minut.pl/liga/1/liga11233.html", LeagueKey: "liga11233"},
+		{Name: "Ligi regionalne 2025/26", URL: "http://www.90minut.pl/ligireg.php?id_sezon=107", LeagueKey: "www.90minut.pl/ligireg.php?id_sezon=107"},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m.competitionCursor = 1
+	staleKey := competitionRequestKey(m.competitions[m.competitionCursor])
+	m.competitionCursor = 0
+	currentKey := competitionRequestKey(m.competitions[m.competitionCursor])
+
+	m, cmd := updateModelWithMsg(t, m, competitionMenuLoadedMsg{competitionKey: staleKey, err: errors.New("stale submenu failed")})
+	if cmd != nil {
+		t.Fatalf("expected stale async error to be ignored")
+	}
+	if m.err != "" {
+		t.Fatalf("expected stale error to be ignored, got %q", m.err)
+	}
+
+	m, cmd = updateModelWithMsg(t, m, competitionMenuLoadedMsg{competitionKey: currentKey, err: errors.New("current submenu failed")})
+	if cmd != nil {
+		t.Fatalf("expected current async error to settle without command")
+	}
+	if m.err != "current submenu failed" {
+		t.Fatalf("expected current error to be shown, got %q", m.err)
+	}
+}
+
 func TestFixtureEnterLoadsMatchWithoutReloadingLeague(t *testing.T) {
 	loader := newRecordingLoader()
 	m := bootstrapLeagueLoadedModel(t, loader)
@@ -113,6 +297,83 @@ func TestFixtureEnterLoadsMatchWithoutReloadingLeague(t *testing.T) {
 	}
 	if !m.matchView || m.match == nil || m.match.MatchID != "1" {
 		t.Fatalf("expected match view for fixture #1")
+	}
+}
+
+func TestFixtureEnterKeepsLeagueViewWhenFixtureHasNoDetails(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.league.Rounds[0].Fixtures[0].MatchURL = ""
+	loader.league.Rounds[0].Fixtures[0].MatchID = ""
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected no command for non-drillable fixture")
+	}
+	if m.matchView {
+		t.Fatalf("expected league view to stay open for non-drillable fixture")
+	}
+	if m.match != nil {
+		t.Fatalf("expected no match payload for non-drillable fixture")
+	}
+	if m.err != unavailableFixtureMatchDetailsMessage {
+		t.Fatalf("unexpected unavailable-details message: %q", m.err)
+	}
+	if loader.matchCalls != 0 {
+		t.Fatalf("expected no match loads, got %d", loader.matchCalls)
+	}
+}
+
+func TestMatchViewNavigationFallsBackToLeagueWhenNextFixtureHasNoDetails(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.league.Rounds[0].Fixtures[1].MatchURL = ""
+	loader.league.Rounds[0].Fixtures[1].MatchID = ""
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected match load command on enter")
+	}
+	m, _ = updateModelWithMsg(t, m, cmd())
+
+	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	if cmd != nil {
+		t.Fatalf("expected no load command for non-drillable fixture in match view")
+	}
+	if m.matchView {
+		t.Fatalf("expected navigation to return to league view for non-drillable fixture")
+	}
+	if m.match != nil {
+		t.Fatalf("expected stale match details to clear when fixture has no details")
+	}
+	if m.err != unavailableFixtureMatchDetailsMessage {
+		t.Fatalf("unexpected unavailable-details message: %q", m.err)
+	}
+	if loader.matchCalls != 1 {
+		t.Fatalf("expected no extra match load, got %d", loader.matchCalls)
+	}
+}
+
+func TestFixtureEnterUsesFixtureSpecificMessageWhenLeagueHasOtherDetails(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.league.Rounds[0].Fixtures[0].MatchURL = ""
+	loader.league.Rounds[0].Fixtures[0].MatchID = ""
+	loader.league.Rounds[0].Fixtures[1].MatchURL = "http://www.90minut.pl/mecz.php?id_mecz=2"
+	loader.league.Rounds[0].Fixtures[1].MatchID = "2"
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected no command for non-drillable fixture")
+	}
+	if m.err != unavailableFixtureMatchDetailsMessage {
+		t.Fatalf("unexpected fixture-specific message: %q", m.err)
 	}
 }
 
@@ -332,6 +593,7 @@ func newRecordingLoader() *recordingLoader {
 			Current:  true,
 		}},
 		selectedIdx: 0,
+		menus:       map[string]*site.CompetitionMenu{},
 		competitions: []site.Competition{{
 			Name:      "Ekstraklasa",
 			URL:       "http://www.90minut.pl/liga/1/liga11233.html",

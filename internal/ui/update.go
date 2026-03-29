@@ -74,7 +74,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.league != nil {
 				m.err = ""
-				if m.selectorVisible {
+				if m.selectorVisible && m.popCompetitionMenu() {
+					m.focus = focusCompetitions
+				} else if m.selectorVisible {
 					m.closeSelector()
 				} else {
 					m.openSelector()
@@ -96,8 +98,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastFetchAt = time.Now()
 		m.seasons = msg.seasons
 		m.seasonCursor = clamp(msg.selectedIdx, 0, len(m.seasons)-1)
-		m.competitions = msg.competitions
-		m.competitionCursor = m.preferredCompetitionIndex()
+		m.resetCompetitionMenu("Competitions", msg.competitions)
 
 		if len(m.competitions) == 0 {
 			return m, nil
@@ -109,7 +110,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = false
 			return m, nil
 		}
-		return m, m.loadLeagueCmd(competition.URL, competitionRequestKey(*competition))
+		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
 
 	case competitionsLoadedMsg:
 		m.loading = false
@@ -126,8 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.err = ""
 		m.lastFetchAt = time.Now()
-		m.competitions = msg.competitions
-		m.competitionCursor = m.preferredCompetitionIndex()
+		m.resetCompetitionMenu("Competitions", msg.competitions)
 		m.matchView = false
 		m.match = nil
 		m.matchScroll = 0
@@ -142,7 +142,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = false
 			return m, nil
 		}
-		return m, m.loadLeagueCmd(competition.URL, competitionRequestKey(*competition))
+		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
+
+	case competitionMenuLoadedMsg:
+		m.loading = false
+		competition := m.currentCompetition()
+		if competition == nil || msg.competitionKey != competitionRequestKey(*competition) {
+			return m, nil
+		}
+
+		if msg.err != nil {
+			m.err = msg.err.Error()
+			return m, nil
+		}
+
+		m.err = ""
+		m.lastFetchAt = time.Now()
+		if msg.menu != nil {
+			m.pushCompetitionMenu(msg.menu.Title, msg.menu.Items)
+			m.matchView = false
+			m.match = nil
+			m.matchScroll = 0
+			m.openSelector()
+			m.focus = focusCompetitions
+			return m, nil
+		}
+		if msg.league == nil {
+			m.err = "competition parse: empty result"
+			return m, nil
+		}
+
+		m.matchView = false
+		m.match = nil
+		m.matchScroll = 0
+		m.league = msg.league
+		m.roundCursor, m.fixtureCursor = m.initialFixtureSelection()
+		m.closeSelector()
+		return m, nil
 
 	case leagueLoadedMsg:
 		m.loading = false
@@ -163,8 +199,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.match = nil
 		m.matchScroll = 0
 		m.league = msg.league
-		m.roundCursor = clamp(len(msg.league.Rounds)-1, 0, len(msg.league.Rounds)-1)
-		m.fixtureCursor = 0
+		m.roundCursor, m.fixtureCursor = m.initialFixtureSelection()
 		m.closeSelector()
 		return m, nil
 
@@ -304,7 +339,7 @@ func (m *Model) handleEnter() tea.Cmd {
 				m.loading = false
 				return nil
 			}
-			return m.loadLeagueCmd(competition.URL, competitionRequestKey(*competition))
+			return m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
 		}
 
 		m.loading = false
@@ -314,6 +349,14 @@ func (m *Model) handleEnter() tea.Cmd {
 	fixture := m.currentFixture()
 	if fixture == nil {
 		m.loading = false
+		return nil
+	}
+	if !m.currentFixtureDrillable() {
+		m.loading = false
+		m.matchView = false
+		m.match = nil
+		m.matchScroll = 0
+		m.err = m.unavailableMatchDetailsMessage()
 		return nil
 	}
 	m.matchView = true
@@ -330,6 +373,14 @@ func (m *Model) handleReload() tea.Cmd {
 		fixture := m.currentFixture()
 		if fixture == nil {
 			m.loading = false
+			return nil
+		}
+		if !m.currentFixtureDrillable() {
+			m.loading = false
+			m.matchView = false
+			m.match = nil
+			m.matchScroll = 0
+			m.err = m.unavailableMatchDetailsMessage()
 			return nil
 		}
 		m.match = nil
@@ -362,7 +413,7 @@ func (m *Model) handleReload() tea.Cmd {
 	}
 
 	m.matchView = false
-	return m.loadLeagueCmd(competition.URL, competitionRequestKey(*competition))
+	return m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
 }
 
 func (m *Model) scrollMatch(delta int) {
@@ -385,6 +436,14 @@ func (m *Model) loadCurrentMatch() tea.Cmd {
 		m.loading = false
 		m.err = ""
 		m.matchView = true
+		m.match = nil
+		m.matchScroll = 0
+		return nil
+	}
+	if !m.currentFixtureDrillable() {
+		m.loading = false
+		m.err = m.unavailableMatchDetailsMessage()
+		m.matchView = false
 		m.match = nil
 		m.matchScroll = 0
 		return nil

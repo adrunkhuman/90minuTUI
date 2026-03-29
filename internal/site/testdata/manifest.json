@@ -1,5 +1,5 @@
 {
-  "generated_at": "sha256:969307a13d9cda4b3df5545eb17073087987b5fed3fb53026767851fa12c67de",
+  "generated_at": "sha256:280abfa7e319aa9300e56579033fd8b362fa84ca80aa38d3115c5358711a6c46",
   "source": "http://www.90minut.pl/archsezon.php",
   "fixtures": [
     {
@@ -52,6 +52,14 @@
       "season": "2025/26",
       "file": "fixtures/league_14073.html",
       "note": "round text annotations"
+    },
+    {
+      "name": "league_14141",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga14141.html",
+      "season": "2025/26",
+      "file": "fixtures/league_14141.html",
+      "note": "current women league page without match links"
     },
     {
       "name": "league_liga11233",
@@ -151,6 +159,14 @@
       "url": "http://www.90minut.pl/mecz.php?id_mecz=1666308",
       "season": "2020/21",
       "file": "fixtures/match_1666308.html"
+    },
+    {
+      "name": "league_ambiguous_linkless",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga99998.html",
+      "season": "synthetic",
+      "file": "fixtures/league_ambiguous_linkless.html",
+      "note": "plain-text score plus extra score-like metadata"
     }
   ]
 }

@@ -101,7 +101,12 @@ func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems, width int, c
 			prefix = "> "
 		}
 
-		line := prefix + fixtureLine(&fixtures[i], width-len([]rune(prefix)), whenWidth, compact)
+		lineWidth := width - len([]rune(prefix))
+		suffix := fixtureAvailabilitySuffix(&fixtures[i], lineWidth, compact)
+		line := prefix + fixtureLine(&fixtures[i], lineWidth-ansi.StringWidth(suffix), whenWidth, compact)
+		if suffix != "" {
+			line += suffix
+		}
 		if whenInfo := formatFixtureWhenInfo(fixtures[i].WhenInfo); whenInfo != "" {
 			line += " | " + whenInfo
 		}
@@ -1208,6 +1213,23 @@ func fixtureLine(fixture *site.Fixture, width, whenWidth int, compact bool) stri
 	home := padLeft(truncate(fixture.Home, nameWidth), nameWidth)
 	away := padRight(truncate(fixture.Away, nameWidth), nameWidth)
 	return home + " " + score + " " + away
+}
+
+func fixtureAvailabilitySuffix(fixture *site.Fixture, width int, compact bool) string {
+	if fixture == nil || strings.TrimSpace(fixture.MatchURL) != "" {
+		return ""
+	}
+
+	suffix := " [no details]"
+	minWidth := 64
+	if compact {
+		minWidth = 40
+	}
+	if width < minWidth+ansi.StringWidth(suffix) {
+		return ""
+	}
+
+	return suffix
 }
 
 func normalizeScore(score string) string {

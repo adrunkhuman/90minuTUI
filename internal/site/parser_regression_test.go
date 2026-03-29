@@ -192,6 +192,60 @@ func TestParseFixturesTableSkipsRowsWithMultipleMatchLinks(t *testing.T) {
 	}
 }
 
+func TestParseFixturesTableFallsBackToPlainTextScoresWithoutMatchLinks(t *testing.T) {
+	html := `
+	<table>
+	<tr><td>Slask Wroclaw</td><td>-</td><td>Pogon Tczew</td><td>16 maja, 12:00</td></tr>
+	<tr><td colspan="4">w pierwotnym terminie odwolany</td></tr>
+	<tr><td><b>Gornik Leczna</b></td><td><b>3-0</b></td><td><b>UKS SMS Lodz</b></td><td>25 marca, 16:00</td></tr>
+	</table>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	fixtures := parseFixturesTable(doc.Find("table").First())
+	if len(fixtures) != 2 {
+		t.Fatalf("expected 2 fixtures, got %d", len(fixtures))
+	}
+	if fixtures[0].Home != "Slask Wroclaw" || fixtures[0].Away != "Pogon Tczew" || fixtures[0].Score != "-" || fixtures[0].WhenInfo != "16 maja, 12:00" {
+		t.Fatalf("unexpected plain-text fixture: %+v", fixtures[0])
+	}
+	if fixtures[0].MatchURL != "" || fixtures[0].MatchID != "" {
+		t.Fatalf("expected empty match details for plain-text score fixture: %+v", fixtures[0])
+	}
+	if fixtures[1].Home != "Gornik Leczna" || fixtures[1].Away != "UKS SMS Lodz" || fixtures[1].Score != "3-0" {
+		t.Fatalf("unexpected second plain-text fixture: %+v", fixtures[1])
+	}
+}
+
+func TestParseLeaguePageHandlesSavedAmbiguousLinklessFixture(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_ambiguous_linkless.html")
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga99998.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Rounds) != 1 {
+		t.Fatalf("expected 1 round, got %d", len(page.Rounds))
+	}
+	if len(page.Rounds[0].Fixtures) != 2 {
+		t.Fatalf("expected 2 fixtures, got %d", len(page.Rounds[0].Fixtures))
+	}
+
+	first := page.Rounds[0].Fixtures[0]
+	if first.Home != "Team A" || first.Away != "Team B" || first.Score != "1-0" {
+		t.Fatalf("unexpected first fixture: %+v", first)
+	}
+	if first.WhenInfo != "walkower 3-0 24 lipca, 18:00" {
+		t.Fatalf("unexpected first fixture metadata: %+v", first)
+	}
+	if first.MatchURL != "" || first.MatchID != "" {
+		t.Fatalf("expected linkless fixture, got %+v", first)
+	}
+}
+
 func TestRoundNameFromTableSkipsNavigationBlocks(t *testing.T) {
 	html := `
 	<table>
