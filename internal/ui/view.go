@@ -499,9 +499,10 @@ func (m Model) matchDetailContent(width int) string {
 
 		homeIdx := playerEventIndex(m.match.Events, "home")
 		awayIdx := playerEventIndex(m.match.Events, "away")
-		homeEntries := reorderedLineup(m.match.HomeLineup, homeIdx)
-		awayEntries := reorderedLineup(m.match.AwayLineup, awayIdx)
+		homeEntries := annotatedLineup(m.match.HomeLineup, homeIdx)
+		awayEntries := annotatedLineup(m.match.AwayLineup, awayIdx)
 		maxPlayers := max(len(homeEntries), len(awayEntries))
+		playerWidth := lineupPlayerWidth(width - 4)
 
 		for i := 0; i < maxPlayers; i++ {
 			var hEntry, aEntry lineupEntry
@@ -512,15 +513,8 @@ func (m Model) matchDetailContent(width int) string {
 				aEntry = awayEntries[i]
 			}
 
-			// Sub-on players get their substitution minute at the outer edge of the name.
-			homeName := formatPlayerLabel(hEntry.player.Name)
-			if hEntry.subMinute != "" {
-				homeName = hEntry.subMinute + " " + homeName
-			}
-			awayName := formatPlayerLabel(aEntry.player.Name)
-			if aEntry.subMinute != "" {
-				awayName = awayName + " " + aEntry.subMinute
-			}
+			homeName := formatLineupPlayer(hEntry, "home", playerWidth)
+			awayName := formatLineupPlayer(aEntry, "away", playerWidth)
 
 			b.WriteString(renderAnnotatedLineupRow(
 				homeName, cardAnnotation(hEntry.player, homeIdx),
@@ -529,6 +523,7 @@ func (m Model) matchDetailContent(width int) string {
 			))
 			b.WriteString("\n")
 		}
+
 	}
 
 	if metaLine := displayMatchMeta(m.match.Meta, m.match.Weather); metaLine != "" {
