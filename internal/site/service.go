@@ -3,6 +3,8 @@ package site
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -10,6 +12,36 @@ import (
 
 type Service struct {
 	client *Client
+}
+
+var womenTierNameRe = regexp.MustCompile(`(?i)\b([ivx]+)\s+liga kobiet\b`)
+var futsalTierNameRe = regexp.MustCompile(`(?i)\b([ivx]+)\s+liga futsalu\b`)
+
+// Archive pages flatten multi-group women and futsal tiers into one link list;
+// synthesize fragment-backed submenu nodes so the UI can drill into each tier.
+type archiveGroupSpec struct {
+	fragmentKey string
+	keyPrefix   string
+	sectionLogo string
+	namePattern *regexp.Regexp
+	suffix      string
+}
+
+var archiveGroupSpecs = []archiveGroupSpec{
+	{
+		fragmentKey: "women-tier",
+		keyPrefix:   "women-tier",
+		sectionLogo: "logo/kobiety.gif",
+		namePattern: womenTierNameRe,
+		suffix:      "liga-kobiet",
+	},
+	{
+		fragmentKey: "futsal-tier",
+		keyPrefix:   "futsal-tier",
+		sectionLogo: "logo/futsal_pzpn.gif",
+		namePattern: futsalTierNameRe,
+		suffix:      "liga-futsalu",
+	},
 }
 
 func NewService() *Service {
@@ -23,7 +55,7 @@ func (s *Service) LoadArchive(ctx context.Context, archiveURL string) ([]Season,
 	}
 
 	seasons, selectedIdx := parseSeasons(doc, s.client)
-	competitions := parseCompetitions(doc, s.client)
+	competitions := parseCompetitions(doc, s.client, archiveURL)
 
 	if len(seasons) == 0 {
 		return nil, -1, nil, fmt.Errorf("archive parse: no seasons found")
@@ -187,7 +219,9 @@ func parseSeasons(doc *goquery.Document, c *Client) ([]Season, int) {
 	return seasons, selectedIdx
 }
 
-func parseCompetitions(doc *goquery.Document, c *Client) []Competition {
+// parseCompetitions keeps direct archive links intact and collapses repeated
+// grouped tiers into synthetic submenu entries scoped to archiveURL.
+func parseCompetitions(doc *goquery.Document, c *Client, archiveURL string) []Competition {
 	links := make([]Competition, 0, 64)
 	seen := map[string]struct{}{}
 
@@ -218,12 +252,16 @@ func parseCompetitions(doc *goquery.Document, c *Client) []Competition {
 		links = append(links, Competition{Name: name, URL: absoluteURL, LeagueKey: extractLeagueKey(absoluteURL)})
 	})
 
+	archiveURL = c.Resolve(archiveURL)
+	for _, spec := range archiveGroupSpecs {
+		links = groupArchiveCompetitions(links, archiveURL, spec)
+	}
 	return links
 }
 
 // Regional archive pages reuse similar central markup, so URL taxonomy is the
 // stable discriminator between III liga selectors, regional roots, association
-// pages, and regional cup trees.
+// pages, regional cup trees, and synthetic fragment-backed archive submenus.
 func parseCompetitionMenu(doc *goquery.Document, resolvedURL string, c *Client) *CompetitionMenu {
 	switch {
 	case isIIIligaSelectorURL(resolvedURL):
@@ -235,8 +273,168 @@ func parseCompetitionMenu(doc *goquery.Document, resolvedURL string, c *Client) 
 	case isRegionalCupsURL(resolvedURL):
 		return parseRegionalCupMenu(doc, resolvedURL, c)
 	default:
+		for _, spec := range archiveGroupSpecs {
+			if menu := parseArchiveCompetitionMenu(doc, resolvedURL, c, spec); menu != nil {
+				return menu
+			}
+		}
 		return nil
 	}
+}
+
+func groupArchiveCompetitions(competitions []Competition, archiveURL string, spec archiveGroupSpec) []Competition {
+	groups := make(map[string][]Competition)
+
+	for _, competition := range competitions {
+		key, _, ok := archiveCompetitionMenuMeta(competition.Name, spec)
+		if !ok {
+			continue
+		}
+		groups[key] = append(groups[key], competition)
+	}
+
+	if len(groups) == 0 {
+		return competitions
+	}
+
+	result := make([]Competition, 0, len(competitions))
+	emitted := make(map[string]struct{}, len(groups))
+
+	for _, competition := range competitions {
+		key, title, ok := archiveCompetitionMenuMeta(competition.Name, spec)
+		if !ok || len(groups[key]) < 2 {
+			result = append(result, competition)
+			continue
+		}
+		if _, exists := emitted[key]; exists {
+			continue
+		}
+
+		emitted[key] = struct{}{}
+		result = append(result, Competition{
+			Name:      title,
+			URL:       archiveCompetitionMenuURL(archiveURL, key, spec),
+			LeagueKey: archiveCompetitionMenuKey(archiveURL, key, spec),
+		})
+	}
+
+	return result
+}
+
+func parseArchiveCompetitionMenu(doc *goquery.Document, resolvedURL string, c *Client, spec archiveGroupSpec) *CompetitionMenu {
+	key := archiveCompetitionMenuFromURL(resolvedURL, spec)
+	if key == "" {
+		return nil
+	}
+
+	section := archiveSection(doc, spec.sectionLogo)
+	if section.Length() == 0 {
+		return nil
+	}
+
+	items := parseCompetitionLinks(section.Find("a.main"), c, func(name string) bool {
+		groupKey, _, ok := archiveCompetitionMenuMeta(name, spec)
+		return ok && groupKey == key
+	}, func(rawURL string) bool {
+		return isLeagueLikeURL(rawURL) && strings.Contains(strings.ToLower(rawURL), "/liga/")
+	})
+	if len(items) == 0 {
+		return nil
+	}
+
+	_, title, _ := archiveCompetitionMenuMeta(items[0].Name, spec)
+	return &CompetitionMenu{Title: title, URL: resolvedURL, Items: items}
+}
+
+func archiveSection(doc *goquery.Document, logoPath string) *goquery.Selection {
+	return doc.Find("table.main").FilterFunction(func(_ int, s *goquery.Selection) bool {
+		return s.Find("img[src*='"+logoPath+"']").Length() > 0
+	}).First()
+}
+
+func archiveCompetitionMenuMeta(name string, spec archiveGroupSpec) (string, string, bool) {
+	trimmed := normalizeWhitespace(name)
+	matches := spec.namePattern.FindStringSubmatchIndex(trimmed)
+	if len(matches) < 4 {
+		return "", "", false
+	}
+
+	tier := strings.ToUpper(trimmed[matches[2]:matches[3]])
+	title := strings.TrimSpace(trimmed[matches[0]:])
+	if comma := strings.Index(title, ","); comma >= 0 {
+		title = strings.TrimSpace(title[:comma])
+	}
+	if title == "" {
+		return "", "", false
+	}
+
+	return strings.ToLower(tier) + "-" + spec.suffix, title, true
+}
+
+func archiveCompetitionMenuURL(archiveURL, key string, spec archiveGroupSpec) string {
+	trimmed := strings.TrimSpace(archiveURL)
+	if trimmed == "" {
+		return "#" + spec.fragmentKey + "=" + key
+	}
+	return trimmed + "#" + spec.fragmentKey + "=" + key
+}
+
+func archiveCompetitionMenuKey(archiveURL, key string, spec archiveGroupSpec) string {
+	return spec.keyPrefix + ":" + canonicalURLKey(archiveURL) + ":" + key
+}
+
+func isWomenTierMenuURL(raw string) bool {
+	return archiveCompetitionMenuFromURL(raw, archiveGroupSpecs[0]) != ""
+}
+
+func isFutsalTierMenuURL(raw string) bool {
+	return archiveCompetitionMenuFromURL(raw, archiveGroupSpecs[1]) != ""
+}
+
+func archiveCompetitionMenuFromURL(raw string, spec archiveGroupSpec) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Fragment == "" {
+		return ""
+	}
+
+	values, err := url.ParseQuery(parsed.Fragment)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(values.Get(spec.fragmentKey))
+}
+
+func womenTierMenuURL(archiveURL, key string) string {
+	return archiveCompetitionMenuURL(archiveURL, key, archiveGroupSpecs[0])
+}
+
+func womenTierMenuKey(archiveURL, key string) string {
+	return archiveCompetitionMenuKey(archiveURL, key, archiveGroupSpecs[0])
+}
+
+func womenTierMenuMeta(name string) (string, string, bool) {
+	return archiveCompetitionMenuMeta(name, archiveGroupSpecs[0])
+}
+
+func womenTierMenuFromURL(raw string) string {
+	return archiveCompetitionMenuFromURL(raw, archiveGroupSpecs[0])
+}
+
+func futsalTierMenuURL(archiveURL, key string) string {
+	return archiveCompetitionMenuURL(archiveURL, key, archiveGroupSpecs[1])
+}
+
+func futsalTierMenuKey(archiveURL, key string) string {
+	return archiveCompetitionMenuKey(archiveURL, key, archiveGroupSpecs[1])
+}
+
+func futsalTierMenuMeta(name string) (string, string, bool) {
+	return archiveCompetitionMenuMeta(name, archiveGroupSpecs[1])
+}
+
+func futsalTierMenuFromURL(raw string) string {
+	return archiveCompetitionMenuFromURL(raw, archiveGroupSpecs[1])
 }
 
 func parseIIIligaMenu(doc *goquery.Document, resolvedURL string, c *Client) *CompetitionMenu {

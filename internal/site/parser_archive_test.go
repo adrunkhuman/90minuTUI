@@ -69,7 +69,7 @@ func TestParseSeasonsAndCompetitionsFromArchiveFixtures(t *testing.T) {
 				}
 			}
 
-			competitions := parseCompetitions(doc, c)
+			competitions := parseCompetitions(doc, c, c.Resolve("/archiwum.php"))
 			if len(competitions) == 0 {
 				t.Fatalf("expected competitions from %s", fixture.Name)
 			}
@@ -127,6 +127,58 @@ func TestParseSeasonsAndCompetitionsFromArchiveFixtures(t *testing.T) {
 
 	if !foundDiacritics {
 		t.Fatalf("expected at least one decoded Polish diacritic in archive fixtures")
+	}
+}
+
+func TestParseCompetitionsGroupsWomenLeagueTiers(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/archive_current.html")
+
+	c := NewClient()
+	archiveURL := c.Resolve("/archiwum.php")
+	competitions := parseCompetitions(doc, c, archiveURL)
+
+	thirdTierIdx := competitionIndexByURL(competitions, womenTierMenuURL(archiveURL, "iii-liga-kobiet"))
+	if thirdTierIdx < 0 {
+		t.Fatalf("expected grouped III liga kobiet submenu in competitions: %+v", competitions)
+	}
+	if competitions[thirdTierIdx].Name != "III liga kobiet 2025/2026" {
+		t.Fatalf("unexpected women submenu title: %q", competitions[thirdTierIdx].Name)
+	}
+
+	for _, competition := range competitions {
+		if strings.Contains(competition.Name, "grupa: I") && strings.Contains(competition.Name, "III liga kobiet") {
+			t.Fatalf("expected grouped III liga kobiet entries to stay out of top-level list: %+v", competitions)
+		}
+	}
+
+	if competitionIndexByURL(competitions, c.Resolve("/liga/1/liga14141.html")) < 0 {
+		t.Fatalf("expected Ekstraliga kobiet to remain directly selectable")
+	}
+}
+
+func TestParseCompetitionsGroupsFutsalLeagueTiers(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/archive_current.html")
+
+	c := NewClient()
+	archiveURL := c.Resolve("/archiwum.php")
+	competitions := parseCompetitions(doc, c, archiveURL)
+
+	futsalTierIdx := competitionIndexByURL(competitions, futsalTierMenuURL(archiveURL, "i-liga-futsalu"))
+	if futsalTierIdx < 0 {
+		t.Fatalf("expected grouped I liga futsalu submenu in competitions: %+v", competitions)
+	}
+	if competitions[futsalTierIdx].Name != "I liga futsalu 2025/2026" {
+		t.Fatalf("unexpected futsal submenu title: %q", competitions[futsalTierIdx].Name)
+	}
+
+	for _, competition := range competitions {
+		if strings.Contains(competition.Name, "I liga futsalu") && strings.Contains(competition.Name, "grupa:") {
+			t.Fatalf("expected grouped I liga futsalu entries to stay out of top-level list: %+v", competitions)
+		}
+	}
+
+	if competitionIndexByURL(competitions, c.Resolve("/liga/1/liga14148.html")) < 0 {
+		t.Fatalf("expected Futsal Ekstraklasa to remain directly selectable")
 	}
 }
 
@@ -210,5 +262,72 @@ func TestParseCompetitionMenuForRegionalCupsPage(t *testing.T) {
 	}
 	if len(menu.Items) != 2 {
 		t.Fatalf("expected regional cups only, got %+v", menu.Items)
+	}
+}
+
+func TestParseCompetitionMenuForWomenTierPage(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/archive_current.html")
+
+	c := NewClient()
+	menu := parseCompetitionMenu(doc, womenTierMenuURL(c.Resolve("/archiwum.php"), "iii-liga-kobiet"), c)
+	if menu == nil {
+		t.Fatalf("expected women tier submenu")
+	}
+	if menu.Title != "III liga kobiet 2025/2026" {
+		t.Fatalf("unexpected women tier title: %q", menu.Title)
+	}
+	if len(menu.Items) != 4 {
+		t.Fatalf("expected grouped III liga kobiet items, got %+v", menu.Items)
+	}
+	if menu.Items[0].Name != "III liga kobiet 2025/2026, grupa: I" {
+		t.Fatalf("unexpected first women tier item: %+v", menu.Items[0])
+	}
+	if menu.Items[3].Name != "III liga kobiet 2025/2026, grupa: IV" {
+		t.Fatalf("unexpected last women tier item: %+v", menu.Items[3])
+	}
+}
+
+func TestParseCompetitionMenuForSponsoredWomenTierPage(t *testing.T) {
+	html := `<html><body><table class="main"><tr><td colspan="2"><p align="center"><img src="http://img.90minut.pl/img/line.gif"></p></td></tr><tr><td></td><td rowspan="10" align="right"><img src="http://img.90minut.pl/logo/kobiety.gif"></td></tr><tr><td><a href="/liga/1/liga11667.html" class="main">III liga kobiet 2020/2021, grupa: I</a></td></tr><tr><td><a href="/liga/1/liga11661.html" class="main">III liga kobiet 2020/2021, grupa: II</a></td></tr><tr><td><a href="/liga/1/liga11674.html" class="main">III liga kobiet 2020/2021, grupa: III</a></td></tr><tr><td><a href="/liga/1/liga11675.html" class="main">Keeza III liga kobiet 2020/2021, grupa: IV</a></td></tr></table></body></html>`
+	doc, err := decodeAndParse([]byte(html), "text/html; charset=utf-8")
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	c := NewClient()
+	menu := parseCompetitionMenu(doc, womenTierMenuURL(c.Resolve("/archiwum.php?id_sezon=97"), "iii-liga-kobiet"), c)
+	if menu == nil {
+		t.Fatalf("expected sponsored women tier submenu")
+	}
+	if menu.Title != "III liga kobiet 2020/2021" {
+		t.Fatalf("unexpected sponsored women tier title: %q", menu.Title)
+	}
+	if len(menu.Items) != 4 {
+		t.Fatalf("expected 4 sponsored women tier items, got %+v", menu.Items)
+	}
+	if menu.Items[3].Name != "Keeza III liga kobiet 2020/2021, grupa: IV" {
+		t.Fatalf("expected sponsored child to keep original name, got %+v", menu.Items[3])
+	}
+}
+
+func TestParseCompetitionMenuForFutsalTierPage(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/archive_current.html")
+
+	c := NewClient()
+	menu := parseCompetitionMenu(doc, futsalTierMenuURL(c.Resolve("/archiwum.php"), "i-liga-futsalu"), c)
+	if menu == nil {
+		t.Fatalf("expected futsal tier submenu")
+	}
+	if menu.Title != "I liga futsalu 2025/2026" {
+		t.Fatalf("unexpected futsal tier title: %q", menu.Title)
+	}
+	if len(menu.Items) != 2 {
+		t.Fatalf("expected grouped futsal items, got %+v", menu.Items)
+	}
+	if menu.Items[0].Name != "I liga futsalu 2025/2026, grupa: południowa" {
+		t.Fatalf("unexpected first futsal tier item: %+v", menu.Items[0])
+	}
+	if menu.Items[1].Name != "I liga futsalu 2025/2026, grupa: północna" {
+		t.Fatalf("unexpected second futsal tier item: %+v", menu.Items[1])
 	}
 }
