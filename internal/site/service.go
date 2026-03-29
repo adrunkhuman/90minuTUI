@@ -43,6 +43,7 @@ func (s *Service) LoadCompetition(ctx context.Context, competitionURL string) (*
 	}
 
 	resolvedURL := s.client.Resolve(competitionURL)
+	var leagueErr error
 	if league := parseLeaguePage(doc, resolvedURL); league != nil {
 		league.LeagueKey = extractLeagueKey(league.URL)
 
@@ -59,11 +60,16 @@ func (s *Service) LoadCompetition(ctx context.Context, competitionURL string) (*
 
 		if err := validateLeaguePage(league); err == nil {
 			return nil, league, nil
+		} else {
+			leagueErr = err
 		}
 	}
 
 	menu := parseCompetitionMenu(doc, resolvedURL, s.client)
 	if menu == nil || len(menu.Items) == 0 {
+		if leagueErr != nil {
+			return nil, nil, leagueErr
+		}
 		return nil, nil, fmt.Errorf("competition parse: no submenu or fixtures found")
 	}
 
@@ -264,7 +270,8 @@ func parseRegionalAssociationMenu(doc *goquery.Document, resolvedURL string, c *
 	items := parseCompetitionLinks(doc.Find("a.main"), c, func(name string) bool {
 		return name != ""
 	}, func(rawURL string) bool {
-		return strings.HasPrefix(strings.TrimSpace(rawURL), "/ligireg-")
+		trimmed := strings.TrimSpace(rawURL)
+		return strings.HasPrefix(trimmed, "/ligireg-") || isRegionalAssociationURL(trimmed)
 	})
 	if len(items) == 0 {
 		return nil
@@ -342,7 +349,7 @@ func isLeagueLikeURL(raw string) bool {
 		return true
 	}
 
-	return strings.Contains(lower, "/ligireg.php")
+	return strings.Contains(lower, "/ligireg.php") || strings.Contains(lower, "/polcups.php")
 }
 
 func isIIIligaSelectorURL(raw string) bool {

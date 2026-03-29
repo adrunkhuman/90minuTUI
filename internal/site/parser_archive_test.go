@@ -85,12 +85,14 @@ func TestParseSeasonsAndCompetitionsFromArchiveFixtures(t *testing.T) {
 				iiLigaURL := c.Resolve("/liga/1/liga11235.html")
 				iiiLigaSelectorURL := c.Resolve("/ligireg.php?poziom=4&id_sezon=97")
 				regionalneURL := c.Resolve("/ligireg.php?id_sezon=97")
+				regionalCupsURL := c.Resolve("/polcups.php?id_sezon=97")
 
 				ekstraklasaIdx := competitionIndexByURL(competitions, ekstraklasaURL)
 				iLigaIdx := competitionIndexByURL(competitions, iLigaURL)
 				iiLigaIdx := competitionIndexByURL(competitions, iiLigaURL)
 				iiiLigaSelectorIdx := competitionIndexByURL(competitions, iiiLigaSelectorURL)
 				regionalneIdx := competitionIndexByURL(competitions, regionalneURL)
+				regionalCupsIdx := competitionIndexByURL(competitions, regionalCupsURL)
 
 				if ekstraklasaIdx < 0 || iLigaIdx < 0 || iiLigaIdx < 0 {
 					t.Fatalf("missing expected league links in 2020/21 archive")
@@ -100,6 +102,9 @@ func TestParseSeasonsAndCompetitionsFromArchiveFixtures(t *testing.T) {
 				}
 				if iiiLigaSelectorIdx < 0 || regionalneIdx < 0 {
 					t.Fatalf("missing III liga or ligi regionalne links in 2020/21 archive")
+				}
+				if regionalCupsIdx < 0 {
+					t.Fatalf("missing regional cups link in 2020/21 archive")
 				}
 			}
 
@@ -156,6 +161,22 @@ func TestParseCompetitionMenuForRegionalRoot(t *testing.T) {
 		t.Fatalf("expected regional submenu")
 	}
 	if len(menu.Items) != 2 || menu.Items[0].Name != "Dolnośląski ZPN" || menu.Items[1].Name != "Kujawsko-Pomorski ZPN" {
+		t.Fatalf("unexpected regional submenu items: %+v", menu.Items)
+	}
+}
+
+func TestParseCompetitionMenuForRegionalRootWithAssociationQueryLinks(t *testing.T) {
+	html := `<html><body><table class="main"><tr><td valign="top"><p align="center"><b>Ligi regionalne 2025/26</b></p><a href="/ligireg.php?id_okreg=16&id_sezon=107" class="main">Dolnośląski ZPN</a><a href="/ligireg.php?id_okreg=8&id_sezon=107" class="main">Lubuski ZPN</a></td></tr></table></body></html>`
+	doc, err := decodeAndParse([]byte(html), "text/html; charset=utf-8")
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	menu := parseCompetitionMenu(doc, "http://www.90minut.pl/ligireg.php?id_sezon=107", NewClient())
+	if menu == nil {
+		t.Fatalf("expected regional submenu")
+	}
+	if len(menu.Items) != 2 {
 		t.Fatalf("unexpected regional submenu items: %+v", menu.Items)
 	}
 }

@@ -146,13 +146,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case competitionMenuLoadedMsg:
 		m.loading = false
-		if msg.err != nil {
-			m.err = msg.err.Error()
+		competition := m.currentCompetition()
+		if competition == nil || msg.competitionKey != competitionRequestKey(*competition) {
 			return m, nil
 		}
 
-		competition := m.currentCompetition()
-		if competition == nil || msg.competitionKey != competitionRequestKey(*competition) {
+		if msg.err != nil {
+			m.err = msg.err.Error()
 			return m, nil
 		}
 

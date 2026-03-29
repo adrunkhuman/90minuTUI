@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -123,6 +124,34 @@ func TestLeagueLoadPrefersLatestCompletedFixtureWhenLeagueHasNoMatchLinks(t *tes
 	}
 }
 
+func TestLeagueLoadPrefersLatestDrillableFixtureWhenLeagueHasMixedLinks(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.league.Rounds = []site.Round{
+		{
+			Name:     "1. kolejka",
+			Fixtures: []site.Fixture{{Home: "Team A", Away: "Team B", Score: "1-0", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1", MatchID: "1"}},
+		},
+		{
+			Name: "2. kolejka",
+			Fixtures: []site.Fixture{
+				{Home: "Team C", Away: "Team D", Score: "-"},
+				{Home: "Team E", Away: "Team F", Score: "2-1", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=2", MatchID: "2"},
+			},
+		},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	if m.roundCursor != 1 {
+		t.Fatalf("expected latest round with drillable fixture selected, got %d", m.roundCursor)
+	}
+	if m.fixtureCursor != 1 {
+		t.Fatalf("expected latest drillable fixture selected, got %d", m.fixtureCursor)
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "2" {
+		t.Fatalf("expected latest drillable fixture selected, got %+v", fixture)
+	}
+}
+
 func TestCompetitionEnterOpensIIILigaSubmenu(t *testing.T) {
 	loader := newRecordingLoader()
 	loader.competitions = []site.Competition{
@@ -202,6 +231,37 @@ func TestCompetitionSubmenuEscReturnsToPreviousMenu(t *testing.T) {
 	}
 	if len(m.competitions) != 1 || m.competitions[0].Name != "Dolnoslaski ZPN" {
 		t.Fatalf("expected previous submenu items restored, got %+v", m.competitions)
+	}
+}
+
+func TestStaleCompetitionLoadErrorDoesNotOverwriteCurrentSelection(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.competitions = []site.Competition{
+		{Name: "Ekstraklasa", URL: "http://www.90minut.pl/liga/1/liga11233.html", LeagueKey: "liga11233"},
+		{Name: "Ligi regionalne 2025/26", URL: "http://www.90minut.pl/ligireg.php?id_sezon=107", LeagueKey: "www.90minut.pl/ligireg.php?id_sezon=107"},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m.competitionCursor = 1
+	staleKey := competitionRequestKey(m.competitions[m.competitionCursor])
+	m.competitionCursor = 0
+	currentKey := competitionRequestKey(m.competitions[m.competitionCursor])
+
+	m, cmd := updateModelWithMsg(t, m, competitionMenuLoadedMsg{competitionKey: staleKey, err: errors.New("stale submenu failed")})
+	if cmd != nil {
+		t.Fatalf("expected stale async error to be ignored")
+	}
+	if m.err != "" {
+		t.Fatalf("expected stale error to be ignored, got %q", m.err)
+	}
+
+	m, cmd = updateModelWithMsg(t, m, competitionMenuLoadedMsg{competitionKey: currentKey, err: errors.New("current submenu failed")})
+	if cmd != nil {
+		t.Fatalf("expected current async error to settle without command")
+	}
+	if m.err != "current submenu failed" {
+		t.Fatalf("expected current error to be shown, got %q", m.err)
 	}
 }
 

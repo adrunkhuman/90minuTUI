@@ -210,8 +210,15 @@ func (m Model) initialFixtureSelection() (int, int) {
 	}
 
 	if m.leagueHasDrillableFixtures() {
-		roundIdx := clamp(len(m.league.Rounds)-1, 0, len(m.league.Rounds)-1)
-		return roundIdx, 0
+		for roundIdx := len(m.league.Rounds) - 1; roundIdx >= 0; roundIdx-- {
+			fixtures := m.league.Rounds[roundIdx].Fixtures
+			for fixtureIdx := len(fixtures) - 1; fixtureIdx >= 0; fixtureIdx-- {
+				if strings.TrimSpace(fixtures[fixtureIdx].MatchURL) == "" {
+					continue
+				}
+				return roundIdx, fixtureIdx
+			}
+		}
 	}
 
 	for roundIdx := len(m.league.Rounds) - 1; roundIdx >= 0; roundIdx-- {
