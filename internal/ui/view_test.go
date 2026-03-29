@@ -268,14 +268,14 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 func TestFormatLineupPlayerMirrorsSubstitutionNote(t *testing.T) {
 	home := formatLineupPlayer(lineupEntry{
 		player:     site.PlayerLine{Name: "Igor Strzalek"},
-		subMinute:  "46'",
+		leftAt:     "46'",
 		replacedBy: "Damian Nowak",
-	}, "home")
+	}, "home", 64)
 	away := formatLineupPlayer(lineupEntry{
 		player:     site.PlayerLine{Name: "J. Wilson-Esbrand"},
-		subMinute:  "46'",
+		leftAt:     "46'",
 		replacedBy: "J. Grzesik",
-	}, "away")
+	}, "away", 64)
 
 	if got := ansi.Strip(home); got != "(46' D. Nowak) I. Strzalek" {
 		t.Fatalf("unexpected home lineup substitution label: %q", got)
@@ -288,6 +288,61 @@ func TestFormatLineupPlayerMirrorsSubstitutionNote(t *testing.T) {
 	}
 	if !strings.Contains(away, "\x1b[2m(J. Grzesik 46')\x1b[0m") {
 		t.Fatalf("expected away substitution note to be dimmed, got %q", away)
+	}
+}
+
+func TestFormatLineupPlayerShowsEntryAndExitNotes(t *testing.T) {
+	home := formatLineupPlayer(lineupEntry{
+		player:     site.PlayerLine{Name: "Oskar Lesniak"},
+		enteredAt:  "66'",
+		replaced:   "Jason Lokilo",
+		leftAt:     "82'",
+		replacedBy: "Michal Smith",
+	}, "home", 64)
+	away := formatLineupPlayer(lineupEntry{
+		player:     site.PlayerLine{Name: "Oskar Lesniak"},
+		enteredAt:  "66'",
+		replaced:   "Jason Lokilo",
+		leftAt:     "82'",
+		replacedBy: "Michal Smith",
+	}, "away", 64)
+
+	if got := ansi.Strip(home); got != "(66' for J. Lokilo) (82' M. Smith) O. Lesniak" {
+		t.Fatalf("unexpected home double substitution label: %q", got)
+	}
+	if got := ansi.Strip(away); got != "O. Lesniak (for J. Lokilo 66') (M. Smith 82')" {
+		t.Fatalf("unexpected away double substitution label: %q", got)
+	}
+}
+
+func TestFormatLineupPlayerShortensOnlySubstitutionNotesWhenNeeded(t *testing.T) {
+	got := ansi.Strip(formatLineupPlayer(lineupEntry{
+		player:     site.PlayerLine{Name: "Alexandre Verylongsurname"},
+		enteredAt:  "66'",
+		replaced:   "Christopher Hyperextendedname",
+		leftAt:     "82'",
+		replacedBy: "Maximilian Unnecessarilylongsurname",
+	}, "home", 40))
+
+	if got != "(66' for Hyperextendedname) (82' Unnecessarilylongsurname) A. Verylongsurname" {
+		t.Fatalf("unexpected shortened substitution label: %q", got)
+	}
+}
+
+func TestFormatLineupPlayerShortensNotesForNarrowFallbackRows(t *testing.T) {
+	width := lineupPlayerWidth(32)
+	if width != 13 {
+		t.Fatalf("unexpected narrow lineup player width: %d", width)
+	}
+
+	got := ansi.Strip(formatLineupPlayer(lineupEntry{
+		player:     site.PlayerLine{Name: "Alexandre Verylongsurname"},
+		leftAt:     "82'",
+		replacedBy: "Maximilian Unnecessarilylongsurname",
+	}, "away", width))
+
+	if got != "A. Verylongsurname (Unnecessarilylongsurname 82')" {
+		t.Fatalf("expected narrow-row shortening before truncation, got %q", got)
 	}
 }
 
@@ -517,11 +572,14 @@ func TestAnnotatedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testin
 	if got[0].player.Name != "Adam Kowalski" {
 		t.Fatalf("expected unrelated Kowalski to stay first, got %#v", got)
 	}
-	if got[1].player.Name != "Jan Kowalski" || got[1].replacedBy != "Piotr Kowalski" || got[1].subMinute != "60'" {
+	if got[1].player.Name != "Jan Kowalski" || got[1].replacedBy != "Piotr Kowalski" || got[1].leftAt != "60'" {
 		t.Fatalf("expected substituted player to carry entrant note, got %#v", got)
 	}
 	if got[2].player.Name != "Piotr Kowalski" || got[2].replacedBy != "" {
 		t.Fatalf("expected entrant row to stay untouched when already present, got %#v", got)
+	}
+	if got[2].enteredAt != "60'" || got[2].replaced != "Jan Kowalski" {
+		t.Fatalf("expected entrant row to record who they replaced, got %#v", got)
 	}
 }
 
@@ -561,11 +619,14 @@ func TestAnnotatedLineupAddsMissingEntrantWhenTheyHaveCardEvent(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected starter plus synthetic entrant, got %#v", got)
 	}
-	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || got[0].subMinute != "66'" {
+	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || got[0].leftAt != "66'" {
 		t.Fatalf("expected starter row to retain substitution note, got %#v", got)
 	}
 	if got[1].player.Name != "Oskar Lesniak" || got[1].replacedBy != "" {
 		t.Fatalf("expected entrant row added for card badge visibility, got %#v", got)
+	}
+	if got[1].enteredAt != "66'" || got[1].replaced != "Jason Lokilo" {
+		t.Fatalf("expected synthetic entrant row to retain entry note, got %#v", got)
 	}
 }
 
@@ -581,8 +642,24 @@ func TestAnnotatedLineupSkipsMissingEntrantWithoutBadgeEvent(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected only starter row when entrant has no lineup badge event, got %#v", got)
 	}
-	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || got[0].subMinute != "66'" {
+	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || got[0].leftAt != "66'" {
 		t.Fatalf("expected starter row to retain substitution note, got %#v", got)
+	}
+}
+
+func TestAnnotatedLineupSyntheticEntrantKeepsLaterSubstitutionOff(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{
+		{MinuteText: "66", Kind: "SUB", TeamSide: "home", Text: "Jason Lokilo -> Oskar Lesniak"},
+		{MinuteText: "78", Kind: "SUB", TeamSide: "home", Text: "Oskar Lesniak -> Michal Smith"},
+		{MinuteText: "72", Kind: "YC", TeamSide: "home", Text: "Oskar Lesniak 72"},
+	}, "home")
+
+	got := annotatedLineup([]site.PlayerLine{{Name: "Jason Lokilo"}}, idx)
+	if len(got) != 2 {
+		t.Fatalf("expected starter plus synthetic entrant, got %#v", got)
+	}
+	if got[1].player.Name != "Oskar Lesniak" || got[1].enteredAt != "66'" || got[1].replaced != "Jason Lokilo" || got[1].leftAt != "78'" || got[1].replacedBy != "Michal Smith" {
+		t.Fatalf("expected synthetic entrant row to keep both substitution notes, got %#v", got[1])
 	}
 }
 

@@ -671,36 +671,139 @@ func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) st
 
 type lineupEntry struct {
 	player     site.PlayerLine
-	subMinute  string
+	enteredAt  string
+	replaced   string
+	leftAt     string
 	replacedBy string
 }
 
-func formatLineupPlayer(entry lineupEntry, side string) string {
+// A lineup row can carry both entry and exit notes for players who came on and were later replaced.
+func formatLineupPlayer(entry lineupEntry, side string, maxWidth int) string {
 	name := formatPlayerLabel(entry.player.Name)
-	if entry.subMinute == "" && entry.replacedBy == "" {
+	if entry.enteredAt == "" && entry.replaced == "" && entry.leftAt == "" && entry.replacedBy == "" {
 		return name
 	}
 
-	if entry.replacedBy != "" {
-		replacement := "("
-		if side == "home" && entry.subMinute != "" {
-			replacement += entry.subMinute + " "
+	label := lineupPlayerLabel(entry, side, name, false)
+	if maxWidth > 0 && ansi.StringWidth(label) > maxWidth {
+		shortened := lineupPlayerLabel(entry, side, name, true)
+		if ansi.StringWidth(shortened) < ansi.StringWidth(label) {
+			return shortened
 		}
-		replacement += formatPlayerLabel(entry.replacedBy)
-		if side != "home" && entry.subMinute != "" {
-			replacement += " " + entry.subMinute
-		}
-		replacement = faintText(replacement + ")")
-		if side == "home" {
-			parts := []string{replacement, name}
-			return strings.Join(parts, " ")
-		}
+	}
 
-		parts := []string{name, replacement}
+	return label
+}
+
+func lineupPlayerLabel(entry lineupEntry, side, name string, shortenNotes bool) string {
+	notes := lineupNotes(entry, side, shortenNotes)
+	if len(notes) == 0 {
+		return name
+	}
+
+	if side == "home" {
+		parts := append(notes, name)
 		return strings.Join(parts, " ")
 	}
 
-	return name
+	parts := append([]string{name}, notes...)
+	return strings.Join(parts, " ")
+}
+
+func lineupNotes(entry lineupEntry, side string, shortenNotes bool) []string {
+	notes := make([]string, 0, 2)
+
+	if note := entryNote(entry, side, shortenNotes); note != "" {
+		notes = append(notes, note)
+	}
+	if note := exitNote(entry, side, shortenNotes); note != "" {
+		notes = append(notes, note)
+	}
+
+	return notes
+}
+
+func entryNote(entry lineupEntry, side string, shortenNotes bool) string {
+	if entry.enteredAt == "" {
+		return ""
+	}
+
+	replaced := formatSubNoteName(entry.replaced, shortenNotes)
+	if side == "home" {
+		text := "(" + entry.enteredAt
+		if replaced != "" {
+			text += " for " + replaced
+		}
+		return faintText(text + ")")
+	}
+
+	text := "(for "
+	if replaced != "" {
+		text += replaced + " "
+	}
+	text += entry.enteredAt
+	return faintText(text + ")")
+}
+
+func exitNote(entry lineupEntry, side string, shortenNotes bool) string {
+	if entry.replacedBy == "" {
+		return ""
+	}
+
+	replacement := formatSubNoteName(entry.replacedBy, shortenNotes)
+	text := "("
+	if side == "home" && entry.leftAt != "" {
+		text += entry.leftAt + " "
+	}
+	text += replacement
+	if side != "home" && entry.leftAt != "" {
+		text += " " + entry.leftAt
+	}
+	return faintText(text + ")")
+}
+
+// Under width pressure, shorten only substitution-note names so the main player label stays stable.
+func formatSubNoteName(name string, surnameOnly bool) string {
+	formatted := formatPlayerLabel(name)
+	if !surnameOnly {
+		return formatted
+	}
+
+	cleaned := canonicalPlayerName(name)
+	if cleaned == "" {
+		return ""
+	}
+
+	words := strings.Fields(cleaned)
+	if len(words) == 0 {
+		return ""
+	}
+
+	return faintPenaltySuffix(words[len(words)-1])
+}
+
+// Players can collect both entry and exit notes when they are substituted on and off in one match.
+func annotateLineupPlayer(player site.PlayerLine, idx map[string][]site.MatchEvent) lineupEntry {
+	entry := lineupEntry{player: player}
+	key := playerMatchKey(player.Name)
+	for _, event := range sortedEvents(idx[key]) {
+		if event.Kind != "SUB" {
+			continue
+		}
+
+		out, in := substitutionPlayers(event.Text)
+		minute := strings.TrimSpace(formatMatchMinute(event.MinuteText))
+		if playerMatchKey(in) == key {
+			entry.enteredAt = minute
+			entry.replaced = out
+		}
+		if playerMatchKey(out) == key {
+			entry.leftAt = minute
+			entry.replacedBy = in
+		}
+	}
+
+	return entry
 }
 
 func hasLineupBadgeEvent(key string, idx map[string][]site.MatchEvent) bool {
@@ -714,6 +817,7 @@ func hasLineupBadgeEvent(key string, idx map[string][]site.MatchEvent) bool {
 	return false
 }
 
+// Synthetic entrant rows inherit the same substitution annotations so later card badges keep context.
 func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
 	if len(players) == 0 {
 		return nil
@@ -725,36 +829,41 @@ func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 	}
 
 	entries := make([]lineupEntry, 0, len(players))
+	addedSynthetic := make(map[string]bool)
 	for _, player := range players {
-		entry := lineupEntry{player: player}
-		key := playerMatchKey(player.Name)
-		for _, event := range idx[key] {
-			if event.Kind != "SUB" {
-				continue
-			}
+		entry := annotateLineupPlayer(player, idx)
+		entries = append(entries, entry)
 
-			out, in := substitutionPlayers(event.Text)
-			if playerMatchKey(out) != key {
-				continue
-			}
-
-			entry.subMinute = strings.TrimSpace(formatMatchMinute(event.MinuteText))
-			entry.replacedBy = in
-			inKey := playerMatchKey(in)
-			if _, exists := byKey[inKey]; !exists && hasLineupBadgeEvent(inKey, idx) {
-				entries = append(entries, entry)
-				entries = append(entries, lineupEntry{player: site.PlayerLine{Name: in}})
-				entry = lineupEntry{}
-			}
-			break
-		}
-		if entry.player.Name == "" {
+		inKey := playerMatchKey(entry.replacedBy)
+		if inKey == "" || addedSynthetic[inKey] {
 			continue
 		}
-		entries = append(entries, entry)
+		if _, exists := byKey[inKey]; exists || !hasLineupBadgeEvent(inKey, idx) {
+			continue
+		}
+
+		entries = append(entries, annotateLineupPlayer(site.PlayerLine{Name: entry.replacedBy}, idx))
+		addedSynthetic[inKey] = true
 	}
 
 	return entries
+}
+
+// Narrow layouts fall back to the generic lineup row, which reserves a smaller per-side text budget.
+func lineupPlayerWidth(width int) int {
+	if width <= 0 {
+		return 0
+	}
+	if width < 30 {
+		return 0
+	}
+	if width < 36 {
+		return max(8, (width-3-2)/2)
+	}
+
+	const eventWidth = 2
+	const gap = 0
+	return max(8, (width-1-2*eventWidth-2*gap)/2)
 }
 
 // Keep a dedicated event column next to the centre separator:
@@ -775,7 +884,7 @@ func renderAnnotatedLineupRow(homePlayer, homeEvents, awayPlayer, awayEvents str
 
 	const eventWidth = 2 // one emoji wide (YC/RC or empty)
 	const gap = 0        // names sit directly against the event column
-	playerWidth := max(8, (width-1-2*eventWidth-2*gap)/2)
+	playerWidth := lineupPlayerWidth(width)
 
 	leftPlayer := padLeft(truncate(homePlayer, playerWidth), playerWidth)
 	leftEvents := padLeft(truncate(homeEvents, eventWidth), eventWidth)

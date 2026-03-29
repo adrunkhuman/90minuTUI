@@ -502,6 +502,7 @@ func (m Model) matchDetailContent(width int) string {
 		homeEntries := annotatedLineup(m.match.HomeLineup, homeIdx)
 		awayEntries := annotatedLineup(m.match.AwayLineup, awayIdx)
 		maxPlayers := max(len(homeEntries), len(awayEntries))
+		playerWidth := lineupPlayerWidth(width - 4)
 
 		for i := 0; i < maxPlayers; i++ {
 			var hEntry, aEntry lineupEntry
@@ -512,8 +513,8 @@ func (m Model) matchDetailContent(width int) string {
 				aEntry = awayEntries[i]
 			}
 
-			homeName := formatLineupPlayer(hEntry, "home")
-			awayName := formatLineupPlayer(aEntry, "away")
+			homeName := formatLineupPlayer(hEntry, "home", playerWidth)
+			awayName := formatLineupPlayer(aEntry, "away", playerWidth)
 
 			b.WriteString(renderAnnotatedLineupRow(
 				homeName, cardAnnotation(hEntry.player, homeIdx),
