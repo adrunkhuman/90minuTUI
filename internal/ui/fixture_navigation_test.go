@@ -193,6 +193,70 @@ func TestCompetitionEnterOpensIIILigaSubmenu(t *testing.T) {
 	}
 }
 
+func TestCompetitionEnterOpensWomenTierSubmenu(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.competitions = []site.Competition{
+		{Name: "Orlen Ekstraliga kobiet 2025/2026", URL: "http://www.90minut.pl/liga/1/liga14141.html", LeagueKey: "liga14141"},
+		{Name: "III liga kobiet 2025/2026", URL: "http://www.90minut.pl/archiwum.php#women-tier=iii-liga-kobiet", LeagueKey: "women-tier:www.90minut.pl/archiwum.php:iii-liga-kobiet"},
+	}
+	loader.menus = map[string]*site.CompetitionMenu{
+		"http://www.90minut.pl/archiwum.php#women-tier=iii-liga-kobiet": {
+			Title: "III liga kobiet 2025/2026",
+			Items: []site.Competition{{Name: "III liga kobiet 2025/2026, grupa: I", URL: "http://www.90minut.pl/liga/1/liga14578.html", LeagueKey: "liga14578"}},
+		},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m.competitionCursor = 1
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected women tier submenu load command")
+	}
+	m, cmd = updateModelWithMsg(t, m, cmd())
+	if cmd != nil {
+		t.Fatalf("expected women tier submenu load to settle without chained command")
+	}
+	if got := m.competitionTitle; got != "III liga kobiet 2025/2026" {
+		t.Fatalf("unexpected women submenu title: %q", got)
+	}
+	if len(m.competitions) != 1 || m.competitions[0].Name != "III liga kobiet 2025/2026, grupa: I" {
+		t.Fatalf("unexpected women submenu items: %+v", m.competitions)
+	}
+}
+
+func TestCompetitionEnterOpensFutsalTierSubmenu(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.competitions = []site.Competition{
+		{Name: "Fogo Futsal Ekstraklasa 2025/2026", URL: "http://www.90minut.pl/liga/1/liga14148.html", LeagueKey: "liga14148"},
+		{Name: "I liga futsalu 2025/2026", URL: "http://www.90minut.pl/archiwum.php#futsal-tier=i-liga-futsalu", LeagueKey: "futsal-tier:www.90minut.pl/archiwum.php:i-liga-futsalu"},
+	}
+	loader.menus = map[string]*site.CompetitionMenu{
+		"http://www.90minut.pl/archiwum.php#futsal-tier=i-liga-futsalu": {
+			Title: "I liga futsalu 2025/2026",
+			Items: []site.Competition{{Name: "I liga futsalu 2025/2026, grupa: południowa", URL: "http://www.90minut.pl/liga/1/liga14625.html", LeagueKey: "liga14625"}},
+		},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m.competitionCursor = 1
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected futsal tier submenu load command")
+	}
+	m, cmd = updateModelWithMsg(t, m, cmd())
+	if cmd != nil {
+		t.Fatalf("expected futsal tier submenu load to settle without chained command")
+	}
+	if got := m.competitionTitle; got != "I liga futsalu 2025/2026" {
+		t.Fatalf("unexpected futsal submenu title: %q", got)
+	}
+	if len(m.competitions) != 1 || m.competitions[0].Name != "I liga futsalu 2025/2026, grupa: południowa" {
+		t.Fatalf("unexpected futsal submenu items: %+v", m.competitions)
+	}
+}
+
 func TestCompetitionSubmenuEscReturnsToPreviousMenu(t *testing.T) {
 	loader := newRecordingLoader()
 	loader.competitions = []site.Competition{
