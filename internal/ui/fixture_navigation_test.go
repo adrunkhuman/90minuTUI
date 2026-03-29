@@ -258,7 +258,7 @@ func TestFixtureEnterKeepsLeagueViewWhenFixtureHasNoDetails(t *testing.T) {
 	if m.match != nil {
 		t.Fatalf("expected no match payload for non-drillable fixture")
 	}
-	if m.err != unavailableMatchDetailsMessage {
+	if m.err != unavailableFixtureMatchDetailsMessage {
 		t.Fatalf("unexpected unavailable-details message: %q", m.err)
 	}
 	if loader.matchCalls != 0 {
@@ -290,11 +290,30 @@ func TestMatchViewNavigationFallsBackToLeagueWhenNextFixtureHasNoDetails(t *test
 	if m.match != nil {
 		t.Fatalf("expected stale match details to clear when fixture has no details")
 	}
-	if m.err != unavailableMatchDetailsMessage {
+	if m.err != unavailableFixtureMatchDetailsMessage {
 		t.Fatalf("unexpected unavailable-details message: %q", m.err)
 	}
 	if loader.matchCalls != 1 {
 		t.Fatalf("expected no extra match load, got %d", loader.matchCalls)
+	}
+}
+
+func TestFixtureEnterUsesFixtureSpecificMessageWhenLeagueHasOtherDetails(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.league.Rounds[0].Fixtures[0].MatchURL = ""
+	loader.league.Rounds[0].Fixtures[0].MatchID = ""
+	loader.league.Rounds[0].Fixtures[1].MatchURL = "http://www.90minut.pl/mecz.php?id_mecz=2"
+	loader.league.Rounds[0].Fixtures[1].MatchID = "2"
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+
+	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected no command for non-drillable fixture")
+	}
+	if m.err != unavailableFixtureMatchDetailsMessage {
+		t.Fatalf("unexpected fixture-specific message: %q", m.err)
 	}
 }
 

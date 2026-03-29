@@ -356,7 +356,7 @@ func (m *Model) handleEnter() tea.Cmd {
 		m.matchView = false
 		m.match = nil
 		m.matchScroll = 0
-		m.err = unavailableMatchDetailsMessage
+		m.err = m.unavailableMatchDetailsMessage()
 		return nil
 	}
 	m.matchView = true
@@ -380,7 +380,7 @@ func (m *Model) handleReload() tea.Cmd {
 			m.matchView = false
 			m.match = nil
 			m.matchScroll = 0
-			m.err = unavailableMatchDetailsMessage
+			m.err = m.unavailableMatchDetailsMessage()
 			return nil
 		}
 		m.match = nil
@@ -442,7 +442,7 @@ func (m *Model) loadCurrentMatch() tea.Cmd {
 	}
 	if !m.currentFixtureDrillable() {
 		m.loading = false
-		m.err = unavailableMatchDetailsMessage
+		m.err = m.unavailableMatchDetailsMessage()
 		m.matchView = false
 		m.match = nil
 		m.matchScroll = 0

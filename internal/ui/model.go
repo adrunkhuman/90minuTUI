@@ -17,7 +17,8 @@ const (
 	focusFixtures
 )
 
-const unavailableMatchDetailsMessage = "Match details unavailable for this competition"
+const unavailableCompetitionMatchDetailsMessage = "Match details unavailable for this competition"
+const unavailableFixtureMatchDetailsMessage = "Match details unavailable for this fixture"
 
 var fixtureResultRe = regexp.MustCompile(`^\d+\s*-\s*\d+$`)
 
@@ -194,6 +195,13 @@ func (m Model) currentFixture() *site.Fixture {
 func (m Model) currentFixtureDrillable() bool {
 	fixture := m.currentFixture()
 	return fixture != nil && strings.TrimSpace(fixture.MatchURL) != ""
+}
+
+func (m Model) unavailableMatchDetailsMessage() string {
+	if m.leagueHasDrillableFixtures() {
+		return unavailableFixtureMatchDetailsMessage
+	}
+	return unavailableCompetitionMatchDetailsMessage
 }
 
 func (m Model) initialFixtureSelection() (int, int) {
