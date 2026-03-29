@@ -383,14 +383,6 @@ func archiveCompetitionMenuKey(archiveURL, key string, spec archiveGroupSpec) st
 	return spec.keyPrefix + ":" + canonicalURLKey(archiveURL) + ":" + key
 }
 
-func isWomenTierMenuURL(raw string) bool {
-	return archiveCompetitionMenuFromURL(raw, archiveGroupSpecs[0]) != ""
-}
-
-func isFutsalTierMenuURL(raw string) bool {
-	return archiveCompetitionMenuFromURL(raw, archiveGroupSpecs[1]) != ""
-}
-
 func archiveCompetitionMenuFromURL(raw string, spec archiveGroupSpec) string {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || parsed.Fragment == "" {
@@ -409,32 +401,8 @@ func womenTierMenuURL(archiveURL, key string) string {
 	return archiveCompetitionMenuURL(archiveURL, key, archiveGroupSpecs[0])
 }
 
-func womenTierMenuKey(archiveURL, key string) string {
-	return archiveCompetitionMenuKey(archiveURL, key, archiveGroupSpecs[0])
-}
-
-func womenTierMenuMeta(name string) (string, string, bool) {
-	return archiveCompetitionMenuMeta(name, archiveGroupSpecs[0])
-}
-
-func womenTierMenuFromURL(raw string) string {
-	return archiveCompetitionMenuFromURL(raw, archiveGroupSpecs[0])
-}
-
 func futsalTierMenuURL(archiveURL, key string) string {
 	return archiveCompetitionMenuURL(archiveURL, key, archiveGroupSpecs[1])
-}
-
-func futsalTierMenuKey(archiveURL, key string) string {
-	return archiveCompetitionMenuKey(archiveURL, key, archiveGroupSpecs[1])
-}
-
-func futsalTierMenuMeta(name string) (string, string, bool) {
-	return archiveCompetitionMenuMeta(name, archiveGroupSpecs[1])
-}
-
-func futsalTierMenuFromURL(raw string) string {
-	return archiveCompetitionMenuFromURL(raw, archiveGroupSpecs[1])
 }
 
 func parseIIIligaMenu(doc *goquery.Document, resolvedURL string, c *Client) *CompetitionMenu {
