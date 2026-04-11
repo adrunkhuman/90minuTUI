@@ -1,18 +1,20 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/adrunkhuman/90minuTUI/internal/site"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
 func (m Model) View() string {
 	if m.width == 0 {
-		return "Loading terminal size..."
+		return "Loading..."
 	}
 
-	topBar := m.topContextBarView()
+	topBar := m.topBarView()
 	body := m.leagueSketchView()
 	if m.matchView {
 		body = m.matchSketchView()
@@ -21,15 +23,74 @@ func (m Model) View() string {
 		body = m.selectorOverlayView(body)
 	}
 	body = fitLines(body, m.bodyHeightLimit())
+
 	if topBar != "" {
 		return topBar + "\n" + body + "\n" + m.statusBarView()
 	}
-
 	return body + "\n" + m.statusBarView()
 }
 
+func (m Model) bodyHeightLimit() int {
+	reserved := 1 // status bar
+	if bar := m.topBarView(); bar != "" {
+		reserved += strings.Count(bar, "\n") + 1
+	}
+	if m.height <= reserved {
+		return 0
+	}
+	return m.height - reserved
+}
+
+// topBarView renders a two-line header: competition + round on line 1, a dim
+// separator on line 2. Returns "" when the bar should be suppressed.
+func (m Model) topBarView() string {
+	if m.suppressTopBar || m.league == nil {
+		return ""
+	}
+
+	label := displayCompetitionLabel(m.league.Title)
+	if label == "" {
+		return ""
+	}
+
+	right := ""
+	if round := m.currentRound(); round != nil {
+		roundLabel := displayRoundLabel(round.Name, m.roundCursor+1)
+		right = fmt.Sprintf("%s / %d", roundLabel, len(m.league.Rounds))
+	}
+
+	titleLine := barLine(label, right, m.width)
+	sep := styleDim.Render(strings.Repeat("─", m.width))
+	return titleLine + "\n" + sep
+}
+
+// barLine builds a fixed-width line: bold left label + subtle right label, space-padded.
+func barLine(left, right string, width int) string {
+	inner := width - 2 // 1 leading + 1 trailing space
+	if inner <= 0 {
+		return ""
+	}
+	if right == "" {
+		text := truncate(left, inner)
+		pad := max(0, inner-ansi.StringWidth(text))
+		return " " + styleBold.Render(text) + strings.Repeat(" ", pad) + " "
+	}
+	rightW := ansi.StringWidth(right)
+	leftMax := max(0, inner-rightW-1)
+	leftText := truncate(left, leftMax)
+	leftW := ansi.StringWidth(leftText)
+	gap := max(1, inner-leftW-rightW)
+	return " " + styleBold.Render(leftText) + strings.Repeat(" ", gap) + styleSubtle.Render(right) + " "
+}
+
 func (m Model) selectorOverlayView(body string) string {
-	popup := m.selectorPopupView(selectorPopupWidth(m.width))
+	seasonLines := renderSeasonsWindow(m.seasons, m.seasonCursor)
+	rightHeading := "Leagues"
+	if strings.TrimSpace(m.competitionTitle) != "" {
+		rightHeading = m.competitionTitle
+	}
+	competitionLines := selectorCompetitionWidthLines(m.competitions)
+	popup := m.selectorPopupView(selectorPopupWidth(m.width, seasonLines, rightHeading, competitionLines))
 	bodyLines := strings.Split(body, "\n")
 	totalHeight := max(len(bodyLines), max(1, m.bodyHeightLimit()))
 	for len(bodyLines) < totalHeight {
@@ -75,45 +136,62 @@ func overlayLine(base, overlay string, leftWidth int) string {
 }
 
 func (m Model) selectorPopupView(width int) string {
-	title := lipgloss.NewStyle().Bold(true)
-	focusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	panel := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(0, 1)
-	content := lipgloss.NewStyle().Width(max(24, width-4))
 	innerWidth := max(24, width-4)
 	seasonLines := renderSeasonsWindow(m.seasons, m.seasonCursor)
+	competitionLines := renderCompetitionWindow(m.competitions, m.competitionCursor)
 	leftWidth, rightWidth := selectorPaneWidths(innerWidth, seasonLines)
 
-	var b strings.Builder
-	b.WriteString(title.Render("Season + league"))
-	b.WriteString("\n\n")
-	left := selectorPaneView(leftWidth, "Season", m.focus == focusSeasons, seasonLines, title, focusStyle)
 	rightHeading := "Leagues"
 	if strings.TrimSpace(m.competitionTitle) != "" {
 		rightHeading = m.competitionTitle
 	}
-	right := selectorPaneView(rightWidth, rightHeading, m.focus == focusCompetitions, renderCompetitionWindow(m.competitions, m.competitionCursor), title, focusStyle)
-	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, left, right))
+
+	left := selectorPaneView(leftWidth, "Season", m.focus == focusSeasons, seasonLines)
+	right := selectorPaneView(rightWidth, rightHeading, m.focus == focusCompetitions, competitionLines)
+
+	// Vertical divider — height matches the taller pane.
+	leftLines := strings.Split(left, "\n")
+	rightLines := strings.Split(right, "\n")
+	divH := max(len(leftLines), len(rightLines))
+	divParts := make([]string, divH)
+	for i := range divParts {
+		divParts[i] = styleDim.Render("│")
+	}
+	divider := strings.Join(divParts, "\n")
+
+	var b strings.Builder
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, left, divider, right))
 
 	if m.loading {
-		b.WriteString("\nLoading...")
+		b.WriteString("\n")
+		b.WriteString(styleSubtle.Render("Loading…"))
 	}
 	if m.err != "" {
-		b.WriteString("\nError: ")
-		b.WriteString(m.err)
+		b.WriteString("\n")
+		b.WriteString(styleSubtle.Render("Error: " + m.err))
 	}
+
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorDim).
+		Padding(0, 1)
+	content := lipgloss.NewStyle().Width(innerWidth)
 
 	return panel.Render(content.Render(strings.TrimRight(b.String(), "\n")))
 }
 
-func selectorPaneView(width int, heading string, focused bool, lines []string, title, focusStyle lipgloss.Style) string {
+func selectorPaneView(width int, heading string, focused bool, lines []string) string {
 	base := lipgloss.NewStyle().Width(width)
 
-	var b strings.Builder
-	b.WriteString(title.Render(truncate(heading, width)))
+	var headingStyle lipgloss.Style
 	if focused {
-		b.WriteString(" ")
-		b.WriteString(focusStyle.Render("[focus]"))
+		headingStyle = styleBold.Copy().Foreground(colorAccent)
+	} else {
+		headingStyle = styleSubtle
 	}
+
+	var b strings.Builder
+	b.WriteString(headingStyle.Render(truncate(heading, width)))
 	b.WriteString("\n")
 	for _, line := range lines {
 		b.WriteString(truncate(line, width))
@@ -130,10 +208,10 @@ func selectorPaneWidths(total int, seasonLines []string) (int, int) {
 	}
 
 	leftWidth := clamp(seasonWidth+1, 14, 18)
-	rightWidth := total - leftWidth - 2
+	rightWidth := total - leftWidth - 1 // 1 for the │ divider
 	if rightWidth < 16 {
 		rightWidth = 16
-		leftWidth = max(14, total-rightWidth-2)
+		leftWidth = max(14, total-rightWidth-1)
 	}
 
 	return leftWidth, rightWidth
@@ -147,9 +225,24 @@ func (m Model) leagueSketchView() string {
 	}
 
 	standings := m.standingsPaneView(leftWidth)
-	return lipgloss.JoinHorizontal(lipgloss.Top, standings, fixtures)
+	divider := m.verticalDivider()
+	return lipgloss.JoinHorizontal(lipgloss.Top, standings, divider, fixtures)
 }
 
+func (m Model) verticalDivider() string {
+	h := m.bodyHeightLimit()
+	if h <= 0 {
+		return styleDim.Render("│")
+	}
+	parts := make([]string, h)
+	for i := range parts {
+		parts[i] = styleDim.Render("│")
+	}
+	return strings.Join(parts, "\n")
+}
+
+// standingsPaneView renders the league table without a title header —
+// the column header acts as the first row.
 func (m Model) standingsPaneView(width int) string {
 	return m.standingsPaneViewBounded(width)
 }
@@ -159,18 +252,20 @@ func (m Model) standingsPaneViewBounded(width int) string {
 	if limit := m.bodyHeightLimit(); limit > 0 {
 		base = base.MaxHeight(limit)
 	}
-	title := lipgloss.NewStyle().Bold(true)
 
 	var b strings.Builder
-	b.WriteString(title.Render("Standings"))
-	b.WriteString("\n")
 
 	if m.league == nil || len(m.league.Standings) == 0 {
-		b.WriteString("Standings unavailable")
+		b.WriteString(styleSubtle.Render("no standings"))
 		return base.Render(b.String())
 	}
 
-	b.WriteString(truncate("   # Team                P  W  D  L Pts", width-2))
+	teamWidth := standingsTeamWidth(m.league.Standings, width-2)
+	colHeader := styleSubtle.Render(truncate(
+		fmt.Sprintf("  %2s %-*s %2s %2s %2s %2s %3s", "#", teamWidth, "Team", "P", "W", "D", "L", "Pts"),
+		width-2,
+	))
+	b.WriteString(colHeader)
 	b.WriteString("\n")
 	for _, line := range renderStandingsWindow(m.league.Standings, m.currentFixture(), width-2, m.standingsRowLimit()) {
 		b.WriteString(line)
@@ -180,28 +275,25 @@ func (m Model) standingsPaneViewBounded(width int) string {
 	return base.Render(strings.TrimRight(b.String(), "\n"))
 }
 
+// leagueFixturesPaneView renders the fixture list. The round label is the only
+// header line — no "Fixtures" title, no focus indicator.
 func (m Model) leagueFixturesPaneView(width int) string {
 	base := lipgloss.NewStyle().Width(width).Padding(0, 1)
 	if limit := m.bodyHeightLimit(); limit > 0 {
 		base = base.MaxHeight(limit)
 	}
-	title := lipgloss.NewStyle().Bold(true)
-	focusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 
 	round := m.currentRound()
 	if m.league == nil || round == nil {
-		return base.Render("No league loaded yet")
+		return base.Render(styleSubtle.Render("no league loaded"))
 	}
 
 	var b strings.Builder
-	b.WriteString(title.Render("Fixtures"))
-	if m.focus == focusFixtures {
-		b.WriteString(" ")
-		b.WriteString(focusStyle.Render("[focus]"))
-	}
+
+	roundLabel := displayRoundLabel(round.Name, m.roundCursor+1)
+	total := len(m.league.Rounds)
+	b.WriteString(styleSubtle.Render(truncate(fmt.Sprintf("%s / %d", roundLabel, total), width-2)))
 	b.WriteString("\n")
-	b.WriteString(displayRoundLabel(round.Name, m.roundCursor+1))
-	b.WriteString("\n\n")
 
 	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.fixtureRowLimit(), width-2, false) {
 		b.WriteString(truncate(line, width-2))
@@ -209,11 +301,12 @@ func (m Model) leagueFixturesPaneView(width int) string {
 	}
 
 	if m.loading {
-		b.WriteString("\nLoading...")
+		b.WriteString("\n")
+		b.WriteString(styleSubtle.Render("Loading…"))
 	}
 	if m.err != "" {
-		b.WriteString("\nError: ")
-		b.WriteString(m.err)
+		b.WriteString("\n")
+		b.WriteString(styleSubtle.Render(m.err))
 	}
 
 	return base.Render(strings.TrimRight(b.String(), "\n"))
@@ -226,66 +319,9 @@ func (m Model) matchSketchView() string {
 	}
 
 	sidebar := m.matchSidebarView(leftWidth)
+	divider := m.verticalDivider()
 	detail := m.matchDetailPaneView(centerWidth)
-	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, detail)
-}
-
-func (m Model) bodyHeightLimit() int {
-	reserved := 1
-	if m.topContextBarView() != "" {
-		reserved++
-	}
-	if m.height <= reserved {
-		return 0
-	}
-
-	return m.height - reserved
-}
-
-func (m Model) topContextBarView() string {
-	if m.suppressTopBar {
-		return ""
-	}
-
-	if m.league != nil {
-		if label := displayCompetitionLabel(m.league.Title); label != "" {
-			style := lipgloss.NewStyle().Width(m.width).Padding(0, 1).Bold(true)
-			return style.Render(truncate(label, m.width-2))
-		}
-	}
-
-	return ""
-}
-
-func (m Model) standingsRowLimit() int {
-	limit := m.bodyHeightLimit()
-	if limit == 0 {
-		return len(m.league.Standings)
-	}
-
-	reserved := 2
-	return max(0, limit-reserved)
-}
-
-func (m Model) fixtureRowLimit() int {
-	limit := m.bodyHeightLimit()
-	if limit == 0 {
-		round := m.currentRound()
-		if round == nil {
-			return 0
-		}
-		return len(round.Fixtures)
-	}
-
-	reserved := 3
-	if m.loading {
-		reserved += 2
-	}
-	if m.err != "" {
-		reserved += 2
-	}
-
-	return max(0, limit-reserved)
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, divider, detail)
 }
 
 func (m Model) matchSidebarView(width int) string {
@@ -343,17 +379,14 @@ func (m Model) matchFixtureRailView(width int) string {
 	if limit := m.bodyHeightLimit(); limit > 0 {
 		base = base.Height(limit).MaxHeight(limit)
 	}
-	title := lipgloss.NewStyle().Bold(true)
 
 	round := m.currentRound()
 	if round == nil {
-		return base.Render(title.Render("Fixtures") + "\nNo fixtures in selected round")
+		return base.Render(styleSubtle.Render("no fixtures"))
 	}
 
 	var b strings.Builder
-	b.WriteString(title.Render("Fixtures"))
-	b.WriteString("\n")
-	b.WriteString(truncate(displayRoundLabel(round.Name, m.roundCursor+1), width-2))
+	b.WriteString(styleSubtle.Render(truncate(displayRoundLabel(round.Name, m.roundCursor+1), width-2)))
 	b.WriteString("\n")
 
 	for _, line := range renderFixtureWindow(round.Fixtures, m.fixtureCursor, m.matchFixtureRowLimit(), width-2, true) {
@@ -362,7 +395,8 @@ func (m Model) matchFixtureRailView(width int) string {
 	}
 
 	if m.loading && m.match == nil {
-		b.WriteString("\nLoading...")
+		b.WriteString("\n")
+		b.WriteString(styleSubtle.Render("Loading…"))
 	}
 
 	return base.Render(strings.TrimRight(b.String(), "\n"))
@@ -378,7 +412,7 @@ func (m Model) matchFixtureRowLimit() int {
 		return len(round.Fixtures)
 	}
 
-	reserved := 2
+	reserved := 1 // round label
 	if m.loading && m.match == nil {
 		reserved += 2
 	}
@@ -394,8 +428,36 @@ func (m Model) standingsContentHeight() int {
 	if m.league == nil || len(m.league.Standings) == 0 {
 		return 2
 	}
+	return 1 + len(m.league.Standings) // col header + rows
+}
 
-	return 2 + len(m.league.Standings)
+func (m Model) standingsRowLimit() int {
+	limit := m.bodyHeightLimit()
+	if limit == 0 {
+		return len(m.league.Standings)
+	}
+	return max(0, limit-1) // 1 for col header
+}
+
+func (m Model) fixtureRowLimit() int {
+	limit := m.bodyHeightLimit()
+	if limit == 0 {
+		round := m.currentRound()
+		if round == nil {
+			return 0
+		}
+		return len(round.Fixtures)
+	}
+
+	reserved := 1 // round label
+	if m.loading {
+		reserved += 2
+	}
+	if m.err != "" {
+		reserved += 2
+	}
+
+	return max(0, limit-reserved)
 }
 
 func (m Model) matchDetailPaneView(width int) string {
@@ -403,18 +465,17 @@ func (m Model) matchDetailPaneView(width int) string {
 	if limit := m.matchViewportHeight(); limit > 0 {
 		base = base.MaxHeight(limit)
 	}
-	title := lipgloss.NewStyle().Bold(true)
 
 	if m.loading && m.match == nil {
-		return base.Render(title.Render("Match") + "\nLoading match details...")
+		return base.Render(styleSubtle.Render("Loading…"))
 	}
 
 	if m.err != "" && m.match == nil {
-		return base.Render(title.Render("Match") + "\nError: " + m.err)
+		return base.Render(styleSubtle.Render("Error: " + m.err))
 	}
 
 	if m.match == nil {
-		return base.Render("No match loaded")
+		return base.Render(styleSubtle.Render("no match loaded"))
 	}
 
 	content := m.matchDetailContent(width)
@@ -422,48 +483,111 @@ func (m Model) matchDetailPaneView(width int) string {
 }
 
 func (m Model) statusBarView() string {
-	enterHint := "enter: unavailable"
-	if m.currentFixtureDrillable() {
-		enterHint = "enter: details"
-	}
-	parts := []string{"j/k: move", "left/right: round", enterHint, "esc: selector", "q: quit"}
-	if m.matchView {
-		parts = []string{"h/l: round", "j/k: fixture", "pgup/pgdn: scroll", "ctrl+u/d: scroll", "esc: league", "r: reload", "q: quit"}
-	}
-	if m.selectorActive() {
-		parts = []string{"tab: focus", "j/k: move", "enter: load", "q: quit"}
-		if m.league != nil {
-			parts = []string{"tab: focus", "j/k: move", "enter: load", "esc: close", "q: quit"}
-		}
+	var parts []string
+
+	switch {
+	case m.selectorActive():
+		parts = []string{"j/k: move", "tab: focus", "enter: load"}
 		if len(m.competitionStack) > 0 {
-			parts = []string{"tab: focus", "j/k: move", "enter: open", "esc: back", "q: quit"}
+			parts[2] = "enter: open"
+			parts = append(parts, "esc: back")
+		} else if m.league != nil {
+			parts = append(parts, "esc: close")
 		}
+		parts = append(parts, "q: quit")
+
+	case m.matchView:
+		parts = []string{"j/k: fixture", "h/l: round", "pgup/pgdn: scroll", "esc: back", "r: reload", "q: quit"}
+
+	default:
+		enterHint := "enter: details"
+		if !m.currentFixtureDrillable() {
+			enterHint = "enter: unavail"
+		}
+		parts = []string{"j/k: move", "h/l: round", enterHint, "esc: selector", "q: quit"}
 	}
 
-	status := strings.Join(parts, "  ") + "  |  fetched: " + formatFetchTime(m.lastFetchAt)
+	left := strings.Join(parts, "  ·  ")
+
+	right := formatFetchTime(m.lastFetchAt)
 	if m.loading {
-		status += "  |  loading"
+		right = "loading…"
 	}
-	if m.err != "" {
-		status += "  |  error"
+	if m.err != "" && !m.loading {
+		right = "error  " + right
 	}
 
+	inner := m.width - 2
+	leftW := ansi.StringWidth(left)
+	rightW := ansi.StringWidth(right)
+	gap := max(2, inner-leftW-rightW)
+	if leftW+gap+rightW > inner {
+		left = truncate(left, inner-rightW-2)
+		leftW = ansi.StringWidth(left)
+		gap = max(1, inner-leftW-rightW)
+	}
+
+	status := left + strings.Repeat(" ", gap) + right
 	return lipgloss.NewStyle().Width(m.width).Padding(0, 1).Reverse(true).Render(truncate(status, m.width-2))
 }
 
-func selectorPopupWidth(total int) int {
+func selectorPopupWidth(total int, seasonLines []string, rightHeading string, competitionLines []string) int {
 	if total <= 0 {
 		return 36
 	}
 
-	return clamp(total/2+4, 40, 68)
+	leftWidth, rightWidth := selectorContentWidths(seasonLines, rightHeading, competitionLines)
+	desired := leftWidth + 1 + rightWidth + 4 // divider + panel border/padding
+	return clamp(desired, 40, max(40, total-2))
+}
+
+func selectorContentWidths(seasonLines []string, rightHeading string, competitionLines []string) (int, int) {
+	seasonWidth := lipgloss.Width("Season")
+	for _, line := range seasonLines {
+		seasonWidth = max(seasonWidth, lipgloss.Width(line))
+	}
+	leftWidth := clamp(seasonWidth+1, 14, 18)
+
+	rightWidth := lipgloss.Width(rightHeading)
+	for _, line := range competitionLines {
+		rightWidth = max(rightWidth, lipgloss.Width(line))
+	}
+	rightWidth = max(16, rightWidth+1)
+
+	return leftWidth, rightWidth
+}
+
+func selectorCompetitionWidthLines(items []site.Competition) []string {
+	if len(items) == 0 {
+		return nil
+	}
+
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		lines = append(lines, "  "+item.Name)
+	}
+	return lines
 }
 
 func (m Model) matchDetailContent(width int) string {
-	title := lipgloss.NewStyle().Bold(true)
 	var b strings.Builder
-	b.WriteString(title.Render(renderMatchDetailRow(m.match.HomeTeam, normalizeScore(m.match.Score), m.match.AwayTeam, width-4)))
+
+	// Score header — one blank line of breathing room above.
 	b.WriteString("\n")
+	scoreText := matchDetailScore(m.match.Score)
+	b.WriteString(styleBold.Render(renderMatchDetailRow(m.match.HomeTeam, scoreText, m.match.AwayTeam, width-4)))
+	b.WriteString("\n")
+
+	// Date and match details sit directly under the score.
+	metaDate, metaDetails := matchMetaDisplay(m.match.Meta, m.match.Weather)
+	if metaDate != "" {
+		b.WriteString(styleSubtle.Render(padCenter(truncate(metaDate, width-4), width-4)))
+		b.WriteString("\n")
+	}
+	if metaDetails != "" {
+		b.WriteString(styleDim.Render(padCenter(truncate(metaDetails, width-4), width-4)))
+		b.WriteString("\n")
+	}
 
 	status := matchStatus(m.match)
 	headerEvents := headerEventRows(m.match.Events)
@@ -477,7 +601,7 @@ func (m Model) matchDetailContent(width int) string {
 		}
 		for _, row := range headerEvents {
 			if row.isDivider {
-				b.WriteString(renderMatchDividerRow(row.label, width-4))
+				b.WriteString(styleDim.Render(renderMatchDividerRow(row.label, width-4)))
 				b.WriteString("\n")
 				continue
 			}
@@ -491,18 +615,18 @@ func (m Model) matchDetailContent(width int) string {
 			b.WriteString("\n")
 		}
 		if ftDivider != "" {
-			b.WriteString(renderMatchDividerRow(ftDivider, width-4))
+			b.WriteString(styleDim.Render(renderMatchDividerRow(ftDivider, width-4)))
 			b.WriteString("\n")
 		}
 	}
 
 	if len(m.match.HomeLineup) > 0 || len(m.match.AwayLineup) > 0 {
 		b.WriteString("\n")
-		b.WriteString(title.Render(renderCenteredText("Lineups", width-4)))
+		b.WriteString(styleSubtle.Render(renderDividerLabel("Lineups", width-4)))
 		b.WriteString("\n")
 		b.WriteString(renderLineupRowWithMarker(
-			title.Render(m.match.HomeTeam),
-			title.Render(m.match.AwayTeam),
+			styleBold.Render(m.match.HomeTeam),
+			styleBold.Render(m.match.AwayTeam),
 			" ",
 			width-4,
 		))
@@ -534,17 +658,23 @@ func (m Model) matchDetailContent(width int) string {
 			))
 			b.WriteString("\n")
 		}
-
-	}
-
-	if metaLine := displayMatchMeta(m.match.Meta, m.match.Weather); metaLine != "" {
-		b.WriteString("\n")
-		b.WriteString(title.Render(renderCenteredText("Details", width-4)))
-		b.WriteString("\n")
-		b.WriteString(metaLine)
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// matchDetailScore formats the score for the match header with an en-dash,
+// giving it more visual weight than the compact fixture list format.
+func matchDetailScore(score string) string {
+	trimmed := strings.TrimSpace(score)
+	if trimmed == "" {
+		return "? – ?"
+	}
+	parts := strings.SplitN(trimmed, "-", 2)
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[0]) + " – " + strings.TrimSpace(parts[1])
+	}
+	return trimmed
 }
 
 func (m Model) matchViewportHeight() int {

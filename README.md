@@ -17,9 +17,9 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
 - Match details view with:
   - centered score line with scorer rows anchored to a shared minute column
   - side-aware timeline with halftime/full-time dividers
-  - compact event markers: `⚽` goal, `↕` substitution, `🟨` yellow, `🟥` red, plus status markers like `HT`, `FT`, `AET`, `PPD`, and `OFF`
-  - side-by-side lineups aligned around the same center axis
-  - match metadata grouped into a separate `Details` block
+  - compact event markers: `⚽` goal plus color-coded card blocks for yellow/red cards, alongside status markers like `HT`, `FT`, `AET`, `PPD`, and `OFF`
+  - side-by-side lineups aligned around the same center axis, with substitutions shown inline in lineup annotations rather than as separate timeline markers
+  - match date/details rendered directly under the score header
   - persistent standings/fixture context beside match details
 
 ## Run

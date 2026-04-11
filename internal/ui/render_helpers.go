@@ -91,24 +91,34 @@ func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems, width int, c
 
 	start, end := windowBounds(len(fixtures), cursor, maxItems)
 	whenWidth := 0
+	scoreWidth := 0
+	suffixWidth := 0
 	for i := start; i < end; i++ {
 		whenWidth = max(whenWidth, len([]rune(formatFixtureWhenInfo(fixtures[i].WhenInfo))))
+		scoreWidth = max(scoreWidth, ansi.StringWidth(normalizeScore(fixtures[i].Score)))
+		suffixWidth = max(suffixWidth, ansi.StringWidth(fixtureAvailabilitySuffix(&fixtures[i], width-2, compact)))
 	}
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		prefix := "  "
-		if i == cursor {
-			prefix = "> "
+		isCursor := i == cursor
+		// "› " and "  " are both 2 visible chars; accent marker on cursor row.
+		var prefix string
+		if isCursor {
+			prefix = styleAccent.Render("›") + " "
+		} else {
+			prefix = "  "
 		}
 
-		lineWidth := width - len([]rune(prefix))
+		lineWidth := width - 2 // 2-char prefix in both cases
 		suffix := fixtureAvailabilitySuffix(&fixtures[i], lineWidth, compact)
-		line := prefix + fixtureLine(&fixtures[i], lineWidth-ansi.StringWidth(suffix), whenWidth, compact)
+		line := prefix + fixtureLine(&fixtures[i], lineWidth-suffixWidth, whenWidth, scoreWidth, compact)
 		if suffix != "" {
-			line += suffix
+			line += styleDim.Render(suffix)
+		} else if suffixWidth > 0 {
+			line += strings.Repeat(" ", suffixWidth)
 		}
 		if whenInfo := formatFixtureWhenInfo(fixtures[i].WhenInfo); whenInfo != "" {
-			line += " | " + whenInfo
+			line += styleDim.Render("  " + whenInfo)
 		}
 		lines = append(lines, line)
 	}
@@ -125,10 +135,11 @@ func renderStandingsWindow(rows []site.StandingRow, fixture *site.Fixture, width
 	}
 
 	start, end := anchoredWindowBounds(len(rows), standingSelectionIndices(rows, fixture), maxItems)
+	teamWidth := standingsTeamWidth(rows, width)
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		selected := fixture != nil && (strings.EqualFold(rows[i].Team, fixture.Home) || strings.EqualFold(rows[i].Team, fixture.Away))
-		lines = append(lines, formatStandingRow(rows[i], selected, width))
+		lines = append(lines, formatStandingRow(rows[i], selected, teamWidth, width))
 	}
 
 	return lines
@@ -355,9 +366,9 @@ func eventPrefix(kind string) string {
 	case "SUB":
 		return "↕"
 	case "YC":
-		return "🟨"
+		return styleYellow.Render("■")
 	case "RC":
-		return "🟥"
+		return styleRed.Render("■")
 	default:
 		return "•"
 	}
@@ -463,7 +474,7 @@ func formatMatchMinute(minute string) string {
 func renderDividerLabel(label string, width int) string {
 	cleaned := normalizeDisplayText(label)
 	if cleaned == "" {
-		cleaned = "-"
+		cleaned = "─"
 	}
 	if width <= len([]rune(cleaned))+2 {
 		return cleaned
@@ -472,7 +483,7 @@ func renderDividerLabel(label string, width int) string {
 	pad := width - len([]rune(cleaned)) - 2
 	left := pad / 2
 	right := pad - left
-	return strings.Repeat("-", left) + " " + cleaned + " " + strings.Repeat("-", right)
+	return strings.Repeat("─", left) + " " + cleaned + " " + strings.Repeat("─", right)
 }
 
 // Align the divider score dash with the event-minute column when width allows.
@@ -482,7 +493,11 @@ func renderMatchDividerRow(label string, width int) string {
 	}
 
 	label = truncate(label, max(1, width-2))
-	dashOffset := strings.Index(label, " - ") + 1
+	dashOffset := strings.Index(label, " – ") + 1
+	if dashOffset < 1 {
+		// Fall back to ASCII dash for labels that don't contain an en-dash.
+		dashOffset = strings.Index(label, " - ") + 1
+	}
 	if dashOffset < 1 {
 		return renderDividerLabel(label, width)
 	}
@@ -491,7 +506,7 @@ func renderMatchDividerRow(label string, width int) string {
 	leftWidth := max(0, minuteAxis-1-dashOffset)
 	rightWidth := max(0, width-leftWidth-ansi.StringWidth(label)-2)
 
-	return strings.Repeat("-", leftWidth) + " " + label + " " + strings.Repeat("-", rightWidth)
+	return strings.Repeat("─", leftWidth) + " " + label + " " + strings.Repeat("─", rightWidth)
 }
 
 func matchStatus(page *site.MatchPage) string {
@@ -866,7 +881,7 @@ func lineupPlayerWidth(width int) int {
 		return max(8, (width-3-2)/2)
 	}
 
-	const eventWidth = 2
+	const eventWidth = 1
 	const gap = 0
 	return max(8, (width-1-2*eventWidth-2*gap)/2)
 }
@@ -887,7 +902,7 @@ func renderAnnotatedLineupRow(homePlayer, homeEvents, awayPlayer, awayEvents str
 		return renderLineupRow(home, away, width)
 	}
 
-	const eventWidth = 2 // one emoji wide (YC/RC or empty)
+	const eventWidth = 1 // one char wide (YC/RC block or empty)
 	const gap = 0        // names sit directly against the event column
 	playerWidth := lineupPlayerWidth(width)
 
@@ -927,7 +942,7 @@ func halftimeScore(events []site.MatchEvent) string {
 		return ""
 	}
 
-	return fmt.Sprintf("HT %d - %d", homeGoals, awayGoals)
+	return fmt.Sprintf("HT %d – %d", homeGoals, awayGoals)
 }
 
 func finalScoreLine(page *site.MatchPage) string {
@@ -960,7 +975,7 @@ func dividerScore(score string) string {
 		return normalizeScore(trimmed)
 	}
 
-	return left + " - " + right
+	return left + " – " + right
 }
 
 func matchMetaParts(meta, weather string) []string {
@@ -977,7 +992,10 @@ func matchMetaParts(meta, weather string) []string {
 			remainder = strings.TrimSpace(strings.TrimPrefix(remainder, matches[0]))
 		}
 		if remainder != "" {
-			parts = append(parts, "Ref. "+translatePolishDateText(remainder))
+			translated := translatePolishDateText(remainder)
+			// Drop trailing "(City)" — only venue/city name, not part of the ref's identity.
+			refName := strings.TrimSpace(trailingParenRe.ReplaceAllString(translated, "$1"))
+			parts = append(parts, "Ref. "+refName)
 		}
 		if len(parts) == 0 {
 			parts = append(parts, translatePolishDateText(cleanedMeta))
@@ -1016,9 +1034,8 @@ func renderMatchDetailRow(left, middle, right string, width int) string {
 		return renderSideBySide(left, middle, right, width)
 	}
 
-	// midWidth=7 with gap=0: padCenter of a 3-char minute leaves exactly 2 leading
-	// spaces between the icon and the first digit, while keeping the minute centre
-	// aligned with the dash in the HT/FT divider (which uses midWidth=11, gap=1).
+	// Keep the minute column visually centered and close to the HT/FT score dash,
+	// even as left/right event labels vary in width.
 	midWidth := 7
 	gap := 0
 	sideWidth := max(8, (width-midWidth-(gap*2))/2)
@@ -1185,17 +1202,18 @@ func abbreviateTeamName(name string) string {
 	return padRight(string(letters), 3)
 }
 
-func abbreviatedFixtureLine(fixture *site.Fixture) string {
+func abbreviatedFixtureLine(fixture *site.Fixture, scoreWidth int) string {
 	if fixture == nil {
-		return "--- ?-? ---"
+		return "--- " + padCenter("?-?", scoreWidth) + " ---"
 	}
 
-	return fmt.Sprintf("%s %s %s", abbreviateTeamName(fixture.Home), normalizeScore(fixture.Score), abbreviateTeamName(fixture.Away))
+	score := padCenter(normalizeScore(fixture.Score), scoreWidth)
+	return fmt.Sprintf("%s %s %s", abbreviateTeamName(fixture.Home), score, abbreviateTeamName(fixture.Away))
 }
 
-func fixtureLine(fixture *site.Fixture, width, whenWidth int, compact bool) string {
+func fixtureLine(fixture *site.Fixture, width, whenWidth, scoreWidth int, compact bool) string {
 	if compact {
-		return abbreviatedFixtureLine(fixture)
+		return abbreviatedFixtureLine(fixture, scoreWidth)
 	}
 	if fixture == nil {
 		return "--- ?-? ---"
@@ -1204,8 +1222,8 @@ func fixtureLine(fixture *site.Fixture, width, whenWidth int, compact bool) stri
 		return fmt.Sprintf("%s %s %s", fixture.Home, normalizeScore(fixture.Score), fixture.Away)
 	}
 
-	score := normalizeScore(fixture.Score)
-	reserved := len([]rune(score)) + 2
+	score := padCenter(normalizeScore(fixture.Score), scoreWidth)
+	reserved := scoreWidth + 2
 	if whenWidth > 0 {
 		reserved += 3 + whenWidth
 	}
@@ -1247,14 +1265,31 @@ func formatFetchTime(ts time.Time) string {
 	return ts.Format("15:04:05")
 }
 
-func formatStandingRow(row site.StandingRow, selected bool, width int) string {
-	prefix := "  "
-	if selected {
-		prefix = "> "
+func standingsTeamWidth(rows []site.StandingRow, width int) int {
+	const reserved = 21
+	minWidth := ansi.StringWidth("Team")
+	maxWidth := max(minWidth, width-reserved)
+	if maxWidth <= minWidth {
+		return minWidth
 	}
 
-	line := fmt.Sprintf("%s%2d %-18s %2d %2d %2d %2d %3d", prefix, row.Position, truncate(row.Team, 18), row.Played, row.Won, row.Drawn, row.Lost, row.Points)
-	return truncate(line, max(12, width))
+	teamWidth := minWidth
+	for _, row := range rows {
+		teamWidth = max(teamWidth, ansi.StringWidth(row.Team))
+	}
+	if teamWidth > maxWidth {
+		return maxWidth
+	}
+	return teamWidth
+}
+
+func formatStandingRow(row site.StandingRow, selected bool, teamWidth, width int) string {
+	line := fmt.Sprintf("  %2d %-*s %2d %2d %2d %2d %3d", row.Position, teamWidth, truncate(row.Team, teamWidth), row.Played, row.Won, row.Drawn, row.Lost, row.Points)
+	line = truncate(line, max(12, width))
+	if selected {
+		return styleBold.Render(line)
+	}
+	return line
 }
 
 func parseRoundNumber(name string, fallback int) string {
@@ -1323,6 +1358,24 @@ func displayRoundLabel(name string, fallback int) string {
 
 func displayMatchMeta(meta, weather string) string {
 	return strings.Join(matchMetaParts(meta, weather), " | ")
+}
+
+// matchMetaDisplay splits meta parts into a prominent date line and a secondary
+// details line (attendance, ref, weather). Returns empty strings when absent.
+func matchMetaDisplay(meta, weather string) (date, details string) {
+	parts := matchMetaParts(meta, weather)
+	if len(parts) == 0 {
+		return "", ""
+	}
+	if matchDatePrefixRe.MatchString(parts[0]) {
+		date = parts[0]
+		if len(parts) > 1 {
+			details = strings.Join(parts[1:], "  ·  ")
+		}
+		return
+	}
+	details = strings.Join(parts, "  ·  ")
+	return
 }
 
 func trimEventMinute(event site.MatchEvent) string {
