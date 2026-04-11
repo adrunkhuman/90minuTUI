@@ -1034,9 +1034,8 @@ func renderMatchDetailRow(left, middle, right string, width int) string {
 		return renderSideBySide(left, middle, right, width)
 	}
 
-	// midWidth=7 with gap=0: padCenter of a 3-char minute leaves exactly 2 leading
-	// spaces between the icon and the first digit, while keeping the minute centre
-	// aligned with the dash in the HT/FT divider (which uses midWidth=11, gap=1).
+	// Keep the minute column visually centered and close to the HT/FT score dash,
+	// even as left/right event labels vary in width.
 	midWidth := 7
 	gap := 0
 	sideWidth := max(8, (width-midWidth-(gap*2))/2)

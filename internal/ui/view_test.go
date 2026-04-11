@@ -47,7 +47,7 @@ func TestLeagueSketchViewShowsLeagueTitleOnlyOnce(t *testing.T) {
 	}
 }
 
-func TestLeagueViewUsesTopContextBar(t *testing.T) {
+func TestLeagueViewUsesTwoLineTopBar(t *testing.T) {
 	m := sketchModel()
 	m.width = 120
 	m.height = 18
@@ -374,10 +374,10 @@ func TestMatchDetailKeepsSubstitutionsOnlyInLineups(t *testing.T) {
 }
 
 func TestMatchDetailRowsAnchorTowardCenteredMinuteColumn(t *testing.T) {
-	line := renderMatchDetailRow("Wdowiak ⚽", "39'", "↕ Pllana (4)", 76)
+	line := renderMatchDetailRow("Wdowiak ⚽", "39'", "Pllana ■", 76)
 	minuteIdx := strings.Index(line, "39'")
 	leftIdx := strings.Index(line, "Wdowiak ⚽")
-	rightIdx := strings.Index(line, "↕ Pllana (4)")
+	rightIdx := strings.Index(line, "Pllana ■")
 	if minuteIdx <= 0 || leftIdx < 0 || rightIdx < 0 {
 		t.Fatalf("expected all columns rendered, got %q", line)
 	}
@@ -411,10 +411,10 @@ func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 	divider := renderMatchDividerRow("HT 1 - 0", 76)
 	// The divider label stays visually centered, and its score dash should remain close
 	// to the minute center used by event rows.
-	// divider uses '─' (multi-byte), so normalise to '-' before byte-indexing.
+	// Divider fill uses '─', so normalise it to '-' before byte-indexing.
 	dividerASCII := strings.ReplaceAll(divider, "─", "-")
 	rowMid := strings.Index(row, "39'") + 1                // '9' = middle char of "39'"
-	dividerMid := strings.Index(dividerASCII, "1 - 0") + 2 // '-' at offset 2 within "1 - 0"
+	dividerMid := strings.Index(dividerASCII, "1 - 0") + 2 // score dash within the divider label
 	if diff := rowMid - dividerMid; diff < -2 || diff > 2 {
 		t.Fatalf("expected divider score dash to align with minute centre\nrow: %q\ndiv: %q", row, divider)
 	}
@@ -422,7 +422,7 @@ func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 
 func TestMatchDividerFillsCenterPaddingWithDashes(t *testing.T) {
 	divider := renderMatchDividerRow("HT 0 - 0", 76)
-	// Padding chars are '─'; label uses ASCII ' - '.
+	// Padding chars are '─'; the test label stays ASCII so byte positions are stable.
 	if strings.Contains(divider, "HT 0 - 0   ") {
 		t.Fatalf("expected divider to avoid wide trailing spaces after label, got %q", divider)
 	}

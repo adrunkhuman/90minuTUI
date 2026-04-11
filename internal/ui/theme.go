@@ -8,14 +8,14 @@ var (
 	colorDim    = lipgloss.Color("240") // dark grey
 	colorSubtle = lipgloss.Color("243") // mid grey
 
-	// Semantic card colors — only used for YC/RC lineup markers.
+	// Semantic card colors for YC/RC markers across match detail views.
 	colorYellow = lipgloss.Color("226")
 	colorRed    = lipgloss.Color("196")
 
-	styleAccent  = lipgloss.NewStyle().Foreground(colorAccent)
-	styleDim     = lipgloss.NewStyle().Foreground(colorDim)
-	styleSubtle  = lipgloss.NewStyle().Foreground(colorSubtle)
-	styleBold    = lipgloss.NewStyle().Bold(true)
-	styleYellow  = lipgloss.NewStyle().Foreground(colorYellow)
-	styleRed     = lipgloss.NewStyle().Foreground(colorRed)
+	styleAccent = lipgloss.NewStyle().Foreground(colorAccent)
+	styleDim    = lipgloss.NewStyle().Foreground(colorDim)
+	styleSubtle = lipgloss.NewStyle().Foreground(colorSubtle)
+	styleBold   = lipgloss.NewStyle().Bold(true)
+	styleYellow = lipgloss.NewStyle().Foreground(colorYellow)
+	styleRed    = lipgloss.NewStyle().Foreground(colorRed)
 )
