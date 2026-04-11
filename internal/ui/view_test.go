@@ -133,8 +133,10 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 		"17'",
 		"62'",
 		"FT 1 – 2",
-		"Details",
-		"13 March 2026, 18:00 | Attendance 3542 | Ref. Damian Kos | Weather 15 C",
+		"13 March 2026, 18:00",
+		"Attendance 3542",
+		"Ref. Damian Kos",
+		"Weather 15 C",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected match view to contain %q\n%s", want, view)
@@ -201,7 +203,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		"❌", "52'", // away missed penalty row
 		"Szkurin", "60'", // second home goal row
 		"K. Czubak", "70'", // away goal row
-		"🟥", "85'", // away red card row
+		"■", "85'", // away red card row
 		"FT 2 – 1", // FT divider with score
 	} {
 		if !strings.Contains(plainView, want) {
@@ -241,7 +243,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	for _, want := range []string{
 		"46'",      // sub minute visible at outer edge of player name
 		"D. Nowak", // sub-on player visible immediately after sub-off
-		"🟥",        // red card badge in event column
+		"■",        // red card badge in event column
 	} {
 		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected lineup section to contain %q\n%s", want, view)
@@ -411,7 +413,7 @@ func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 	// to the minute center used by event rows.
 	// divider uses '─' (multi-byte), so normalise to '-' before byte-indexing.
 	dividerASCII := strings.ReplaceAll(divider, "─", "-")
-	rowMid := strings.Index(row, "39'") + 1              // '9' = middle char of "39'"
+	rowMid := strings.Index(row, "39'") + 1                // '9' = middle char of "39'"
 	dividerMid := strings.Index(dividerASCII, "1 - 0") + 2 // '-' at offset 2 within "1 - 0"
 	if diff := rowMid - dividerMid; diff < -2 || diff > 2 {
 		t.Fatalf("expected divider score dash to align with minute centre\nrow: %q\ndiv: %q", row, divider)
@@ -491,8 +493,8 @@ func TestHeaderEventRowsIncludesRedCardsAndHTDivider(t *testing.T) {
 	if strings.TrimSpace(rows[0].minute) != "39'" {
 		t.Fatalf("expected first goal minute 39' in center, got %q", rows[0].minute)
 	}
-	if !strings.Contains(ansi.Strip(rows[3].label), "🟥") {
-		t.Fatalf("expected red card row to contain 🟥, got %q", ansi.Strip(rows[3].label))
+	if !strings.Contains(ansi.Strip(rows[3].label), "■") {
+		t.Fatalf("expected red card row to contain ■, got %q", ansi.Strip(rows[3].label))
 	}
 	if rows[3].minute != "85'" {
 		t.Fatalf("expected red card minute 85', got %q", rows[3].minute)
@@ -876,6 +878,46 @@ func TestRenderFixtureWindowAlignsFullFixtureColumns(t *testing.T) {
 	}
 }
 
+func TestRenderFixtureWindowKeepsColumnsAlignedWhenDetailsUnavailable(t *testing.T) {
+	fixtures := []site.Fixture{
+		{Home: "Cracovia", Away: "Arka Gdynia", Score: "-", WhenInfo: "12 kwietnia, 12:15"},
+		{Home: "Legia Warszawa", Away: "Gornik Zabrze", Score: "1-1", WhenInfo: "11 kwietnia, 20:15", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=3"},
+	}
+	lines := renderFixtureWindow(fixtures, 0, 5, 84, false)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d", len(lines))
+	}
+
+	norm := func(s string) string { return strings.Replace(ansi.Strip(s), "›", " ", 1) }
+	n0, n1 := norm(lines[0]), norm(lines[1])
+	if strings.Index(n0[2:], "Arka Gdynia") != strings.Index(n1[2:], "Gornik Zabrze") {
+		t.Fatalf("expected aligned away-team column, got %q and %q", lines[0], lines[1])
+	}
+	if strings.Index(n0[2:], "12/04") != strings.Index(n1[2:], "11/04") {
+		t.Fatalf("expected aligned date column, got %q and %q", lines[0], lines[1])
+	}
+	if !strings.Contains(lines[0], "[no details]") {
+		t.Fatalf("expected unavailable-details marker, got %q", lines[0])
+	}
+}
+
+func TestStandingsTeamWidthUsesAvailableSpaceWithoutOverexpanding(t *testing.T) {
+	rows := []site.StandingRow{
+		{Team: "Legia Warszawa"},
+		{Team: "Bruk-Bet Termalica Nieciecza"},
+	}
+
+	if got := standingsTeamWidth(rows, 60); got != ansi.StringWidth("Bruk-Bet Termalica Nieciecza") {
+		t.Fatalf("expected long team to fit when space allows, got %d", got)
+	}
+	if got := standingsTeamWidth(rows, 80); got != ansi.StringWidth("Bruk-Bet Termalica Nieciecza") {
+		t.Fatalf("expected width to stop at longest team, got %d", got)
+	}
+	if got := standingsTeamWidth(rows, 40); got != 19 {
+		t.Fatalf("expected width capped by available space, got %d", got)
+	}
+}
+
 func TestLeagueViewCanShowSelectorPopup(t *testing.T) {
 	m := sketchModel()
 	m.width = 120
@@ -921,6 +963,53 @@ func TestSelectorPaneWidthsFavorLeagues(t *testing.T) {
 	left, right := selectorPaneWidths(40, renderSeasonsWindow(sketchModel().seasons, 0))
 	if left >= right {
 		t.Fatalf("expected leagues pane wider than seasons pane, got left=%d right=%d", left, right)
+	}
+}
+
+func TestSelectorPopupWidthExpandsForVisibleLeagueNames(t *testing.T) {
+	seasonLines := renderSeasonsWindow(sketchModel().seasons, 0)
+	competitionLines := []string{
+		"Decathlon IV liga 2025/2026, grupa: mazowiecka",
+		"Keeza Liga okregowa 2025/2026, grupa: Ciechanow-Ostroleka",
+	}
+
+	got := selectorPopupWidth(120, seasonLines, "Ligi regionalne 2025/26 - Mazowiecki ZPN", competitionLines)
+	if got <= 68 {
+		t.Fatalf("expected popup wider than legacy cap for long visible league names, got %d", got)
+	}
+
+	short := selectorPopupWidth(120, seasonLines, "Leagues", []string{"Ekstraklasa", "I liga"})
+	if short >= got {
+		t.Fatalf("expected short content popup narrower than long-content popup, got short=%d long=%d", short, got)
+	}
+}
+
+func TestSelectorPopupWidthDoesNotDependOnCurrentScrollWindow(t *testing.T) {
+	m := sketchModel()
+	m.competitions = make([]site.Competition, 0, 24)
+	for i := 0; i < 24; i++ {
+		name := fmt.Sprintf("League %02d", i)
+		if i == 22 {
+			name = "Ligi regionalne 2025/26 - Mazowiecki ZPN, grupa: Ciechanow-Ostroleka i okolice"
+		}
+		m.competitions = append(m.competitions, site.Competition{Name: name})
+	}
+
+	seasonLines := renderSeasonsWindow(m.seasons, m.seasonCursor)
+	rightHeading := "Leagues"
+	allLines := selectorCompetitionWidthLines(m.competitions)
+	widthFromAll := selectorPopupWidth(120, seasonLines, rightHeading, allLines)
+
+	visibleNearTop := renderCompetitionWindow(m.competitions, 0)
+	visibleNearBottom := renderCompetitionWindow(m.competitions, len(m.competitions)-1)
+	widthTop := selectorPopupWidth(120, seasonLines, rightHeading, visibleNearTop)
+	widthBottom := selectorPopupWidth(120, seasonLines, rightHeading, visibleNearBottom)
+
+	if widthFromAll < widthTop || widthFromAll < widthBottom {
+		t.Fatalf("expected all-items width to cover every scroll window, got all=%d top=%d bottom=%d", widthFromAll, widthTop, widthBottom)
+	}
+	if widthTop == widthBottom {
+		t.Fatalf("expected visible-window widths to differ in this fixture setup, got top=%d bottom=%d", widthTop, widthBottom)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/adrunkhuman/90minuTUI/internal/site"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -83,7 +84,13 @@ func barLine(left, right string, width int) string {
 }
 
 func (m Model) selectorOverlayView(body string) string {
-	popup := m.selectorPopupView(selectorPopupWidth(m.width))
+	seasonLines := renderSeasonsWindow(m.seasons, m.seasonCursor)
+	rightHeading := "Leagues"
+	if strings.TrimSpace(m.competitionTitle) != "" {
+		rightHeading = m.competitionTitle
+	}
+	competitionLines := selectorCompetitionWidthLines(m.competitions)
+	popup := m.selectorPopupView(selectorPopupWidth(m.width, seasonLines, rightHeading, competitionLines))
 	bodyLines := strings.Split(body, "\n")
 	totalHeight := max(len(bodyLines), max(1, m.bodyHeightLimit()))
 	for len(bodyLines) < totalHeight {
@@ -131,6 +138,7 @@ func overlayLine(base, overlay string, leftWidth int) string {
 func (m Model) selectorPopupView(width int) string {
 	innerWidth := max(24, width-4)
 	seasonLines := renderSeasonsWindow(m.seasons, m.seasonCursor)
+	competitionLines := renderCompetitionWindow(m.competitions, m.competitionCursor)
 	leftWidth, rightWidth := selectorPaneWidths(innerWidth, seasonLines)
 
 	rightHeading := "Leagues"
@@ -139,7 +147,7 @@ func (m Model) selectorPopupView(width int) string {
 	}
 
 	left := selectorPaneView(leftWidth, "Season", m.focus == focusSeasons, seasonLines)
-	right := selectorPaneView(rightWidth, rightHeading, m.focus == focusCompetitions, renderCompetitionWindow(m.competitions, m.competitionCursor))
+	right := selectorPaneView(rightWidth, rightHeading, m.focus == focusCompetitions, competitionLines)
 
 	// Vertical divider — height matches the taller pane.
 	leftLines := strings.Split(left, "\n")
@@ -252,7 +260,11 @@ func (m Model) standingsPaneViewBounded(width int) string {
 		return base.Render(b.String())
 	}
 
-	colHeader := styleSubtle.Render(truncate("  # Team                P  W  D  L Pts", width-2))
+	teamWidth := standingsTeamWidth(m.league.Standings, width-2)
+	colHeader := styleSubtle.Render(truncate(
+		fmt.Sprintf("  %2s %-*s %2s %2s %2s %2s %3s", "#", teamWidth, "Team", "P", "W", "D", "L", "Pts"),
+		width-2,
+	))
 	b.WriteString(colHeader)
 	b.WriteString("\n")
 	for _, line := range renderStandingsWindow(m.league.Standings, m.currentFixture(), width-2, m.standingsRowLimit()) {
@@ -519,11 +531,42 @@ func (m Model) statusBarView() string {
 	return lipgloss.NewStyle().Width(m.width).Padding(0, 1).Reverse(true).Render(truncate(status, m.width-2))
 }
 
-func selectorPopupWidth(total int) int {
+func selectorPopupWidth(total int, seasonLines []string, rightHeading string, competitionLines []string) int {
 	if total <= 0 {
 		return 36
 	}
-	return clamp(total/2+4, 40, 68)
+
+	leftWidth, rightWidth := selectorContentWidths(seasonLines, rightHeading, competitionLines)
+	desired := leftWidth + 1 + rightWidth + 4 // divider + panel border/padding
+	return clamp(desired, 40, max(40, total-2))
+}
+
+func selectorContentWidths(seasonLines []string, rightHeading string, competitionLines []string) (int, int) {
+	seasonWidth := lipgloss.Width("Season")
+	for _, line := range seasonLines {
+		seasonWidth = max(seasonWidth, lipgloss.Width(line))
+	}
+	leftWidth := clamp(seasonWidth+1, 14, 18)
+
+	rightWidth := lipgloss.Width(rightHeading)
+	for _, line := range competitionLines {
+		rightWidth = max(rightWidth, lipgloss.Width(line))
+	}
+	rightWidth = max(16, rightWidth+1)
+
+	return leftWidth, rightWidth
+}
+
+func selectorCompetitionWidthLines(items []site.Competition) []string {
+	if len(items) == 0 {
+		return nil
+	}
+
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		lines = append(lines, "  "+item.Name)
+	}
+	return lines
 }
 
 func (m Model) matchDetailContent(width int) string {
@@ -534,6 +577,17 @@ func (m Model) matchDetailContent(width int) string {
 	scoreText := matchDetailScore(m.match.Score)
 	b.WriteString(styleBold.Render(renderMatchDetailRow(m.match.HomeTeam, scoreText, m.match.AwayTeam, width-4)))
 	b.WriteString("\n")
+
+	// Date and match details sit directly under the score.
+	metaDate, metaDetails := matchMetaDisplay(m.match.Meta, m.match.Weather)
+	if metaDate != "" {
+		b.WriteString(styleSubtle.Render(padCenter(truncate(metaDate, width-4), width-4)))
+		b.WriteString("\n")
+	}
+	if metaDetails != "" {
+		b.WriteString(styleDim.Render(padCenter(truncate(metaDetails, width-4), width-4)))
+		b.WriteString("\n")
+	}
 
 	status := matchStatus(m.match)
 	headerEvents := headerEventRows(m.match.Events)
@@ -573,7 +627,7 @@ func (m Model) matchDetailContent(width int) string {
 		b.WriteString(renderLineupRowWithMarker(
 			styleBold.Render(m.match.HomeTeam),
 			styleBold.Render(m.match.AwayTeam),
-			"│",
+			" ",
 			width-4,
 		))
 		b.WriteString("\n")
@@ -604,13 +658,6 @@ func (m Model) matchDetailContent(width int) string {
 			))
 			b.WriteString("\n")
 		}
-	}
-
-	if metaLine := displayMatchMeta(m.match.Meta, m.match.Weather); metaLine != "" {
-		b.WriteString("\n")
-		b.WriteString(styleSubtle.Render(renderDividerLabel("Details", width-4)))
-		b.WriteString("\n")
-		b.WriteString(styleDim.Render(metaLine))
 	}
 
 	return strings.TrimRight(b.String(), "\n")
