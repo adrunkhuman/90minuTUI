@@ -22,15 +22,12 @@ func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
 	view := m.View()
 	for _, want := range []string{
 		"PKO Bank Polski Ekstraklasa 2025/2026",
-		"Standings",
 		"# Team",
 		"Legia Warszawa",
-		"Fixtures",
 		"Round 1",
-		"Legia Warszawa",
 		"Lech Poznan",
-		"| 24/01 20:30",
-		"fetched: 21:15:00",
+		"24/01 20:30",
+		"21:15:00",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
@@ -87,10 +84,10 @@ func TestMatchSketchViewShowsLoadingState(t *testing.T) {
 
 	view := m.View()
 	for _, want := range []string{
-		"Standings",
-		"Fixtures",
+		"# Team",
+		"Round 1",
 		"LEG 2-1 LEC",
-		"Loading match details...",
+		"Loading…",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
@@ -129,13 +126,13 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 	for _, want := range []string{
 		"PKO Bank Polski Ekstraklasa 2025/2026",
 		"Bruk-Bet Termalica Nieciecza",
-		"1-2",
+		"1 – 2",
 		"Motor Lublin",
 		"K. Kubica",
 		"S. Mraz",
 		"17'",
 		"62'",
-		"FT 1 - 2",
+		"FT 1 – 2",
 		"Details",
 		"13 March 2026, 18:00 | Attendance 3542 | Ref. Damian Kos | Weather 15 C",
 	} {
@@ -192,7 +189,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	plainView := ansi.Strip(view)
 	_, centerWidth, _ := matchLayoutWidths(m.width)
 	content := ansi.Strip(m.matchDetailContent(centerWidth))
-	scoreHeader := renderMatchDetailRow("GKS Katowice", "2-1", "Lechia Gdansk", centerWidth-4)
+	scoreHeader := renderMatchDetailRow("GKS Katowice", matchDetailScore("2-1"), "Lechia Gdansk", centerWidth-4)
 	spacerRow := renderMatchDetailRow("", "", "", centerWidth-4)
 	if !strings.Contains(content, scoreHeader+"\n"+spacerRow+"\n") {
 		t.Fatalf("expected spacer row between score header and event log\n%s", content)
@@ -200,12 +197,12 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 
 	for _, want := range []string{
 		"Wdowiak", "39'", "⚽", // home goal row (minute in center, icon adjacent)
-		"HT 1 - 0", // HT divider with score
+		"HT 1 – 0", // HT divider with score
 		"❌", "52'", // away missed penalty row
 		"Szkurin", "60'", // second home goal row
 		"K. Czubak", "70'", // away goal row
 		"🟥", "85'", // away red card row
-		"FT 2 - 1", // FT divider with score
+		"FT 2 – 1", // FT divider with score
 	} {
 		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected match view to contain %q\n%s", want, view)
@@ -223,12 +220,12 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 
 	headerIndexes := []int{
 		strings.Index(plainView, "39'"),
-		strings.Index(plainView, "HT 1 - 0"),
+		strings.Index(plainView, "HT 1 – 0"),
 		strings.Index(plainView, "52'"),
 		strings.Index(plainView, "60'"),
 		strings.Index(plainView, "70'"),
 		strings.Index(plainView, "85'"),
-		strings.Index(plainView, "FT 2 - 1"),
+		strings.Index(plainView, "FT 2 – 1"),
 	}
 	for _, idx := range headerIndexes {
 		if idx < 0 {
@@ -412,8 +409,10 @@ func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 	divider := renderMatchDividerRow("HT 1 - 0", 76)
 	// The divider label stays visually centered, and its score dash should remain close
 	// to the minute center used by event rows.
-	rowMid := strings.Index(row, "39'") + 1           // '9' = middle char of "39'"
-	dividerMid := strings.Index(divider, "1 - 0") + 2 // '-' at offset 2 within "1 - 0"
+	// divider uses '─' (multi-byte), so normalise to '-' before byte-indexing.
+	dividerASCII := strings.ReplaceAll(divider, "─", "-")
+	rowMid := strings.Index(row, "39'") + 1              // '9' = middle char of "39'"
+	dividerMid := strings.Index(dividerASCII, "1 - 0") + 2 // '-' at offset 2 within "1 - 0"
 	if diff := rowMid - dividerMid; diff < -2 || diff > 2 {
 		t.Fatalf("expected divider score dash to align with minute centre\nrow: %q\ndiv: %q", row, divider)
 	}
@@ -421,11 +420,15 @@ func TestMatchDividerSharesCenteredMinuteColumn(t *testing.T) {
 
 func TestMatchDividerFillsCenterPaddingWithDashes(t *testing.T) {
 	divider := renderMatchDividerRow("HT 0 - 0", 76)
+	// Padding chars are '─'; label uses ASCII ' - '.
 	if strings.Contains(divider, "HT 0 - 0   ") {
 		t.Fatalf("expected divider to avoid wide trailing spaces after label, got %q", divider)
 	}
 	if !strings.Contains(divider, " HT 0 - 0 ") {
 		t.Fatalf("expected divider to keep single spaces around label, got %q", divider)
+	}
+	if !strings.Contains(divider, "─") {
+		t.Fatalf("expected divider to use box-drawing fill character, got %q", divider)
 	}
 }
 
@@ -479,8 +482,8 @@ func TestHeaderEventRowsIncludesRedCardsAndHTDivider(t *testing.T) {
 	if !rows[1].isDivider {
 		t.Fatalf("expected row 1 to be HT divider, got %#v", rows[1])
 	}
-	if rows[1].label != "HT 1 - 0" {
-		t.Fatalf("expected HT divider label %q, got %q", "HT 1 - 0", rows[1].label)
+	if rows[1].label != "HT 1 – 0" {
+		t.Fatalf("expected HT divider label %q, got %q", "HT 1 – 0", rows[1].label)
 	}
 	if ansi.Strip(rows[0].label) != "Wdowiak ⚽" {
 		t.Fatalf("unexpected first goal label: %q", ansi.Strip(rows[0].label))
@@ -507,8 +510,8 @@ func TestHeaderEventRowsIncludesGoallessHTDividerBeforeSecondHalfEvents(t *testi
 	if !rows[0].isDivider {
 		t.Fatalf("expected row 0 to be HT divider, got %#v", rows[0])
 	}
-	if rows[0].label != "HT 0 - 0" {
-		t.Fatalf("expected HT divider label %q, got %q", "HT 0 - 0", rows[0].label)
+	if rows[0].label != "HT 0 – 0" {
+		t.Fatalf("expected HT divider label %q, got %q", "HT 0 – 0", rows[0].label)
 	}
 	if rows[1].minute != "60'" {
 		t.Fatalf("expected second-half event minute 60', got %q", rows[1].minute)
@@ -528,7 +531,7 @@ func TestHeaderEventRowsKeepsHTDividerWhenSecondHalfHasOnlyHiddenEvents(t *testi
 	if rows[0].isDivider {
 		t.Fatalf("expected first row to be visible event, got %#v", rows[0])
 	}
-	if !rows[1].isDivider || rows[1].label != "HT 1 - 0" {
+	if !rows[1].isDivider || rows[1].label != "HT 1 – 0" {
 		t.Fatalf("expected final row to be HT divider, got %#v", rows[1])
 	}
 }
@@ -747,7 +750,7 @@ func TestMatchDetailContentShowsFTDividerWithoutVisibleHeaderEvents(t *testing.T
 	}
 
 	content := ansi.Strip(m.matchDetailContent(80))
-	if !strings.Contains(content, "FT 1 - 0") {
+	if !strings.Contains(content, "FT 1 – 0") {
 		t.Fatalf("expected FT divider even without visible header events\n%s", content)
 	}
 }
@@ -766,7 +769,7 @@ func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {
 
 func TestFinalScoreLineUsesMatchScore(t *testing.T) {
 	got := finalScoreLine(&site.MatchPage{Score: "2-0"})
-	if got != "FT 2 - 0" {
+	if got != "FT 2 – 0" {
 		t.Fatalf("unexpected final score line: %q", got)
 	}
 }
@@ -801,7 +804,7 @@ func TestRenderFixtureWindowUsesFullNamesOutsideMatchSidebar(t *testing.T) {
 		MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1",
 	}}, 0, 5, 80, false)
 
-	if len(lines) != 1 || !strings.Contains(lines[0], "Legia Warszawa") || !strings.Contains(lines[0], "Lech Poznan") || !strings.Contains(lines[0], "| 24/01 20:30") {
+	if len(lines) != 1 || !strings.Contains(ansi.Strip(lines[0]), "Legia Warszawa") || !strings.Contains(ansi.Strip(lines[0]), "Lech Poznan") || !strings.Contains(ansi.Strip(lines[0]), "24/01 20:30") {
 		t.Fatalf("expected full fixture line, got %v", lines)
 	}
 }
@@ -815,7 +818,9 @@ func TestRenderFixtureWindowUsesCompactNamesInMatchSidebar(t *testing.T) {
 		MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1",
 	}}, 0, 5, 40, true)
 
-	if len(lines) != 1 || !strings.Contains(lines[0], "LEG 2-1 LEC | 24/01 20:30") {
+	// Compact fixture: abbreviated names + score, then when-info separated by two spaces (no pipe).
+	stripped := ansi.Strip(lines[0])
+	if len(lines) != 1 || !strings.Contains(stripped, "LEG 2-1 LEC") || !strings.Contains(stripped, "24/01 20:30") {
 		t.Fatalf("expected compact fixture line, got %v", lines)
 	}
 }
@@ -845,7 +850,7 @@ func TestStatusBarViewReflectsFixtureDrillability(t *testing.T) {
 	m.league.Rounds[0].Fixtures[0].MatchURL = ""
 	m.league.Rounds[0].Fixtures[0].MatchID = ""
 	status = m.statusBarView()
-	if !strings.Contains(status, "enter: unavailable") {
+	if !strings.Contains(status, "enter: unavail") {
 		t.Fatalf("expected non-drillable status hint, got %q", status)
 	}
 }
@@ -859,10 +864,14 @@ func TestRenderFixtureWindowAlignsFullFixtureColumns(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 lines, got %d", len(lines))
 	}
-	if strings.Index(lines[0][2:], "|") != strings.Index(lines[1][2:], "|") {
+	// Normalise: strip ANSI then replace the multi-byte cursor marker '›' with a space
+	// so both lines have the same 2-byte prefix and byte positions match visual positions.
+	norm := func(s string) string { return strings.Replace(ansi.Strip(s), "›", " ", 1) }
+	n0, n1 := norm(lines[0]), norm(lines[1])
+	if strings.Index(n0[2:], "13/03") != strings.Index(n1[2:], "14/03") {
 		t.Fatalf("expected aligned date column, got %q and %q", lines[0], lines[1])
 	}
-	if strings.Index(lines[0][2:], "1-2") != strings.Index(lines[1][2:], "1-2") {
+	if strings.Index(n0[2:], "1-2") != strings.Index(n1[2:], "1-2") {
 		t.Fatalf("expected score column alignment, got %q and %q", lines[0], lines[1])
 	}
 }
@@ -876,11 +885,11 @@ func TestLeagueViewCanShowSelectorPopup(t *testing.T) {
 
 	view := m.View()
 	for _, want := range []string{
-		"Standings",
+		"# Team",
 		"Legia Warszawa",
 		"Lech Poznan",
-		"| 24/01 20:30",
-		"Season + league",
+		"24/01 20:30",
+		"Season",
 		"2024/2025",
 		"Ekstraklasa",
 		"esc: close",
@@ -933,7 +942,7 @@ func TestSelectorPopupHandlesShortTerminal(t *testing.T) {
 	m.focus = focusCompetitions
 
 	view := m.View()
-	for _, want := range []string{"Season + league", "Fixtures"} {
+	for _, want := range []string{"Season", "Round"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
 		}
@@ -991,7 +1000,7 @@ func TestMatchViewScrollsLongContent(t *testing.T) {
 	if !strings.Contains(view, "Player01") {
 		t.Fatalf("expected initial match view to show top content\n%s", view)
 	}
-	for _, want := range []string{"Standings", "Fixtures", "LEG 2-1 LEC"} {
+	for _, want := range []string{"# Team", "Round", "LEG 2-1 LEC"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected match view to keep sidebar content %q visible\n%s", want, view)
 		}
@@ -1005,7 +1014,7 @@ func TestMatchViewScrollsLongContent(t *testing.T) {
 	if !strings.Contains(view, "Player20") {
 		t.Fatalf("expected scrolled match view to show later content\n%s", view)
 	}
-	for _, want := range []string{"Standings", "Fixtures", "LEG 2-1 LEC"} {
+	for _, want := range []string{"# Team", "Round", "LEG 2-1 LEC"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected scrolled match view to keep sidebar content %q visible\n%s", want, view)
 		}

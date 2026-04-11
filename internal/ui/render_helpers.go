@@ -96,19 +96,23 @@ func renderFixtureWindow(fixtures []site.Fixture, cursor, maxItems, width int, c
 	}
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		prefix := "  "
-		if i == cursor {
-			prefix = "> "
+		isCursor := i == cursor
+		// "› " and "  " are both 2 visible chars; accent marker on cursor row.
+		var prefix string
+		if isCursor {
+			prefix = styleAccent.Render("›") + " "
+		} else {
+			prefix = "  "
 		}
 
-		lineWidth := width - len([]rune(prefix))
+		lineWidth := width - 2 // 2-char prefix in both cases
 		suffix := fixtureAvailabilitySuffix(&fixtures[i], lineWidth, compact)
 		line := prefix + fixtureLine(&fixtures[i], lineWidth-ansi.StringWidth(suffix), whenWidth, compact)
 		if suffix != "" {
-			line += suffix
+			line += styleDim.Render(suffix)
 		}
 		if whenInfo := formatFixtureWhenInfo(fixtures[i].WhenInfo); whenInfo != "" {
-			line += " | " + whenInfo
+			line += styleDim.Render("  " + whenInfo)
 		}
 		lines = append(lines, line)
 	}
@@ -463,7 +467,7 @@ func formatMatchMinute(minute string) string {
 func renderDividerLabel(label string, width int) string {
 	cleaned := normalizeDisplayText(label)
 	if cleaned == "" {
-		cleaned = "-"
+		cleaned = "─"
 	}
 	if width <= len([]rune(cleaned))+2 {
 		return cleaned
@@ -472,7 +476,7 @@ func renderDividerLabel(label string, width int) string {
 	pad := width - len([]rune(cleaned)) - 2
 	left := pad / 2
 	right := pad - left
-	return strings.Repeat("-", left) + " " + cleaned + " " + strings.Repeat("-", right)
+	return strings.Repeat("─", left) + " " + cleaned + " " + strings.Repeat("─", right)
 }
 
 // Align the divider score dash with the event-minute column when width allows.
@@ -482,7 +486,11 @@ func renderMatchDividerRow(label string, width int) string {
 	}
 
 	label = truncate(label, max(1, width-2))
-	dashOffset := strings.Index(label, " - ") + 1
+	dashOffset := strings.Index(label, " – ") + 1
+	if dashOffset < 1 {
+		// Fall back to ASCII dash for labels that don't contain an en-dash.
+		dashOffset = strings.Index(label, " - ") + 1
+	}
 	if dashOffset < 1 {
 		return renderDividerLabel(label, width)
 	}
@@ -491,7 +499,7 @@ func renderMatchDividerRow(label string, width int) string {
 	leftWidth := max(0, minuteAxis-1-dashOffset)
 	rightWidth := max(0, width-leftWidth-ansi.StringWidth(label)-2)
 
-	return strings.Repeat("-", leftWidth) + " " + label + " " + strings.Repeat("-", rightWidth)
+	return strings.Repeat("─", leftWidth) + " " + label + " " + strings.Repeat("─", rightWidth)
 }
 
 func matchStatus(page *site.MatchPage) string {
@@ -927,7 +935,7 @@ func halftimeScore(events []site.MatchEvent) string {
 		return ""
 	}
 
-	return fmt.Sprintf("HT %d - %d", homeGoals, awayGoals)
+	return fmt.Sprintf("HT %d – %d", homeGoals, awayGoals)
 }
 
 func finalScoreLine(page *site.MatchPage) string {
@@ -960,7 +968,7 @@ func dividerScore(score string) string {
 		return normalizeScore(trimmed)
 	}
 
-	return left + " - " + right
+	return left + " – " + right
 }
 
 func matchMetaParts(meta, weather string) []string {
@@ -1248,13 +1256,12 @@ func formatFetchTime(ts time.Time) string {
 }
 
 func formatStandingRow(row site.StandingRow, selected bool, width int) string {
-	prefix := "  "
+	line := fmt.Sprintf("  %2d %-18s %2d %2d %2d %2d %3d", row.Position, truncate(row.Team, 18), row.Played, row.Won, row.Drawn, row.Lost, row.Points)
+	line = truncate(line, max(12, width))
 	if selected {
-		prefix = "> "
+		return styleBold.Render(line)
 	}
-
-	line := fmt.Sprintf("%s%2d %-18s %2d %2d %2d %2d %3d", prefix, row.Position, truncate(row.Team, 18), row.Played, row.Won, row.Drawn, row.Lost, row.Points)
-	return truncate(line, max(12, width))
+	return line
 }
 
 func parseRoundNumber(name string, fallback int) string {
