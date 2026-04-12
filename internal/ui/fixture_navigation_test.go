@@ -23,6 +23,9 @@ type recordingLoader struct {
 	menus        map[string]*site.CompetitionMenu
 	league       *site.LeaguePage
 	match        *site.MatchPage
+
+	// compErr, when non-nil, is returned by LoadCompetition instead of the league.
+	compErr error
 }
 
 func (l *recordingLoader) LoadArchive(context.Context, string) ([]site.Season, int, []site.Competition, error) {
@@ -37,6 +40,9 @@ func (l *recordingLoader) LoadLeague(context.Context, string) (*site.LeaguePage,
 
 func (l *recordingLoader) LoadCompetition(_ context.Context, rawURL string) (*site.CompetitionMenu, *site.LeaguePage, error) {
 	l.menuCalls++
+	if l.compErr != nil {
+		return nil, nil, l.compErr
+	}
 	if menu, ok := l.menus[rawURL]; ok {
 		return menu, nil, nil
 	}
@@ -599,6 +605,97 @@ func TestAnchoredWindowBoundsKeepsSelectedStandingVisible(t *testing.T) {
 	start, end := anchoredWindowBounds(30, []int{1, 18}, 6)
 	if !(start <= 1 && 1 < end) {
 		t.Fatalf("expected anchored window to include at least one selected row, got start=%d end=%d", start, end)
+	}
+}
+
+func TestSelectorNotVisibleAfterSuccessfulStartup(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	if m.selectorVisible {
+		t.Fatalf("expected selector to be closed after successful league load")
+	}
+	if m.focus != focusFixtures {
+		t.Fatalf("expected fixtures focus after startup, got %v", m.focus)
+	}
+}
+
+func TestSelectorBecomesVisibleAfterCompetitionLoadError(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.compErr = fmt.Errorf("network error")
+
+	m := NewModel(loader)
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatalf("expected init command")
+	}
+
+	// Drain the startup chain to completion.
+	m, cmd = updateModelWithMsg(t, m, cmd())
+	if cmd == nil {
+		t.Fatalf("expected archive load to schedule competition load")
+	}
+	for cmd != nil {
+		m, cmd = updateModelWithMsg(t, m, cmd())
+	}
+
+	if m.league != nil {
+		t.Fatalf("expected no league after competition load error")
+	}
+	if !m.selectorVisible {
+		t.Fatalf("expected selector to be open after competition load error")
+	}
+	if m.err == "" {
+		t.Fatalf("expected error message to be set")
+	}
+}
+
+func TestSelectorBecomesVisibleWhenArchiveHasNoCompetitions(t *testing.T) {
+	loader := newRecordingLoader()
+	loader.competitions = nil
+
+	m := NewModel(loader)
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatalf("expected init command")
+	}
+
+	// Drain the startup chain; archive loads but no competition load follows.
+	for cmd != nil {
+		m, cmd = updateModelWithMsg(t, m, cmd())
+	}
+
+	if m.league != nil {
+		t.Fatalf("expected no league when archive has no competitions")
+	}
+	if !m.selectorVisible {
+		t.Fatalf("expected selector to be open when archive has no competitions")
+	}
+}
+
+func TestToggleFocusCyclesBetweenSeasonsAndCompetitions(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	// Open the selector popup.
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if !m.selectorVisible {
+		t.Fatalf("expected selector open after escape")
+	}
+	if m.focus != focusCompetitions {
+		t.Fatalf("expected competitions focus after opening selector, got %v", m.focus)
+	}
+
+	// Tab cycles to seasons.
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.focus != focusSeasons {
+		t.Fatalf("expected seasons focus after first tab, got %v", m.focus)
+	}
+
+	// Tab cycles back to competitions.
+	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.focus != focusCompetitions {
+		t.Fatalf("expected competitions focus after second tab, got %v", m.focus)
 	}
 }
 
