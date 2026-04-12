@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -24,6 +25,33 @@ func extractMinute(text string) string {
 	}
 
 	return matches[1]
+}
+
+// ParseMinute splits a minute string like "45+2" into base minute and stoppage addition.
+// Returns (0, 0, false) when the string is empty or cannot be parsed as a valid minute.
+func ParseMinute(text string) (int, int, bool) {
+	return parseMinute(text)
+}
+
+func parseMinute(text string) (int, int, bool) {
+	if text == "" {
+		return 0, 0, false
+	}
+
+	parts := strings.SplitN(text, "+", 2)
+	base, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil || base < 0 {
+		return 0, 0, false
+	}
+
+	stoppage := 0
+	if len(parts) == 2 {
+		if s, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil && s > 0 {
+			stoppage = s
+		}
+	}
+
+	return base, stoppage, true
 }
 
 func isScoreLikeText(text string) bool {

@@ -48,8 +48,13 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 		if kind, ok := scoreRowEventKind(row); ok {
 			// Incident rows keep one side empty; non-empty side maps event ownership.
 			if left != "" && right == "" {
+				minuteText := extractMinute(left)
+				m, s, ok := parseMinute(minuteText)
 				page.Events = append(page.Events, MatchEvent{
-					MinuteText: extractMinute(left),
+					MinuteText: minuteText,
+					Minute:     m,
+					Stoppage:   s,
+					HasMinute:  ok,
 					Kind:       kind,
 					TeamSide:   "home",
 					Text:       left,
@@ -57,8 +62,13 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 			}
 
 			if right != "" && left == "" {
+				minuteText := extractMinute(right)
+				m, s, ok := parseMinute(minuteText)
 				page.Events = append(page.Events, MatchEvent{
-					MinuteText: extractMinute(right),
+					MinuteText: minuteText,
+					Minute:     m,
+					Stoppage:   s,
+					HasMinute:  ok,
 					Kind:       kind,
 					TeamSide:   "away",
 					Text:       right,
@@ -271,6 +281,7 @@ func playerTimelineEvents(player PlayerLine, side string) []MatchEvent {
 		case strings.Contains(marker, "->"):
 			event.Kind = "SUB"
 			event.MinuteText = extractMinute(marker)
+			event.Minute, event.Stoppage, event.HasMinute = parseMinute(event.MinuteText)
 			event.Text = substitutionEventText(player.Name, marker)
 		default:
 			event.Kind = "EVENT"

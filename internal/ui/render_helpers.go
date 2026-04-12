@@ -246,8 +246,10 @@ func sortedEvents(events []site.MatchEvent) []site.MatchEvent {
 	copy(ordered, events)
 
 	sort.SliceStable(ordered, func(i, j int) bool {
-		mi, hi := minuteSortKey(ordered[i].MinuteText)
-		mj, hj := minuteSortKey(ordered[j].MinuteText)
+		hi := ordered[i].HasMinute
+		hj := ordered[j].HasMinute
+		mi := ordered[i].Minute*100 + ordered[i].Stoppage
+		mj := ordered[j].Minute*100 + ordered[j].Stoppage
 
 		if hi != hj {
 			return hi
@@ -283,33 +285,6 @@ func eventWeight(kind string) int {
 	default:
 		return 9
 	}
-}
-
-func minuteSortKey(text string) (int, bool) {
-	if text == "" {
-		return 0, false
-	}
-
-	parts := strings.SplitN(text, "+", 2)
-	base := atoiOrNeg(parts[0])
-	if base < 0 {
-		return 0, false
-	}
-
-	extra := 0
-	if len(parts) == 2 {
-		extra = max(0, atoiOrNeg(parts[1]))
-	}
-
-	return base*100 + extra, true
-}
-
-func atoiOrNeg(s string) int {
-	value := 0
-	if _, err := fmt.Sscanf(strings.TrimSpace(s), "%d", &value); err != nil {
-		return -1
-	}
-	return value
 }
 
 func substitutionPlayers(text string) (string, string) {
@@ -541,8 +516,11 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 	firstSecondHalfKey := 0
 	hasSecondHalfEvent := false
 	for _, event := range ordered {
-		key, ok := minuteSortKey(event.MinuteText)
-		if !ok || key <= 4599 {
+		if !event.HasMinute {
+			continue
+		}
+		key := event.Minute*100 + event.Stoppage
+		if key <= 4599 {
 			continue
 		}
 		firstSecondHalfKey = key
@@ -554,10 +532,10 @@ func headerEventRows(events []site.MatchEvent) []scorerLine {
 	lines := make([]scorerLine, 0, 8)
 
 	for _, event := range ordered {
-		key, ok := minuteSortKey(event.MinuteText)
-		if !ok {
+		if !event.HasMinute {
 			continue
 		}
+		key := event.Minute*100 + event.Stoppage
 		if !insertedHT && htLabel != "" && hasSecondHalfEvent && key >= firstSecondHalfKey {
 			lines = append(lines, scorerLine{label: htLabel, isDivider: true})
 			insertedHT = true
@@ -920,11 +898,11 @@ func halftimeScore(events []site.MatchEvent) string {
 	hasSecondHalf := false
 
 	for _, event := range sortedEvents(events) {
-		minute, ok := minuteSortKey(event.MinuteText)
-		if !ok {
+		if !event.HasMinute {
 			continue
 		}
-		// minuteSortKey encodes stoppage as MM*100+extra, so 45:59 is the first-half ceiling.
+		// minute encodes stoppage as MM*100+extra, so 45:59 is the first-half ceiling.
+		minute := event.Minute*100 + event.Stoppage
 		if minute <= 4599 {
 			if event.Kind == "GOAL" {
 				if event.TeamSide == "home" {

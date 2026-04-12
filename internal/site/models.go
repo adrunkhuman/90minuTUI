@@ -83,8 +83,13 @@ type MatchPage struct {
 
 type MatchEvent struct {
 	MinuteText string
-	Kind       string
-	TeamSide   string
+	// Minute and Stoppage are the parsed components of MinuteText (e.g. "45+2" → 45, 2).
+	// HasMinute is false when MinuteText was absent or unparseable.
+	Minute    int
+	Stoppage  int
+	HasMinute bool
+	Kind      string
+	TeamSide  string
 	// SUB events carry "<outgoing> -> <incoming>" so renderers can place both players.
 	Text string
 }
