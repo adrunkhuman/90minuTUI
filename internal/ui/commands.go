@@ -10,9 +10,12 @@ import (
 	"github.com/adrunkhuman/90minuTUI/internal/site"
 )
 
+// cmdTimeout is generous enough for slow archive pages without blocking the TUI indefinitely.
+const cmdTimeout = 20 * time.Second
+
 func (m Model) loadArchiveCmd(url string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
 		defer cancel()
 		seasons, selectedIdx, competitions, err := m.service.LoadArchive(ctx, url)
 		return archiveLoadedMsg{seasons: seasons, selectedIdx: selectedIdx, competitions: competitions, err: err}
@@ -21,7 +24,7 @@ func (m Model) loadArchiveCmd(url string) tea.Cmd {
 
 func (m Model) loadSeasonCompetitionsCmd(url, seasonKey string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
 		defer cancel()
 		_, _, competitions, err := m.service.LoadArchive(ctx, url)
 		return competitionsLoadedMsg{seasonKey: seasonKey, competitions: competitions, err: err}
@@ -30,7 +33,7 @@ func (m Model) loadSeasonCompetitionsCmd(url, seasonKey string) tea.Cmd {
 
 func (m Model) loadCompetitionCmd(url, competitionKey string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
 		defer cancel()
 		menu, league, err := m.service.LoadCompetition(ctx, url)
 		return competitionMenuLoadedMsg{competitionKey: competitionKey, menu: menu, league: league, err: err}
@@ -39,7 +42,7 @@ func (m Model) loadCompetitionCmd(url, competitionKey string) tea.Cmd {
 
 func (m Model) loadLeagueCmd(url, competitionKey string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
 		defer cancel()
 		league, err := m.service.LoadLeague(ctx, url)
 		return leagueLoadedMsg{competitionKey: competitionKey, league: league, err: err}
@@ -48,7 +51,7 @@ func (m Model) loadLeagueCmd(url, competitionKey string) tea.Cmd {
 
 func (m Model) loadMatchCmd(url, fixtureKey string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
 		defer cancel()
 		match, err := m.service.LoadMatch(ctx, url)
 		return matchLoadedMsg{fixtureKey: fixtureKey, match: match, err: err}
