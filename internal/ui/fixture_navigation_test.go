@@ -616,8 +616,7 @@ func bootstrapLeagueLoadedModel(t *testing.T, loader *recordingLoader) Model {
 		t.Fatalf("expected archive loaded flow to schedule league load")
 	}
 
-	m, cmd = updateModelWithMsg(t, m, cmd())
-	for i := 0; i < 4 && cmd != nil; i++ {
+	for cmd != nil {
 		m, cmd = updateModelWithMsg(t, m, cmd())
 	}
 
