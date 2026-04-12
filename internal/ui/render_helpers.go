@@ -664,7 +664,11 @@ func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.M
 // cardAnnotation returns the YC/RC badge string for a lineup player, intended
 // for the dedicated event column next to the centre separator. Empty when clean.
 func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) string {
-	key := playerMatchKey(player.Name)
+	return cardAnnotationName(player.Name, idx)
+}
+
+func cardAnnotationName(name string, idx map[string][]site.MatchEvent) string {
+	key := playerMatchKey(name)
 	if key == "" {
 		return ""
 	}
@@ -690,11 +694,13 @@ func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) st
 }
 
 type lineupEntry struct {
-	player     site.PlayerLine
-	enteredAt  string
-	replaced   string
-	leftAt     string
-	replacedBy string
+	player       site.PlayerLine
+	enteredAt    string
+	replaced     string
+	replacedYC   string
+	leftAt       string
+	replacedBy   string
+	replacedByYC string
 }
 
 // A lineup row can carry both entry and exit notes for players who came on and were later replaced.
@@ -753,6 +759,9 @@ func entryNote(entry lineupEntry, side string, shortenNotes bool) string {
 		text := "(" + entry.enteredAt
 		if replaced != "" {
 			text += " for " + replaced
+			if entry.replacedYC != "" {
+				text += entry.replacedYC
+			}
 		}
 		return faintText(text + ")")
 	}
@@ -760,6 +769,9 @@ func entryNote(entry lineupEntry, side string, shortenNotes bool) string {
 	text := "(for "
 	if replaced != "" {
 		text += replaced + " "
+	}
+	if entry.replacedYC != "" {
+		text += entry.replacedYC + " "
 	}
 	text += entry.enteredAt
 	return faintText(text + ")")
@@ -776,6 +788,9 @@ func exitNote(entry lineupEntry, side string, shortenNotes bool) string {
 		text += entry.leftAt + " "
 	}
 	text += replacement
+	if entry.replacedByYC != "" {
+		text += entry.replacedByYC
+	}
 	if side != "home" && entry.leftAt != "" {
 		text += " " + entry.leftAt
 	}
@@ -816,28 +831,19 @@ func annotateLineupPlayer(player site.PlayerLine, idx map[string][]site.MatchEve
 		if playerMatchKey(in) == key {
 			entry.enteredAt = minute
 			entry.replaced = out
+			entry.replacedYC = cardAnnotationName(out, idx)
 		}
 		if playerMatchKey(out) == key {
 			entry.leftAt = minute
 			entry.replacedBy = in
+			entry.replacedByYC = cardAnnotationName(in, idx)
 		}
 	}
 
 	return entry
 }
 
-func hasLineupBadgeEvent(key string, idx map[string][]site.MatchEvent) bool {
-	for _, event := range idx[key] {
-		switch event.Kind {
-		case "YC", "RC":
-			return true
-		}
-	}
-
-	return false
-}
-
-// Synthetic entrant rows inherit the same substitution annotations so later card badges keep context.
+// Synthetic entrant rows are only added when a substitute was later replaced again.
 func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
 	if len(players) == 0 {
 		return nil
@@ -858,11 +864,16 @@ func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 		if inKey == "" || addedSynthetic[inKey] {
 			continue
 		}
-		if _, exists := byKey[inKey]; exists || !hasLineupBadgeEvent(inKey, idx) {
+		if _, exists := byKey[inKey]; exists {
 			continue
 		}
 
-		entries = append(entries, annotateLineupPlayer(site.PlayerLine{Name: entry.replacedBy}, idx))
+		synthetic := annotateLineupPlayer(site.PlayerLine{Name: entry.replacedBy}, idx)
+		if synthetic.replacedBy == "" {
+			continue
+		}
+
+		entries = append(entries, synthetic)
 		addedSynthetic[inKey] = true
 	}
 
