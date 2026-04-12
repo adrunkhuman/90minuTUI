@@ -7,13 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html/charset"
 )
-
-const defaultBaseURL = "http://www.90minut.pl"
 
 type Client struct {
 	baseURL *url.URL
@@ -21,12 +18,12 @@ type Client struct {
 }
 
 func NewClient() *Client {
-	base, _ := url.Parse(defaultBaseURL)
+	base, _ := url.Parse(BaseURL)
 
 	return &Client{
 		baseURL: base,
 		http: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: HTTPTimeout,
 		},
 	}
 }

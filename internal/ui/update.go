@@ -4,10 +4,12 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/adrunkhuman/90minuTUI/internal/site"
 )
 
 func (m Model) Init() tea.Cmd {
-	return m.loadArchiveCmd("http://www.90minut.pl/archsezon.php")
+	return m.loadArchiveCmd(site.ArchiveURL)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -391,7 +393,7 @@ func (m *Model) handleReload() tea.Cmd {
 
 	m.match = nil
 	if len(m.seasons) == 0 {
-		return m.loadArchiveCmd("http://www.90minut.pl/archsezon.php")
+		return m.loadArchiveCmd(site.ArchiveURL)
 	}
 
 	if m.selectorActive() && m.focus == focusSeasons {
