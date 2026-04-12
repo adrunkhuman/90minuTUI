@@ -857,6 +857,16 @@ func TestStatusBarViewReflectsFixtureDrillability(t *testing.T) {
 	}
 }
 
+func TestStatusBarViewLeagueViewIncludesReloadHint(t *testing.T) {
+	m := sketchModel()
+	m.width = 120
+
+	status := m.statusBarView()
+	if !strings.Contains(status, "r: reload") {
+		t.Fatalf("expected reload hint in league status bar, got %q", status)
+	}
+}
+
 func TestRenderFixtureWindowAlignsFullFixtureColumns(t *testing.T) {
 	fixtures := []site.Fixture{
 		{Home: "Bruk-Bet Termalica Nieciecza", Away: "Motor Lublin", Score: "1-2", WhenInfo: "13 marca, 18:00 (3542)", MatchURL: "http://www.90minut.pl/mecz.php?id_mecz=1"},
