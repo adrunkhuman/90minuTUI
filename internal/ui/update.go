@@ -101,6 +101,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resetCompetitionMenu("Competitions", msg.competitions)
 
 		if len(m.competitions) == 0 {
+			m.openSelector()
 			return m, nil
 		}
 
@@ -108,6 +109,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		competition := m.currentCompetition()
 		if competition == nil {
 			m.loading = false
+			m.openSelector()
 			return m, nil
 		}
 		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
@@ -116,6 +118,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err.Error()
+			m.openSelector()
 			return m, nil
 		}
 
@@ -133,6 +136,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.matchScroll = 0
 
 		if len(m.competitions) == 0 {
+			m.openSelector()
 			return m, nil
 		}
 
@@ -140,6 +144,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		competition := m.currentCompetition()
 		if competition == nil {
 			m.loading = false
+			m.openSelector()
 			return m, nil
 		}
 		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
@@ -154,6 +159,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if msg.err != nil {
 			m.err = msg.err.Error()
+			m.openSelector()
 			return m, nil
 		}
 
@@ -170,6 +176,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.league == nil {
 			m.err = "competition parse: empty result"
+			m.openSelector()
 			return m, nil
 		}
 
@@ -243,8 +250,6 @@ func (m *Model) toggleFocus() {
 		m.focus = order[(i+1)%len(order)]
 		return
 	}
-
-	m.focus = focusSeasons
 }
 
 func (m *Model) moveCursor(delta int) {

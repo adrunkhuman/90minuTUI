@@ -102,9 +102,8 @@ func NewModel(svc archiveLoader) Model {
 	return Model{service: svc, focus: focusCompetitions, loading: true}
 }
 
-// The selector is implicit on first load, then explicit once a league is open.
 func (m Model) selectorActive() bool {
-	return m.selectorVisible || (m.league == nil && !m.loading && len(m.seasons) > 0)
+	return m.selectorVisible
 }
 
 func (m *Model) openSelector() {
