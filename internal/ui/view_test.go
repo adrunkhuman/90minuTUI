@@ -614,24 +614,18 @@ func TestAnnotatedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
 	}
 }
 
-func TestAnnotatedLineupAddsMissingEntrantWhenTheyHaveCardEvent(t *testing.T) {
+func TestAnnotatedLineupKeepsBookedEntrantInReplacementNote(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
 		{MinuteText: "66", Kind: "SUB", TeamSide: "home", Text: "Jason Lokilo -> Oskar Lesniak"},
 		{MinuteText: "84", Kind: "YC", TeamSide: "home", Text: "Oskar Lesniak 84"},
 	}, "home")
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jason Lokilo"}}, idx)
-	if len(got) != 2 {
-		t.Fatalf("expected starter plus synthetic entrant, got %#v", got)
+	if len(got) != 1 {
+		t.Fatalf("expected only starter row, got %#v", got)
 	}
-	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || got[0].leftAt != "66'" {
+	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || got[0].leftAt != "66'" || ansi.Strip(got[0].replacedByYC) != "■" {
 		t.Fatalf("expected starter row to retain substitution note, got %#v", got)
-	}
-	if got[1].player.Name != "Oskar Lesniak" || got[1].replacedBy != "" {
-		t.Fatalf("expected entrant row added for card badge visibility, got %#v", got)
-	}
-	if got[1].enteredAt != "66'" || got[1].replaced != "Jason Lokilo" {
-		t.Fatalf("expected synthetic entrant row to retain entry note, got %#v", got)
 	}
 }
 
@@ -665,6 +659,32 @@ func TestAnnotatedLineupSyntheticEntrantKeepsLaterSubstitutionOff(t *testing.T) 
 	}
 	if got[1].player.Name != "Oskar Lesniak" || got[1].enteredAt != "66'" || got[1].replaced != "Jason Lokilo" || got[1].leftAt != "78'" || got[1].replacedBy != "Michal Smith" {
 		t.Fatalf("expected synthetic entrant row to keep both substitution notes, got %#v", got[1])
+	}
+}
+
+func TestFormatLineupPlayerShowsBookedReplacementInsideHomeNote(t *testing.T) {
+	home := formatLineupPlayer(lineupEntry{
+		player:       site.PlayerLine{Name: "Oskar Jakubczyk"},
+		leftAt:       "72'",
+		replacedBy:   "Michal Rzuchowski",
+		replacedByYC: eventPrefix("YC"),
+	}, "home", 64)
+
+	if got := ansi.Strip(home); got != "(72' M. Rzuchowski■) O. Jakubczyk" {
+		t.Fatalf("unexpected home booked-replacement label: %q", got)
+	}
+}
+
+func TestFormatLineupPlayerShowsBookedReplacedPlayerInsideAwayNote(t *testing.T) {
+	away := formatLineupPlayer(lineupEntry{
+		player:     site.PlayerLine{Name: "Jakub Sypek"},
+		enteredAt:  "46'",
+		replaced:   "Jan Kowalczyk",
+		replacedYC: eventPrefix("YC"),
+	}, "away", 64)
+
+	if got := ansi.Strip(away); got != "J. Sypek (for J. Kowalczyk ■ 46')" {
+		t.Fatalf("unexpected away booked-replaced label: %q", got)
 	}
 }
 
