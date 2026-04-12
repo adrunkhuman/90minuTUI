@@ -504,7 +504,7 @@ func (m Model) statusBarView() string {
 		if !m.currentFixtureDrillable() {
 			enterHint = "enter: unavail"
 		}
-		parts = []string{"j/k: move", "h/l: round", enterHint, "esc: selector", "q: quit"}
+		parts = []string{"j/k: move", "h/l: round", enterHint, "esc: selector", "r: reload", "q: quit"}
 	}
 
 	left := strings.Join(parts, "  ·  ")
