@@ -33,6 +33,10 @@ go run ./cmd/90minutui
 - Linkless fixtures that have scores but no match page
 - Match score, timeline, metadata, lineups, substitutions, and cards
 
+## Planned
+
+- CLI/query API for scripts and non-interactive use
+
 ## Boundaries
 
 - `cmd/90minutui`: program entrypoint
