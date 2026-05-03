@@ -3,8 +3,8 @@ package ui
 import (
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/adrunkhuman/90minuTUI/internal/site"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -163,7 +163,7 @@ func selectorCompetitionRows(items []site.Competition, cursor int) []string {
 func selectorModalPane(width int, heading string, rows []string, cursor, visibleRows int, focused bool) string {
 	var b strings.Builder
 	b.WriteString(renderFullLine(" "+truncate(heading, max(1, width-1)), width, colorBgHeader, colorAccent, true))
-	for i := 0; i < visibleRows; i++ {
+	for i := range visibleRows {
 		b.WriteString("\n")
 		row := ""
 		if i < len(rows) {

@@ -1,15 +1,15 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
 type lineupCardMarker struct {
-	color lipgloss.Color
+	color color.Color
 	ok    bool
 }
 

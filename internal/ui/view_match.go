@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/adrunkhuman/90minuTUI/internal/site"
-	"github.com/charmbracelet/lipgloss"
 )
 
 const (
@@ -133,7 +135,7 @@ func renderRoundMiniGridWindow(fixtures []site.Fixture, cursor, maxLines, width 
 	rows := max(1, (end-start+1)/cols)
 	lines := make([]string, 0, rows*2)
 
-	for row := 0; row < rows; row++ {
+	for row := range rows {
 		leftIdx := start + row
 		rightIdx := start + rows + row
 		firstTop, firstBottom := blankRoundMiniCard(colWidth, colorBgPane)
@@ -153,7 +155,7 @@ func renderRoundMiniGridWindow(fixtures []site.Fixture, cursor, maxLines, width 
 	return lines
 }
 
-func blankRoundMiniCard(width int, bg lipgloss.Color) (string, string) {
+func blankRoundMiniCard(width int, bg color.Color) (string, string) {
 	blank := renderFullLine("", width, bg, colorTextMuted, false)
 	return blank, blank
 }
@@ -313,7 +315,7 @@ func (m Model) matchDetailContent(width int) string {
 		maxPlayers := max(len(homeEntries), len(awayEntries))
 		playerWidth := lineupPlayerNameWidth(width)
 
-		for i := 0; i < maxPlayers; i++ {
+		for i := range maxPlayers {
 			var hEntry, aEntry lineupEntry
 			if i < len(homeEntries) {
 				hEntry = homeEntries[i]

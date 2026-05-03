@@ -30,7 +30,6 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 	foundPlayerSideEvidence := false
 
 	for _, fixture := range matches {
-		fixture := fixture
 		t.Run(fixture.Name, func(t *testing.T) {
 			doc, _ := fixtureDoc(t, fixture.File)
 			page := parseMatchPage(doc, fixture.URL)
