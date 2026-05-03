@@ -1146,6 +1146,77 @@ func displayRoundLabel(name string, fallback int) string {
 	return translatePolishDateText(cleaned)
 }
 
+func displayRoundLabelWithFixtures(name string, fallback int, fixtures []site.Fixture, leagueTitle string) string {
+	label := displayRoundLabel(name, fallback)
+	span := roundFixtureDateSpan(fixtures, leagueTitle)
+	if span == "" || !strings.HasPrefix(label, "Round ") {
+		return label
+	}
+
+	roundPart, _, ok := strings.Cut(label, " - ")
+	if !ok {
+		roundPart = label
+	}
+	return roundPart + " - " + span
+}
+
+func roundFixtureDateSpan(fixtures []site.Fixture, leagueTitle string) string {
+	var first time.Time
+	var last time.Time
+	for _, fixture := range fixtures {
+		date, ok := fixtureDisplayDate(fixture.WhenInfo, leagueTitle)
+		if !ok {
+			continue
+		}
+		if first.IsZero() || date.Before(first) {
+			first = date
+		}
+		if last.IsZero() || date.After(last) {
+			last = date
+		}
+	}
+
+	if first.IsZero() {
+		return ""
+	}
+	if sameCalendarDate(first, last) {
+		return first.Format("Jan 2")
+	}
+	if first.Year() == last.Year() && first.Month() == last.Month() {
+		return fmt.Sprintf("%s-%d", first.Format("Jan 2"), last.Day())
+	}
+	return fmt.Sprintf("%s-%s", first.Format("Jan 2"), last.Format("Jan 2"))
+}
+
+func fixtureDisplayDate(value, leagueTitle string) (time.Time, bool) {
+	cleaned := normalizeDisplayText(value)
+	matches := fixtureDateTimeRe.FindStringSubmatch(cleaned)
+	if len(matches) != 5 {
+		return time.Time{}, false
+	}
+
+	month := polishMonthNumber(matches[2])
+	if month == "" {
+		return time.Time{}, false
+	}
+
+	day := atoiOrNeg(matches[1])
+	monthNum := atoiOrNeg(month)
+	year := atoiOrNeg(matches[3])
+	if year < 0 {
+		year = inferFixtureYear(monthNum, leagueTitle)
+	}
+	if day <= 0 || monthNum <= 0 || year <= 0 {
+		return time.Time{}, false
+	}
+
+	return time.Date(year, time.Month(monthNum), day, 0, 0, 0, 0, time.Local), true
+}
+
+func sameCalendarDate(a, b time.Time) bool {
+	return a.Year() == b.Year() && a.Month() == b.Month() && a.Day() == b.Day()
+}
+
 func trimEventMinute(event site.MatchEvent) string {
 	text := eventPlayerText(event)
 	return formatPlayerLabel(text)

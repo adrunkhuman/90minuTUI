@@ -75,6 +75,101 @@ func TestLeagueViewUsesTwoLineTopBar(t *testing.T) {
 	}
 }
 
+func TestTopBarRoundMetaShowsFixtureDateSpan(t *testing.T) {
+	round := site.Round{
+		Name: "1. kolejka - 4 kwietnia",
+		Fixtures: []site.Fixture{
+			{Home: "E", Away: "F", WhenInfo: "8 kwietnia, 20:15"},
+			{Home: "A", Away: "B", WhenInfo: "4 kwietnia, 18:00"},
+			{Home: "C", Away: "D", WhenInfo: "6 kwietnia, 12:30"},
+		},
+	}
+
+	got := topBarRoundMeta(round, 1, 30, "PKO Bank Polski Ekstraklasa 2025/2026")
+	if got != "Round 1 · Apr 4-8 / 30" {
+		t.Fatalf("unexpected round meta: %q", got)
+	}
+}
+
+func TestTopBarRoundMetaShowsSingleFixtureDate(t *testing.T) {
+	round := site.Round{
+		Name: "2. kolejka - 10 maja",
+		Fixtures: []site.Fixture{
+			{Home: "A", Away: "B", WhenInfo: "10 maja, 18:00"},
+			{Home: "C", Away: "D", WhenInfo: "10 maja, 20:30"},
+		},
+	}
+
+	got := topBarRoundMeta(round, 2, 30, "PKO Bank Polski Ekstraklasa 2025/2026")
+	if got != "Round 2 · May 10 / 30" {
+		t.Fatalf("unexpected round meta: %q", got)
+	}
+}
+
+func TestTopBarRoundMetaShowsCrossMonthFixtureDateSpan(t *testing.T) {
+	round := site.Round{
+		Name: "3. kolejka - 30 kwietnia",
+		Fixtures: []site.Fixture{
+			{Home: "A", Away: "B", WhenInfo: "2 maja, 12:00"},
+			{Home: "C", Away: "D", WhenInfo: "30 kwietnia, 18:00"},
+		},
+	}
+
+	got := topBarRoundMeta(round, 3, 30, "PKO Bank Polski Ekstraklasa 2025/2026")
+	if got != "Round 3 · Apr 30-May 2 / 30" {
+		t.Fatalf("unexpected round meta: %q", got)
+	}
+}
+
+func TestTopBarRoundMetaShowsCrossYearFixtureDateSpan(t *testing.T) {
+	round := site.Round{
+		Name: "4. kolejka - 31 grudnia",
+		Fixtures: []site.Fixture{
+			{Home: "A", Away: "B", WhenInfo: "2 stycznia 2026, 12:00"},
+			{Home: "C", Away: "D", WhenInfo: "31 grudnia 2025, 18:00"},
+		},
+	}
+
+	got := topBarRoundMeta(round, 4, 30, "PKO Bank Polski Ekstraklasa 2025/2026")
+	if got != "Round 4 · Dec 31-Jan 2 / 30" {
+		t.Fatalf("unexpected round meta: %q", got)
+	}
+}
+
+func TestTopBarRoundMetaKeepsRoundLabelWhenFixtureDatesAreUnavailable(t *testing.T) {
+	round := site.Round{
+		Name: "5. kolejka - 12 czerwca",
+		Fixtures: []site.Fixture{
+			{Home: "A", Away: "B", WhenInfo: "walkower"},
+			{Home: "C", Away: "D"},
+		},
+	}
+
+	got := topBarRoundMeta(round, 5, 30, "PKO Bank Polski Ekstraklasa 2025/2026")
+	if got != "Round 5 · 12 June / 30" {
+		t.Fatalf("unexpected round meta: %q", got)
+	}
+}
+
+func TestViewTopBarUsesFixtureDateSpan(t *testing.T) {
+	m := sketchModel()
+	m.width = 120
+	m.height = 18
+	m.league.Title = "PKO Bank Polski Ekstraklasa 2025/2026"
+	m.league.Rounds[0] = site.Round{
+		Name: "1. kolejka - 4 kwietnia",
+		Fixtures: []site.Fixture{
+			{Home: "Legia Warszawa", Away: "Lech Poznan", Score: "2-1", WhenInfo: "4 kwietnia, 18:00"},
+			{Home: "Rakow Czestochowa", Away: "Pogon Szczecin", Score: "1-1", WhenInfo: "8 kwietnia, 20:15"},
+		},
+	}
+
+	topLine := ansi.Strip(strings.Split(m.View(), "\n")[0])
+	if !strings.Contains(topLine, "Round 1 · Apr 4-8 / 1") {
+		t.Fatalf("expected fixture-derived round span in top bar, got %q", topLine)
+	}
+}
+
 func TestStartupViewDoesNotFlashSelectorPopup(t *testing.T) {
 	m := NewModel(nil)
 	m.width = 120
