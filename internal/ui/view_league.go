@@ -2,10 +2,12 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/adrunkhuman/90minuTUI/internal/site"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -64,7 +66,7 @@ func paneHeader(label string, width int) string {
 	return renderFullLine(text, width, colorBgHeader, colorAccent, true)
 }
 
-func renderPlainPaneLine(line string, width int, bg lipgloss.Color) string {
+func renderPlainPaneLine(line string, width int, bg color.Color) string {
 	return renderFullLine(ansi.Strip(line), width, bg, colorTextSecondary, false)
 }
 
@@ -73,7 +75,7 @@ func formatStandingsColumns(teamWidth, width int) string {
 	return renderFullLine(line, width, colorBgPane, colorTextMuted, false)
 }
 
-func renderFullLine(text string, width int, bg lipgloss.Color, fg lipgloss.Color, bold bool) string {
+func renderFullLine(text string, width int, bg color.Color, fg color.Color, bold bool) string {
 	if width <= 0 {
 		return ""
 	}
@@ -109,7 +111,7 @@ func isRelegationRow(row site.StandingRow, total int) bool {
 	return total >= 6 && row.Position > total-3
 }
 
-func formatPitchStandingRow(row site.StandingRow, selected, relegated bool, teamWidth, width int, bg lipgloss.Color) string {
+func formatPitchStandingRow(row site.StandingRow, selected, relegated bool, teamWidth, width int, bg color.Color) string {
 	fg := colorTextPrimary
 	if relegated {
 		fg = colorLoss
@@ -181,7 +183,7 @@ func renderFixtureGridWindow(fixtures []site.Fixture, cursor, maxItems, width in
 	return lines
 }
 
-func formatFixtureGridRow(fixture *site.Fixture, selected bool, width int, leagueTitle string, dim bool, bg lipgloss.Color) string {
+func formatFixtureGridRow(fixture *site.Fixture, selected bool, width int, leagueTitle string, dim bool, bg color.Color) string {
 	if fixture == nil {
 		return renderFullLine("", width, bg, colorTextMuted, false)
 	}

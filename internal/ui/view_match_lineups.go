@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/adrunkhuman/90minuTUI/internal/site"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func renderLineupsLabel(width int) string {
@@ -28,7 +30,7 @@ func renderSectionLabel(label string, width int) string {
 	return renderFullLine(string(line), width, colorBgPanel, colorTextMuted, false)
 }
 
-func renderLineupTwoColumnRow(home, away string, width int, bg lipgloss.Color, homeColor lipgloss.Color, awayColor lipgloss.Color, bold bool) string {
+func renderLineupTwoColumnRow(home, away string, width int, bg color.Color, homeColor color.Color, awayColor color.Color, bold bool) string {
 	fg := homeColor
 	if homeColor != awayColor {
 		fg = colorTextSecondary

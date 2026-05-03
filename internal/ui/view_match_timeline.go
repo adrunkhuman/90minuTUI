@@ -1,10 +1,10 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -12,7 +12,7 @@ type timelineRow struct {
 	home   string
 	away   string
 	marker string
-	color  lipgloss.Color
+	color  color.Color
 }
 
 func splitTimelineRows(events []site.MatchEvent) ([]timelineRow, []timelineRow) {
@@ -47,7 +47,7 @@ func splitTimelineRows(events []site.MatchEvent) ([]timelineRow, []timelineRow) 
 	return firstHalf, secondHalf
 }
 
-func timelineMarker(kind string) (string, lipgloss.Color, bool) {
+func timelineMarker(kind string) (string, color.Color, bool) {
 	switch kind {
 	case "GOAL":
 		return "⚽", colorAccent, true

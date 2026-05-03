@@ -364,7 +364,7 @@ func filterCardEvents(events []site.MatchEvent) []site.MatchEvent {
 }
 
 func isAbbreviatedPlayerName(name string) bool {
-	for _, field := range strings.Fields(canonicalPlayerName(name)) {
+	for field := range strings.FieldsSeq(canonicalPlayerName(name)) {
 		if strings.HasSuffix(field, ".") {
 			return true
 		}

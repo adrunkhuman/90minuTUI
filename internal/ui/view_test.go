@@ -59,20 +59,47 @@ func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
 	m.lastFetchAt = time.Date(2026, time.March, 10, 21, 15, 0, 0, time.UTC)
 	m.league.Title = "PKO Bank Polski Ekstraklasa 2025/2026"
 
-	view := m.View()
+	view := m.viewContent()
+	plainView := ansi.Strip(view)
 	for _, want := range []string{
 		"PKO Bank Polski Ekstraklasa 2025/2026",
-		"#   Team",
 		"Legia Warszawa",
 		"Round 1",
 		"Lech Poznan",
 		"24/01 20:30",
 		"21:15:00",
 	} {
-		if !strings.Contains(view, want) {
+		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
 		}
 	}
+	assertStandingHeader(t, plainView)
+}
+
+func TestViewReturnsBubbleTeaViewWithAltScreen(t *testing.T) {
+	m := sketchModel()
+	m.width = 120
+	m.height = 18
+
+	view := m.View()
+	if !view.AltScreen {
+		t.Fatalf("expected Bubble Tea view to request alt screen")
+	}
+	if !strings.Contains(ansi.Strip(view.Content), "Legia Warszawa") {
+		t.Fatalf("expected Bubble Tea view to carry rendered content\n%s", view.Content)
+	}
+}
+
+func assertStandingHeader(t *testing.T, view string) {
+	t.Helper()
+
+	for line := range strings.SplitSeq(view, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "#" && fields[1] == "Team" {
+			return
+		}
+	}
+	t.Fatalf("expected standings header with # and Team columns\n%s", view)
 }
 
 func TestLeagueSketchViewShowsLeagueTitleOnlyOnce(t *testing.T) {
@@ -81,7 +108,7 @@ func TestLeagueSketchViewShowsLeagueTitleOnlyOnce(t *testing.T) {
 	m.height = 18
 	m.league.Title = "PKO Bank Polski Ekstraklasa 2025/2026"
 
-	view := m.View()
+	view := m.viewContent()
 	if got := strings.Count(view, "PKO Bank Polski Ekstraklasa 2025/2026"); got != 1 {
 		t.Fatalf("expected league title once, got %d\n%s", got, view)
 	}
@@ -93,12 +120,12 @@ func TestLeagueViewUsesTwoLineTopBar(t *testing.T) {
 	m.height = 18
 	m.league.Title = "PKO Bank Polski Ekstraklasa 2025/2026"
 
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.viewContent(), "\n")
 	if len(lines) == 0 || !strings.Contains(lines[0], "PKO Bank Polski Ekstraklasa 2025/2026") {
-		t.Fatalf("expected top line to show competition context\n%s", m.View())
+		t.Fatalf("expected top line to show competition context\n%s", m.viewContent())
 	}
-	if strings.Contains(m.View(), "Fixtures\nPKO Bank Polski Ekstraklasa 2025/2026") {
-		t.Fatalf("expected fixtures pane to avoid repeating competition context\n%s", m.View())
+	if strings.Contains(m.viewContent(), "Fixtures\nPKO Bank Polski Ekstraklasa 2025/2026") {
+		t.Fatalf("expected fixtures pane to avoid repeating competition context\n%s", m.viewContent())
 	}
 }
 
@@ -264,7 +291,7 @@ func TestViewTopBarUsesFixtureDateSpan(t *testing.T) {
 		},
 	}
 
-	topLine := ansi.Strip(strings.Split(m.View(), "\n")[0])
+	topLine := ansi.Strip(strings.Split(m.viewContent(), "\n")[0])
 	if !strings.Contains(topLine, "Round 1 · Apr 4-8 / 1") {
 		t.Fatalf("expected fixture-derived round span in top bar, got %q", topLine)
 	}
@@ -275,7 +302,7 @@ func TestStartupViewDoesNotFlashSelectorPopup(t *testing.T) {
 	m.width = 120
 	m.height = 18
 
-	view := m.View()
+	view := m.viewContent()
 	if strings.Contains(view, "Season + league") {
 		t.Fatalf("expected startup view to avoid selector popup\n%s", view)
 	}
@@ -290,18 +317,19 @@ func TestMatchSketchViewShowsLoadingState(t *testing.T) {
 	m.matchView = true
 	m.loading = true
 
-	view := m.View()
+	view := m.viewContent()
+	plainView := ansi.Strip(view)
 	for _, want := range []string{
-		"#   Team",
 		"Round 1",
 		"FIXTURES",
 		"LEG 2-1 LEC",
 		"Loading…",
 	} {
-		if !strings.Contains(view, want) {
+		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
 		}
 	}
+	assertStandingHeader(t, plainView)
 }
 
 func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
@@ -324,7 +352,7 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 		NewsURL:   "http://www.90minut.pl/news/example.html",
 	}
 
-	view := m.View()
+	view := m.viewContent()
 	for _, want := range []string{
 		"PKO Bank Polski Ekstraklasa 2025/2026",
 		"Bruk-Bet Termalica Nieciecza",
@@ -389,7 +417,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		},
 	}
 
-	view := m.View()
+	view := m.viewContent()
 	plainView := ansi.Strip(view)
 
 	for _, want := range []string{
@@ -620,12 +648,16 @@ func TestFormatLineupPlayerMirrorsSubstitutionNote(t *testing.T) {
 	if got := ansi.Strip(away); got != "J. Wilson-Esbrand (J. Grzesik 46')" {
 		t.Fatalf("unexpected away lineup substitution label: %q", got)
 	}
-	if !strings.Contains(home, "\x1b[2m(46' D. Nowak)\x1b[0m") {
+	if !containsFaintSpan(home, "(46' D. Nowak)") {
 		t.Fatalf("expected home substitution note to be dimmed, got %q", home)
 	}
-	if !strings.Contains(away, "\x1b[2m(J. Grzesik 46')\x1b[0m") {
+	if !containsFaintSpan(away, "(J. Grzesik 46')") {
 		t.Fatalf("expected away substitution note to be dimmed, got %q", away)
 	}
+}
+
+func containsFaintSpan(rendered, text string) bool {
+	return strings.Contains(rendered, faintText(text))
 }
 
 func TestFormatLineupPlayerShowsEntryAndExitNotes(t *testing.T) {
@@ -682,7 +714,7 @@ func TestMatchDetailKeepsInlineSubstitutionAnnotationsInLineups(t *testing.T) {
 		AwayLineup: []site.PlayerLine{{Name: "J. Wilson-Esbrand"}},
 	}
 
-	view := m.View()
+	view := m.viewContent()
 	plainView := ansi.Strip(view)
 	if strings.Contains(plainView, "Substitutions") {
 		t.Fatalf("expected substitutions pane to be omitted\n%s", view)
@@ -718,11 +750,19 @@ func assertAmbiguousKowalskisRendered(t *testing.T, lineups string) {
 }
 
 func TestFormatMatchMinuteLeftPadsSingleDigitMinute(t *testing.T) {
-	if got := formatMatchMinute("9"); got != " 9'" {
-		t.Fatalf("unexpected single-digit minute formatting: %q", got)
+	single := formatMatchMinute("9")
+	double := formatMatchMinute("17")
+	if strings.TrimSpace(single) != "9'" {
+		t.Fatalf("unexpected single-digit minute text: %q", single)
 	}
-	if got := formatMatchMinute("17"); got != "17'" {
-		t.Fatalf("unexpected double-digit minute formatting: %q", got)
+	if !strings.HasPrefix(single, " ") {
+		t.Fatalf("expected single-digit minute to be left padded, got %q", single)
+	}
+	if strings.TrimSpace(double) != "17'" {
+		t.Fatalf("unexpected double-digit minute text: %q", double)
+	}
+	if ansi.StringWidth(single) != ansi.StringWidth(double) {
+		t.Fatalf("expected minute labels to align, got %q and %q", single, double)
 	}
 }
 
@@ -1058,7 +1098,7 @@ func TestMatchDetailContentDoesNotShowFTForUnknownScore(t *testing.T) {
 	if !strings.Contains(content, "Motor Lublin") || !strings.Contains(content, "vs") || !strings.Contains(content, "Zaglebie Lubin") {
 		t.Fatalf("expected unknown-score match title, got\n%s", content)
 	}
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "FT ") {
 			t.Fatalf("expected unknown-score match to omit final-score row\n%s", content)
 		}
@@ -1119,7 +1159,7 @@ func TestLeagueViewMarksNonDrillableFixturesWhenSpaceAllows(t *testing.T) {
 	m.league.Rounds[0].Fixtures[0].MatchID = ""
 	m.league.Rounds[0].Fixtures[0].Score = "-"
 
-	view := ansi.Strip(m.View())
+	view := ansi.Strip(m.viewContent())
 	if !strings.Contains(view, "[no details]") {
 		t.Fatalf("expected league fixture grid to mark non-drillable fixture\n%s", view)
 	}
@@ -1182,15 +1222,15 @@ func TestStatusBarViewReflectsFixtureDrillability(t *testing.T) {
 	m := sketchModel()
 	m.width = 120
 
-	status := ansi.Strip(m.statusBarView())
-	if !strings.Contains(status, "enter  details") {
+	status := normalizeDisplayText(ansi.Strip(m.statusBarView()))
+	if !strings.Contains(status, "enter details") {
 		t.Fatalf("expected drillable status hint, got %q", status)
 	}
 
 	m.league.Rounds[0].Fixtures[0].MatchURL = ""
 	m.league.Rounds[0].Fixtures[0].MatchID = ""
-	status = ansi.Strip(m.statusBarView())
-	if !strings.Contains(status, "enter  unavail") {
+	status = normalizeDisplayText(ansi.Strip(m.statusBarView()))
+	if !strings.Contains(status, "enter unavail") {
 		t.Fatalf("expected non-drillable status hint, got %q", status)
 	}
 }
@@ -1199,8 +1239,8 @@ func TestStatusBarViewLeagueViewIncludesReloadHint(t *testing.T) {
 	m := sketchModel()
 	m.width = 120
 
-	status := ansi.Strip(m.statusBarView())
-	if !strings.Contains(status, "r  reload") {
+	status := normalizeDisplayText(ansi.Strip(m.statusBarView()))
+	if !strings.Contains(status, "r reload") {
 		t.Fatalf("expected reload hint in league status bar, got %q", status)
 	}
 }
@@ -1262,20 +1302,25 @@ func TestLeagueViewCanShowSelectorPopup(t *testing.T) {
 	m.selectorVisible = true
 	m.focus = focusCompetitions
 
-	view := m.View()
+	view := m.viewContent()
+	plainView := ansi.Strip(view)
 	for _, want := range []string{
-		"#   Team",
 		"Legia Warszawa",
 		"Lech Poznan",
 		"24/01 20:30",
 		"SEASON",
 		"2024/2025",
 		"Ekstraklasa",
-		"esc  close",
 	} {
-		if !strings.Contains(view, want) {
+		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
 		}
+	}
+	assertStandingHeader(t, plainView)
+	lines := strings.Split(view, "\n")
+	statusLine := normalizeDisplayText(ansi.Strip(lines[len(lines)-1]))
+	if !strings.Contains(statusLine, "esc close") {
+		t.Fatalf("expected selector status to show esc close hint, got %q", statusLine)
 	}
 	if got := strings.Count(view, "\n") + 1; got != m.height {
 		t.Fatalf("expected popup view to fill terminal height, got %d lines for height %d\n%s", got, m.height, view)
@@ -1287,7 +1332,7 @@ func TestSelectorPopupPlacesSeasonsAndLeaguesSideBySide(t *testing.T) {
 	m.focus = focusCompetitions
 
 	popup := m.selectorPopupView(60)
-	for _, line := range strings.Split(popup, "\n") {
+	for line := range strings.SplitSeq(popup, "\n") {
 		if strings.Contains(line, "SEASON") && strings.Contains(line, "COMPETITIONS") {
 			return
 		}
@@ -1324,7 +1369,7 @@ func TestSelectorPopupWidthExpandsForVisibleLeagueNames(t *testing.T) {
 func TestSelectorPopupWidthDoesNotDependOnCurrentScrollWindow(t *testing.T) {
 	m := sketchModel()
 	m.competitions = make([]site.Competition, 0, 24)
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		name := fmt.Sprintf("League %02d", i)
 		if i == 22 {
 			name = "Ligi regionalne 2025/26 - Mazowiecki ZPN, grupa: Ciechanow-Ostroleka i okolice"
@@ -1367,7 +1412,7 @@ func TestSelectorPopupHandlesShortTerminal(t *testing.T) {
 	m.selectorVisible = true
 	m.focus = focusCompetitions
 
-	view := m.View()
+	view := m.viewContent()
 	for _, want := range []string{"SEASON", "Round"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected view to contain %q\n%s", want, view)
@@ -1392,7 +1437,7 @@ func TestLeagueViewClipsListsToTerminalHeight(t *testing.T) {
 	}
 	m.fixtureCursor = 17
 
-	view := m.View()
+	view := m.viewContent()
 	if got := strings.Count(view, "\n") + 1; got > m.height {
 		t.Fatalf("expected clipped view to fit terminal height, got %d lines for height %d\n%s", got, m.height, view)
 	}
@@ -1419,29 +1464,33 @@ func TestMatchViewScrollsLongContent(t *testing.T) {
 		m.match.HomeLineup = append(m.match.HomeLineup, site.PlayerLine{Name: fmt.Sprintf("Player%02d", i)})
 	}
 
-	view := m.View()
+	view := m.viewContent()
+	plainView := ansi.Strip(view)
 	if got := strings.Count(view, "\n") + 1; got > m.height {
 		t.Fatalf("expected match view to fit terminal height, got %d lines for height %d\n%s", got, m.height, view)
 	}
-	if !strings.Contains(view, "Player01") {
+	if !strings.Contains(plainView, "Player01") {
 		t.Fatalf("expected initial match view to show top content\n%s", view)
 	}
-	for _, want := range []string{"#   Team", "Round", "FIXTURES", "LEG 2-1 LEC"} {
-		if !strings.Contains(view, want) {
+	assertStandingHeader(t, plainView)
+	for _, want := range []string{"Round", "FIXTURES", "LEG 2-1 LEC"} {
+		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected match view to keep sidebar content %q visible\n%s", want, view)
 		}
 	}
 
 	m.matchScroll = m.matchScrollLimit()
-	view = m.View()
-	if strings.Contains(view, "Player01") {
+	view = m.viewContent()
+	plainView = ansi.Strip(view)
+	if strings.Contains(plainView, "Player01") {
 		t.Fatalf("expected scrolled match view to hide top content\n%s", view)
 	}
-	if !strings.Contains(view, "Player20") {
+	if !strings.Contains(plainView, "Player20") {
 		t.Fatalf("expected scrolled match view to show later content\n%s", view)
 	}
-	for _, want := range []string{"#   Team", "Round", "FIXTURES", "LEG 2-1 LEC"} {
-		if !strings.Contains(view, want) {
+	assertStandingHeader(t, plainView)
+	for _, want := range []string{"Round", "FIXTURES", "LEG 2-1 LEC"} {
+		if !strings.Contains(plainView, want) {
 			t.Fatalf("expected scrolled match view to keep sidebar content %q visible\n%s", want, view)
 		}
 	}
@@ -1461,7 +1510,7 @@ func TestMatchViewShowsFullStandingsWhenHeightAllows(t *testing.T) {
 		m.league.Standings = append(m.league.Standings, site.StandingRow{Position: i, Team: fmt.Sprintf("Team %02d", i), Played: 30, Won: 10, Drawn: 10, Lost: 10, Points: 40 - i})
 	}
 
-	view := m.View()
+	view := m.viewContent()
 	for _, want := range []string{"Team 01", "Team 16", "FIXTURES", "LEG 2-1 LEC"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected match sidebar to keep full standings and minilist content %q\n%s", want, view)

@@ -88,10 +88,7 @@ func windowBounds(total, cursor, maxItems int) (int, int) {
 	}
 
 	half := maxItems / 2
-	start := cursor - half
-	if start < 0 {
-		start = 0
-	}
+	start := max(cursor-half, 0)
 
 	end := start + maxItems
 	if end > total {
@@ -130,10 +127,7 @@ func anchoredWindowBounds(total int, anchors []int, maxItems int) (int, int) {
 		return windowBounds(total, minAnchor, maxItems)
 	}
 
-	start := minAnchor - (maxItems-span)/2
-	if start < 0 {
-		start = 0
-	}
+	start := max(minAnchor-(maxItems-span)/2, 0)
 	end := start + maxItems
 	if end > total {
 		end = total
@@ -419,7 +413,7 @@ func standingsTeamWidth(rows []site.StandingRow, width int) int {
 }
 
 func parseRoundNumber(name string, fallback int) string {
-	for _, field := range strings.Fields(name) {
+	for field := range strings.FieldsSeq(name) {
 		if _, err := strconv.Atoi(field); err == nil {
 			return field
 		}
@@ -470,8 +464,8 @@ func displayRoundLabel(name string, fallback int) string {
 
 	if strings.Contains(lower, "kolejka") || strings.Contains(lower, "runda") {
 		number := parseRoundNumber(cleaned, fallback)
-		if idx := strings.Index(cleaned, "-"); idx >= 0 {
-			suffix := translatePolishDateText(strings.TrimSpace(cleaned[idx+1:]))
+		if _, after, ok := strings.Cut(cleaned, "-"); ok {
+			suffix := translatePolishDateText(strings.TrimSpace(after))
 			if suffix != "" {
 				return "Round " + number + " - " + suffix
 			}

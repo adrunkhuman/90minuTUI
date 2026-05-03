@@ -36,7 +36,6 @@ func TestParseSeasonsAndCompetitionsFromArchiveFixtures(t *testing.T) {
 	foundDiacritics := false
 
 	for _, fixture := range archives {
-		fixture := fixture
 		t.Run(fixture.Name, func(t *testing.T) {
 			doc, _ := fixtureDoc(t, fixture.File)
 

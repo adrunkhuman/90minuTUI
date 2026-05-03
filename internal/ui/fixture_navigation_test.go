@@ -6,10 +6,22 @@ import (
 	"fmt"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
 )
+
+func testKey(code rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg(tea.Key{Code: code})
+}
+
+func testRune(value rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg(tea.Key{Code: value, Text: string(value)})
+}
+
+func testCtrl(value rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg(tea.Key{Code: value, Mod: tea.ModCtrl})
+}
 
 type recordingLoader struct {
 	archiveCalls int
@@ -69,7 +81,7 @@ func TestFixtureNavigationDoesNotReloadLeague(t *testing.T) {
 		t.Fatalf("expected fixture #1 selected after startup")
 	}
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyDown))
 	if cmd != nil {
 		t.Fatalf("expected no command on fixture cursor move down")
 	}
@@ -83,7 +95,7 @@ func TestFixtureNavigationDoesNotReloadLeague(t *testing.T) {
 		t.Fatalf("fixture cursor move should not load match, got %d match loads", loader.matchCalls)
 	}
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyUp})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyUp))
 	if cmd != nil {
 		t.Fatalf("expected no command on fixture cursor move up")
 	}
@@ -96,6 +108,90 @@ func TestFixtureNavigationDoesNotReloadLeague(t *testing.T) {
 
 	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "1" {
 		t.Fatalf("expected fixture #1 selected after moving back")
+	}
+}
+
+func TestPrintableFixtureNavigationKeys(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+
+	m, cmd := updateModelWithMsg(t, m, testRune('j'))
+	if cmd != nil {
+		t.Fatalf("expected no command on printable fixture move")
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "2" {
+		t.Fatalf("expected printable j to select fixture #2")
+	}
+
+	m, cmd = updateModelWithMsg(t, m, testRune('k'))
+	if cmd != nil {
+		t.Fatalf("expected no command on printable fixture move back")
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "1" {
+		t.Fatalf("expected printable k to select fixture #1")
+	}
+
+	m, cmd = updateModelWithMsg(t, m, testRune('l'))
+	if cmd != nil {
+		t.Fatalf("expected no command on printable round move")
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "3" {
+		t.Fatalf("expected printable l to select next round fixture")
+	}
+
+	m, cmd = updateModelWithMsg(t, m, testRune('h'))
+	if cmd != nil {
+		t.Fatalf("expected no command on printable round move back")
+	}
+	if fixture := m.currentFixture(); fixture == nil || fixture.MatchID != "1" {
+		t.Fatalf("expected printable h to select previous round fixture")
+	}
+}
+
+func TestPrintableReloadAndQuitKeys(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, cmd := updateModelWithMsg(t, m, testRune('r'))
+	if cmd == nil {
+		t.Fatalf("expected printable r to return reload command")
+	}
+	m, cmd = updateModelWithMsg(t, m, cmd())
+	if cmd != nil {
+		t.Fatalf("expected no chained command after reload")
+	}
+	if loader.leagueCalls != 2 {
+		t.Fatalf("expected reload to load league again, got %d league loads", loader.leagueCalls)
+	}
+
+	_, cmd = updateModelWithMsg(t, m, testRune('q'))
+	if cmd == nil {
+		t.Fatalf("expected printable q to return quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("expected printable q command to emit tea.QuitMsg")
+	}
+}
+
+func TestLoadingStateQuitKeys(t *testing.T) {
+	for name, msg := range map[string]tea.Msg{
+		"q":      testRune('q'),
+		"ctrl+c": testCtrl('c'),
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := NewModel(newRecordingLoader())
+			m.loading = true
+
+			_, cmd := updateModelWithMsg(t, m, msg)
+			if cmd == nil {
+				t.Fatalf("expected %s while loading to return quit command", name)
+			}
+			if _, ok := cmd().(tea.QuitMsg); !ok {
+				t.Fatalf("expected %s while loading to emit tea.QuitMsg", name)
+			}
+		})
 	}
 }
 
@@ -172,9 +268,9 @@ func TestCompetitionEnterOpensIIILigaSubmenu(t *testing.T) {
 	}
 	m := bootstrapLeagueLoadedModel(t, loader)
 
-	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	m.competitionCursor = 1
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected submenu load command")
 	}
@@ -213,9 +309,9 @@ func TestCompetitionEnterOpensWomenTierSubmenu(t *testing.T) {
 	}
 	m := bootstrapLeagueLoadedModel(t, loader)
 
-	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	m.competitionCursor = 1
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected women tier submenu load command")
 	}
@@ -245,9 +341,9 @@ func TestCompetitionEnterOpensFutsalTierSubmenu(t *testing.T) {
 	}
 	m := bootstrapLeagueLoadedModel(t, loader)
 
-	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	m.competitionCursor = 1
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected futsal tier submenu load command")
 	}
@@ -281,18 +377,18 @@ func TestCompetitionSubmenuEscReturnsToPreviousMenu(t *testing.T) {
 	}
 	m := bootstrapLeagueLoadedModel(t, loader)
 
-	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	m.competitionCursor = 1
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	m, _ = updateModelWithMsg(t, m, cmd())
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	m, _ = updateModelWithMsg(t, m, cmd())
 
 	if got := m.competitionTitle; got != "Ligi regionalne 2025/26 - Dolnoslaski ZPN" {
 		t.Fatalf("unexpected nested submenu title: %q", got)
 	}
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	if cmd != nil {
 		t.Fatalf("expected esc in submenu to pop without command")
 	}
@@ -312,7 +408,7 @@ func TestStaleCompetitionLoadErrorDoesNotOverwriteCurrentSelection(t *testing.T)
 	}
 	m := bootstrapLeagueLoadedModel(t, loader)
 
-	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	m.competitionCursor = 1
 	staleKey := competitionRequestKey(m.competitions[m.competitionCursor])
 	m.competitionCursor = 0
@@ -341,7 +437,7 @@ func TestFixtureEnterLoadsMatchWithoutReloadingLeague(t *testing.T) {
 	m.roundCursor = 0
 	m.fixtureCursor = 0
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected enter on fixture to return loadMatch command")
 	}
@@ -378,7 +474,7 @@ func TestFixtureEnterKeepsLeagueViewWhenFixtureHasNoDetails(t *testing.T) {
 	m.roundCursor = 0
 	m.fixtureCursor = 0
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd != nil {
 		t.Fatalf("expected no command for non-drillable fixture")
 	}
@@ -404,13 +500,13 @@ func TestMatchViewNavigationFallsBackToLeagueWhenNextFixtureHasNoDetails(t *test
 	m.roundCursor = 0
 	m.fixtureCursor = 0
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected match load command on enter")
 	}
 	m, _ = updateModelWithMsg(t, m, cmd())
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyDown))
 	if cmd != nil {
 		t.Fatalf("expected no load command for non-drillable fixture in match view")
 	}
@@ -438,7 +534,7 @@ func TestFixtureEnterUsesFixtureSpecificMessageWhenLeagueHasOtherDetails(t *test
 	m.roundCursor = 0
 	m.fixtureCursor = 0
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd != nil {
 		t.Fatalf("expected no command for non-drillable fixture")
 	}
@@ -453,13 +549,13 @@ func TestMatchViewNavigationLoadsAdjacentFixture(t *testing.T) {
 	m.roundCursor = 0
 	m.fixtureCursor = 0
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected match load command on enter")
 	}
 	m, _ = updateModelWithMsg(t, m, cmd())
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyDown))
 	if cmd == nil {
 		t.Fatalf("expected moving in match view to load adjacent fixture")
 	}
@@ -482,14 +578,14 @@ func TestMatchViewRoundNavigationLoadsFirstFixture(t *testing.T) {
 	m.roundCursor = 0
 	m.fixtureCursor = 0
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected match load command on enter")
 	}
 	m, _ = updateModelWithMsg(t, m, cmd())
 	m.fixtureCursor = 1
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyRight})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyRight))
 	if cmd == nil {
 		t.Fatalf("expected round change in match view to load first fixture")
 	}
@@ -515,7 +611,7 @@ func TestMatchViewScrollKeysDoNotChangeFixture(t *testing.T) {
 	m.roundCursor = 0
 	m.fixtureCursor = 0
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected match load command on enter")
 	}
@@ -525,7 +621,7 @@ func TestMatchViewScrollKeysDoNotChangeFixture(t *testing.T) {
 		m.match.HomeLineup = append(m.match.HomeLineup, site.PlayerLine{Name: fmt.Sprintf("Player%02d", i)})
 	}
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyPgDown))
 	if cmd != nil {
 		t.Fatalf("expected scroll keys not to load another fixture")
 	}
@@ -550,13 +646,13 @@ func TestMatchViewRoundNavigationClearsDetailForEmptyRound(t *testing.T) {
 		{Name: "2. kolejka"},
 	}
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
 	if cmd == nil {
 		t.Fatalf("expected match load command on enter")
 	}
 	m, _ = updateModelWithMsg(t, m, cmd())
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyRight})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyRight))
 	if cmd != nil {
 		t.Fatalf("expected no load command for empty round")
 	}
@@ -575,7 +671,7 @@ func TestEscapeFromLeagueViewTogglesSelectorPopup(t *testing.T) {
 	loader := newRecordingLoader()
 	m := bootstrapLeagueLoadedModel(t, loader)
 
-	m, cmd := updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	if cmd != nil {
 		t.Fatalf("expected no command when opening selector popup")
 	}
@@ -589,7 +685,7 @@ func TestEscapeFromLeagueViewTogglesSelectorPopup(t *testing.T) {
 		t.Fatalf("expected selector popup to focus competitions, got %v", m.focus)
 	}
 
-	m, cmd = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	if cmd != nil {
 		t.Fatalf("expected no command when closing selector popup")
 	}
@@ -678,7 +774,7 @@ func TestToggleFocusCyclesBetweenSeasonsAndCompetitions(t *testing.T) {
 	m := bootstrapLeagueLoadedModel(t, loader)
 
 	// Open the selector popup.
-	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
 	if !m.selectorVisible {
 		t.Fatalf("expected selector open after escape")
 	}
@@ -687,13 +783,13 @@ func TestToggleFocusCyclesBetweenSeasonsAndCompetitions(t *testing.T) {
 	}
 
 	// Tab cycles to seasons.
-	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyTab})
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyTab))
 	if m.focus != focusSeasons {
 		t.Fatalf("expected seasons focus after first tab, got %v", m.focus)
 	}
 
 	// Tab cycles back to competitions.
-	m, _ = updateModelWithMsg(t, m, tea.KeyMsg{Type: tea.KeyTab})
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyTab))
 	if m.focus != focusCompetitions {
 		t.Fatalf("expected competitions focus after second tab, got %v", m.focus)
 	}

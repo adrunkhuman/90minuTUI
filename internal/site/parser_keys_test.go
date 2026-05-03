@@ -30,7 +30,6 @@ func TestExtractStableKeysFromURLs(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if got := extractSeasonID(tc.url); got != tc.seasonID {
 				t.Fatalf("extractSeasonID(%q)=%q want %q", tc.url, got, tc.seasonID)

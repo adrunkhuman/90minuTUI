@@ -31,7 +31,6 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 	}
 
 	for _, fixture := range leagues {
-		fixture := fixture
 		t.Run(fixture.Name, func(t *testing.T) {
 			doc, _ := fixtureDoc(t, fixture.File)
 			page := parseLeaguePage(doc, fixture.URL)

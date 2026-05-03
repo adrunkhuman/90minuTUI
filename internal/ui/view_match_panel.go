@@ -2,11 +2,11 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -18,7 +18,7 @@ func renderPanelRule(width int) string {
 	return renderFullLine(strings.Repeat("─", max(0, width)), width, colorBgPanel, colorBorder, false)
 }
 
-func renderCenteredPanelLine(text string, width int, fg lipgloss.Color, bold bool) string {
+func renderCenteredPanelLine(text string, width int, fg color.Color, bold bool) string {
 	return renderFullLine(padCenter(truncate(text, width), width), width, colorBgPanel, fg, bold)
 }
 
@@ -33,7 +33,7 @@ func matchTitleLine(home, score, away string, width int) string {
 	return axisPlainLine(home+" "+homeScore, " – ", awayScore+" "+away, width)
 }
 
-func renderScoreAxisLine(text string, width int, fg lipgloss.Color, bold bool) string {
+func renderScoreAxisLine(text string, width int, fg color.Color, bold bool) string {
 	left, right, ok := splitScoreAxis(text)
 	if !ok {
 		return renderCenteredPanelLine(text, width, fg, bold)
