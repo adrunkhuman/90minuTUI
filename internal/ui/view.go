@@ -514,7 +514,7 @@ func formatFixtureGridRow(fixture *site.Fixture, selected bool, width int, leagu
 	contentWidth := max(1, width-2)
 	dateWidth := clamp(ansi.StringWidth("Thu 01/05 20:30"), 10, max(10, contentWidth/3))
 	markerDateWidth := ansi.StringWidth("[no details]") + gap + ansi.StringWidth("Thu 01/05 20:30")
-	if expandedDateWidth := max(dateWidth, markerDateWidth); (contentWidth-expandedDateWidth-scoreWidth-gap*3)/2 >= 6 {
+	if expandedDateWidth := max(dateWidth, markerDateWidth); (contentWidth-expandedDateWidth-scoreWidth-gap*3)/2 >= 12 {
 		dateWidth = expandedDateWidth
 	}
 	teamWidth := (contentWidth - dateWidth - scoreWidth - gap*3) / 2
@@ -1098,14 +1098,17 @@ func fitMatchMetaParts(parts []string, width int) []string {
 		return parts
 	}
 
-	compact := append([]string(nil), parts...)
-	for i, part := range compact {
-		if date := compactMatchMetaDate(part); date != "" {
-			compact[i] = date
-			break
+	withoutDate := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if isMatchMetaDate(part) {
+			continue
 		}
+		withoutDate = append(withoutDate, part)
 	}
-	return compact
+	if len(withoutDate) > 0 {
+		return withoutDate
+	}
+	return parts
 }
 
 func matchMetaAxisTruncatesAttendance(parts []string, width int) bool {
@@ -1138,12 +1141,9 @@ func matchMetaAxisLineRaw(parts []string, width int) string {
 	return axisPlainLine(left, parts[middle], right, width)
 }
 
-func compactMatchMetaDate(value string) string {
+func isMatchMetaDate(value string) bool {
 	parsed, err := time.Parse("Mon 2 January 2006, 15:04", value)
-	if err != nil {
-		return ""
-	}
-	return parsed.Format("Mon 02/01 15:04")
+	return err == nil && !parsed.IsZero()
 }
 
 func compactMatchMetaPart(part string) string {

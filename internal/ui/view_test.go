@@ -1209,7 +1209,7 @@ func TestMatchMetaAxisLineCentersEvenMiddleSeparator(t *testing.T) {
 	}
 }
 
-func TestMatchMetaAxisLineCompactsDateBeforeTruncatingAttendance(t *testing.T) {
+func TestMatchMetaAxisLineDropsDateBeforeTruncatingAttendance(t *testing.T) {
 	line := matchMetaAxisLine([]string{
 		"Sat 2 May 2026, 20:15",
 		"Att. 8 470",
@@ -1217,8 +1217,8 @@ func TestMatchMetaAxisLineCompactsDateBeforeTruncatingAttendance(t *testing.T) {
 		"15°",
 	}, 70)
 
-	if !strings.Contains(line, "Sat 02/05 20:15") {
-		t.Fatalf("expected compact date at narrow width, got %q", line)
+	if strings.Contains(line, "May") || strings.Contains(line, "02/05") {
+		t.Fatalf("expected date to be dropped at narrow width, got %q", line)
 	}
 	if !strings.Contains(line, "Att. 8 470") {
 		t.Fatalf("expected full attendance to remain visible, got %q", line)
@@ -1352,6 +1352,25 @@ func TestFixtureGridNonDrillableMarkerDoesNotReplaceDate(t *testing.T) {
 	}
 	if ansi.StringWidth(line[:strings.Index(line, "Lech Poznan")]) != ansi.StringWidth(drillable[:strings.Index(drillable, "Lech Poznan")]) {
 		t.Fatalf("expected fixture columns to stay aligned, got %q and %q", line, drillable)
+	}
+}
+
+func TestFixtureGridSuppressesDetailsMarkerBeforeOverTruncatingTeams(t *testing.T) {
+	line := ansi.Strip(formatFixtureGridRow(&site.Fixture{
+		Home:     "GKS Katowice",
+		Away:     "Bruk-Bet Termalica Nieciecza",
+		Score:    "-",
+		WhenInfo: "3 maja, 12:15",
+	}, false, 57, "Ekstraklasa", false, colorBgPanel))
+
+	if strings.Contains(line, "[no details]") {
+		t.Fatalf("expected details marker to be suppressed before crushing team names, got %q", line)
+	}
+	if !strings.Contains(line, "GKS Katowice") {
+		t.Fatalf("expected home team to remain readable, got %q", line)
+	}
+	if !strings.Contains(line, "03/05 12:15") {
+		t.Fatalf("expected date to remain visible, got %q", line)
 	}
 }
 
