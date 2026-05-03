@@ -87,22 +87,6 @@ func topBarRoundMeta(roundName string, roundIdx, total int) string {
 	return fmt.Sprintf("%s · %s / %d", roundPart, strings.TrimSpace(datePart), total)
 }
 
-func renderTopBarMeta(meta string) string {
-	roundPart, rest, ok := strings.Cut(meta, " · ")
-	if !ok {
-		roundOnly, totalPart, hasTotal := strings.Cut(meta, " / ")
-		if !hasTotal {
-			return styleBold.Copy().Foreground(colorTextPrimary).Render(meta)
-		}
-		return styleBold.Copy().Foreground(colorTextPrimary).Render(roundOnly) + " " + styleDim.Render("/") + " " + styleDim.Render(totalPart)
-	}
-	datePart, totalPart, ok := strings.Cut(rest, " / ")
-	if !ok {
-		return styleBold.Copy().Foreground(colorTextPrimary).Render(roundPart) + " " + styleDim.Render("·") + " " + styleSubtle.Render(rest)
-	}
-	return styleBold.Copy().Foreground(colorTextPrimary).Render(roundPart) + " " + styleDim.Render("·") + " " + styleSubtle.Render(datePart) + " " + styleDim.Render("/") + " " + styleDim.Render(totalPart)
-}
-
 func (m Model) selectorSketchView() string {
 	leftWidth, rightWidth := leagueLayoutWidths(m.width)
 	if leftWidth == 0 {
@@ -288,27 +272,6 @@ func selectorModalDivider(height int) string {
 		parts[i] = lipgloss.NewStyle().Foreground(colorBorder).Background(colorBgModal).Render("│")
 	}
 	return strings.Join(parts, "\n")
-}
-
-func selectorPaneView(width int, heading string, focused bool, lines []string) string {
-	base := lipgloss.NewStyle().Width(width)
-
-	var headingStyle lipgloss.Style
-	if focused {
-		headingStyle = styleBold.Copy().Foreground(colorAccent)
-	} else {
-		headingStyle = styleSubtle
-	}
-
-	var b strings.Builder
-	b.WriteString(headingStyle.Render(truncate(heading, width)))
-	b.WriteString("\n")
-	for _, line := range lines {
-		b.WriteString(truncate(line, width))
-		b.WriteString("\n")
-	}
-
-	return base.Render(strings.TrimRight(b.String(), "\n"))
 }
 
 func selectorPaneWidths(total int, seasonLines []string) (int, int) {
@@ -552,13 +515,6 @@ func formatFixtureGridRow(fixture *site.Fixture, selected bool, width int, leagu
 		line += strings.Repeat(" ", gap) + date
 	}
 	return renderFullLine(line, width, bg, rowColor, selected)
-}
-
-func fixtureScoreColor(score string) lipgloss.Color {
-	if fixtureResultRe.MatchString(strings.TrimSpace(score)) {
-		return colorWin
-	}
-	return colorTextMuted
 }
 
 func displayFixtureScore(score string) string {
@@ -1045,14 +1001,6 @@ func axisPlainLine(left, center, right string, width int) string {
 	return padLeft(truncate(left, leftWidth), leftWidth) + center + padRight(truncate(right, rightWidth), rightWidth)
 }
 
-func matchMetaLine(meta, weather string) string {
-	parts := matchMetaDisplayParts(meta, weather)
-	if len(parts) == 0 {
-		return ""
-	}
-	return strings.Join(parts, "  ·  ")
-}
-
 func renderMatchMetaPanelLine(meta, weather string, width int) string {
 	parts := matchMetaDisplayParts(meta, weather)
 	if len(parts) == 0 {
@@ -1213,11 +1161,6 @@ func halftimeScoreDisplay(page *site.MatchPage) string {
 	return halftimeScoreAlways(page.Events)
 }
 
-type goalTimelineRow struct {
-	home string
-	away string
-}
-
 type timelineRow struct {
 	home   string
 	away   string
@@ -1271,51 +1214,6 @@ func timelineMarker(kind string) (string, lipgloss.Color, bool) {
 	}
 }
 
-func goalTimelineRows(events []site.MatchEvent) []goalTimelineRow {
-	firstHalf, secondHalf := splitGoalTimelineRows(events)
-	rows := append(firstHalf, secondHalf...)
-	if len(rows) == 0 {
-		return []goalTimelineRow{{home: "—", away: "—"}}
-	}
-	return rows
-}
-
-func splitGoalTimelineRows(events []site.MatchEvent) ([]goalTimelineRow, []goalTimelineRow) {
-	firstHalf := make([]goalTimelineRow, 0, 4)
-	secondHalf := make([]goalTimelineRow, 0, 4)
-	for _, event := range sortedEvents(events) {
-		if event.Kind != "GOAL" {
-			continue
-		}
-		label := goalTimelineLabel(event)
-		if label == "" {
-			continue
-		}
-		row := goalTimelineRow{home: "—", away: "—"}
-		switch event.TeamSide {
-		case "home":
-			row.home = label
-		case "away":
-			row.away = label
-		default:
-			continue
-		}
-
-		minute, ok := minuteSortKey(event.MinuteText)
-		if ok && minute <= 4599 {
-			firstHalf = append(firstHalf, row)
-		} else {
-			secondHalf = append(secondHalf, row)
-		}
-	}
-
-	return firstHalf, secondHalf
-}
-
-func goalTimelineLabel(event site.MatchEvent) string {
-	return timelineEventLabel(event)
-}
-
 func timelineEventLabel(event site.MatchEvent) string {
 	name := ansi.Strip(trimEventMinute(event))
 	minute := formatMatchMinute(event.MinuteText)
@@ -1341,21 +1239,6 @@ func renderTimelineRow(row timelineRow, width int) string {
 		right = row.away
 	}
 	return renderFullLine(axisPlainLine(left, " "+row.marker+" ", right, width), width, colorBgPanel, row.color, false)
-}
-
-func renderGoalTimelineRow(home, away string, width int) string {
-	if home == "—" && away == "—" {
-		return renderCenteredPanelLine("—", width, colorTextMuted, false)
-	}
-	left := ""
-	right := ""
-	if home != "—" {
-		left = home
-	}
-	if away != "—" {
-		right = away
-	}
-	return renderFullLine(axisPlainLine(left, " ⚽ ", right, width), width, colorBgPanel, colorAccent, false)
 }
 
 func renderLineupsLabel(width int) string {
