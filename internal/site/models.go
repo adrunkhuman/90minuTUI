@@ -90,8 +90,10 @@ type MatchEvent struct {
 	HasMinute bool
 	Kind      string
 	TeamSide  string
-	// SUB events carry "<outgoing> -> <incoming>" so renderers can place both players.
-	Text string
+	Text      string
+	// SUB events preserve both participants so UI code does not reparse display text.
+	SubstitutionOut string
+	SubstitutionIn  string
 }
 
 type PlayerLine struct {
