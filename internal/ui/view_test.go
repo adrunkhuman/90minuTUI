@@ -423,6 +423,50 @@ func TestHomeBookedReplacementDoesNotUseStarterCardSlot(t *testing.T) {
 	}
 }
 
+func TestMatchDetailDoesNotMisattributeAmbiguousAbbreviatedSubstitution(t *testing.T) {
+	m := sketchModel()
+	m.match = &site.MatchPage{
+		HomeTeam: "Home",
+		AwayTeam: "Away",
+		Score:    "0-0",
+		Events: []site.MatchEvent{
+			testEvent("60", "SUB", "home", "J. Kowalski -> Piotr Nowak"),
+			testEvent("75", "SUB", "home", "J. Kowalski -> Adam Zielinski"),
+		},
+		HomeLineup: []site.PlayerLine{{Name: "Jan Kowalski"}, {Name: "Jerzy Kowalski"}},
+	}
+
+	lineups := matchLineupSection(t, m.matchDetailContent(100))
+	assertAmbiguousKowalskisRendered(t, lineups)
+	for _, unwanted := range []string{"P. Nowak", "A. Zielinski", "60'", "75'"} {
+		if strings.Contains(lineups, unwanted) {
+			t.Fatalf("expected ambiguous substitution not to annotate lineup with %q\n%s", unwanted, lineups)
+		}
+	}
+}
+
+func TestMatchDetailDoesNotAttachAmbiguousReplacementCardToLineup(t *testing.T) {
+	m := sketchModel()
+	m.match = &site.MatchPage{
+		HomeTeam: "Home",
+		AwayTeam: "Away",
+		Score:    "0-0",
+		Events: []site.MatchEvent{
+			testEvent("60", "SUB", "home", "J. Kowalski -> Piotr Nowak"),
+			testEvent("70", "YC", "home", "Piotr Nowak 70"),
+		},
+		HomeLineup: []site.PlayerLine{{Name: "Jan Kowalski"}, {Name: "Jerzy Kowalski"}},
+	}
+
+	lineups := matchLineupSection(t, m.matchDetailContent(100))
+	assertAmbiguousKowalskisRendered(t, lineups)
+	for _, unwanted := range []string{"P. Nowak", "60'", "■"} {
+		if strings.Contains(lineups, unwanted) {
+			t.Fatalf("expected ambiguous replacement card to stay out of lineup section as %q\n%s", unwanted, lineups)
+		}
+	}
+}
+
 func TestHalftimeScoreDisplayAvoidsInventingSparseHT(t *testing.T) {
 	if got := halftimeScoreDisplay(&site.MatchPage{Score: "1-0"}); got != "HT —" {
 		t.Fatalf("expected sparse match to avoid invented HT score, got %q", got)
@@ -548,6 +592,29 @@ func TestMatchDetailKeepsInlineSubstitutionAnnotationsInLineups(t *testing.T) {
 			t.Fatalf("expected lineup to contain %q\n%s", want, view)
 		}
 	}
+}
+
+func matchLineupSection(t *testing.T, content string) string {
+	t.Helper()
+
+	plain := ansi.Strip(content)
+	lineupIdx := strings.Index(plain, "LINEUPS")
+	if lineupIdx < 0 {
+		t.Fatalf("expected lineup section\n%s", plain)
+	}
+	return plain[lineupIdx:]
+}
+
+func assertAmbiguousKowalskisRendered(t *testing.T, lineups string) {
+	t.Helper()
+
+	if strings.Contains(lineups, "Jan Kowalski") && strings.Contains(lineups, "Jerzy Kowalski") {
+		return
+	}
+	if strings.Count(lineups, "J. Kowalski") == 2 {
+		return
+	}
+	t.Fatalf("expected both ambiguous players to remain rendered\n%s", lineups)
 }
 
 func TestFormatMatchMinuteLeftPadsSingleDigitMinute(t *testing.T) {
