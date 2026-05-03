@@ -199,3 +199,53 @@ func TestParseMatchPageEventsCarryStructuredMinutes(t *testing.T) {
 		t.Fatalf("expected Minute=45 Stoppage=1, got Minute=%d Stoppage=%d", goalEvent.Minute, goalEvent.Stoppage)
 	}
 }
+
+func TestParseMatchPageSubstitutionCellAssignsCardsToBothPlayers(t *testing.T) {
+	html := `
+	<html><head><title>Match Test</title></head><body>
+	<table class="main" width="480">
+	<tr><td colspan="3"><b>Ekstraklasa</b></td></tr>
+	<tr><td colspan="3">20 marca 2026, 18:00</td></tr>
+	<tr><td>Arka Gdynia</td><td>3 - 1</td><td>Zaglebie Lubin</td></tr>
+	<tr height="20" valign="middle" align="center" bgcolor="#F5F5F5">
+	<td width="45%"><a href="/wystepy.php?id=1" class="main">Oskar Jakubczyk</a>&nbsp;<img src="http://img.90minut.pl/img/yel.gif" width="15" height="15" align="absmiddle" alt="ZK"><br>
+	<img src="http://img.90minut.pl/img/sub.gif" width="15" height="15" align="absmiddle">&nbsp;
+	72 <a href="/wystepy.php?id=2" class="main">Michal Rzuchowski</a>&nbsp;<img src="http://img.90minut.pl/img/yel.gif" width="15" height="15" align="absmiddle" alt="ZK"></td>
+	<td bgcolor="#FFFFFF"></td><td width="45%"></td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic html: %v", err)
+	}
+
+	page := parseMatchPage(doc, "http://www.90minut.pl/mecz.php?id_mecz=2023999")
+	if page == nil {
+		t.Fatalf("expected parsed match page")
+	}
+	if len(page.HomeLineup) != 1 {
+		t.Fatalf("expected one starter row, got %#v", page.HomeLineup)
+	}
+	if page.HomeLineup[0].Name != "Oskar Jakubczyk" {
+		t.Fatalf("unexpected starter: %#v", page.HomeLineup[0])
+	}
+
+	seenSub := false
+	seenStarterCard := false
+	seenEntrantCard := false
+	for _, event := range page.Events {
+		switch {
+		case event.Kind == "SUB" && event.TeamSide == "home" && event.Text == "Oskar Jakubczyk -> Michal Rzuchowski":
+			seenSub = true
+		case event.Kind == "YC" && event.TeamSide == "home" && event.Text == "Oskar Jakubczyk":
+			seenStarterCard = true
+		case event.Kind == "YC" && event.TeamSide == "home" && event.Text == "Michal Rzuchowski":
+			seenEntrantCard = true
+		}
+	}
+
+	if !seenSub || !seenStarterCard || !seenEntrantCard {
+		t.Fatalf("expected sub and both YC events, got %#v", page.Events)
+	}
+}

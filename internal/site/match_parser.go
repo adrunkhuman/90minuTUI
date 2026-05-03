@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 var matchMetaLineRe = regexp.MustCompile(`\d{1,2}\s+\p{L}+.*\d{1,2}:\d{2}`)
@@ -87,17 +88,19 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 			return
 		}
 
-		if player := parsePlayerCell(tds.Eq(0)); player != nil {
-			page.HomeLineup = append(page.HomeLineup, *player)
-			for _, event := range playerTimelineEvents(*player, "home") {
+		if parsed := parsePlayerCell(tds.Eq(0), "home"); parsed != nil {
+			page.HomeLineup = append(page.HomeLineup, *parsed.Player)
+			for _, event := range playerTimelineEvents(*parsed.Player, "home") {
 				page.Events = append(page.Events, event)
 			}
+			page.Events = append(page.Events, parsed.ExtraEvents...)
 		}
-		if player := parsePlayerCell(tds.Eq(2)); player != nil {
-			page.AwayLineup = append(page.AwayLineup, *player)
-			for _, event := range playerTimelineEvents(*player, "away") {
+		if parsed := parsePlayerCell(tds.Eq(2), "away"); parsed != nil {
+			page.AwayLineup = append(page.AwayLineup, *parsed.Player)
+			for _, event := range playerTimelineEvents(*parsed.Player, "away") {
 				page.Events = append(page.Events, event)
 			}
+			page.Events = append(page.Events, parsed.ExtraEvents...)
 		}
 	})
 
@@ -313,32 +316,59 @@ func substitutionEventText(outgoing, marker string) string {
 	return outgoing + " -> " + incoming
 }
 
-func parsePlayerCell(cell *goquery.Selection) *PlayerLine {
+type parsedPlayerCell struct {
+	Player      *PlayerLine
+	ExtraEvents []MatchEvent
+}
+
+func parsePlayerCell(cell *goquery.Selection, side string) *parsedPlayerCell {
 	raw := normalizeWhitespace(cell.Text())
 	if raw == "" {
 		return nil
 	}
 
-	anchors := make([]string, 0, 3)
-	cell.Find("a").Each(func(_ int, a *goquery.Selection) {
-		name := normalizeWhitespace(a.Text())
-		if name != "" {
-			anchors = append(anchors, name)
-		}
-	})
-
 	name := raw
-	if len(anchors) > 0 {
-		name = anchors[0]
+	anchors := make([]string, 0, 3)
+	markersByPlayer := make(map[string][]string, 2)
+	currentPlayer := ""
+
+	for _, node := range cell.Contents().Nodes {
+		switch node.Type {
+		case html.ElementNode:
+			switch strings.ToLower(node.Data) {
+			case "a":
+				playerName := normalizeWhitespace(goquery.NewDocumentFromNode(node).Text())
+				if playerName == "" {
+					continue
+				}
+				anchors = append(anchors, playerName)
+				if len(anchors) == 1 {
+					name = playerName
+				}
+				currentPlayer = playerName
+			case "img":
+				src := ""
+				for _, attr := range node.Attr {
+					if strings.EqualFold(attr.Key, "src") {
+						src = strings.ToLower(strings.TrimSpace(attr.Val))
+						break
+					}
+				}
+				switch {
+				case strings.Contains(src, "sub.gif"):
+					currentPlayer = ""
+				case currentPlayer == "":
+					continue
+				case strings.Contains(src, "yel.gif"):
+					markersByPlayer[currentPlayer] = append(markersByPlayer[currentPlayer], "YC")
+				case strings.Contains(src, "red.gif"), strings.Contains(src, "red2.gif"):
+					markersByPlayer[currentPlayer] = append(markersByPlayer[currentPlayer], "RC")
+				}
+			}
+		}
 	}
 
-	events := make([]string, 0, 3)
-	if cell.Find("img[src*='yel.gif']").Length() > 0 {
-		events = append(events, "YC")
-	}
-	if cell.Find("img[src*='red.gif'], img[src*='red2.gif']").Length() > 0 {
-		events = append(events, "RC")
-	}
+	events := append([]string(nil), markersByPlayer[name]...)
 
 	if cell.Find("img[src*='sub.gif']").Length() > 0 && len(anchors) > 1 {
 		// In 90minut substitution cells, the last linked player is the replacement.
@@ -351,7 +381,21 @@ func parsePlayerCell(cell *goquery.Selection) *PlayerLine {
 		}
 	}
 
-	return &PlayerLine{Name: name, Events: events, RawText: raw}
+	extraEvents := make([]MatchEvent, 0, 2)
+	for i := 1; i < len(anchors); i++ {
+		for _, marker := range markersByPlayer[anchors[i]] {
+			extraEvents = append(extraEvents, MatchEvent{
+				Kind:     marker,
+				TeamSide: side,
+				Text:     anchors[i],
+			})
+		}
+	}
+
+	return &parsedPlayerCell{
+		Player:      &PlayerLine{Name: name, Events: events, RawText: raw},
+		ExtraEvents: extraEvents,
+	}
 }
 
 func substitutionMinute(raw, replacement string) string {

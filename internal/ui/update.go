@@ -4,10 +4,12 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/adrunkhuman/90minuTUI/internal/site"
 )
 
 func (m Model) Init() tea.Cmd {
-	return m.loadArchiveCmd("http://www.90minut.pl/archsezon.php")
+	return m.loadArchiveCmd(site.ArchiveURL)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -101,6 +103,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resetCompetitionMenu("Competitions", msg.competitions)
 
 		if len(m.competitions) == 0 {
+			m.openSelector()
 			return m, nil
 		}
 
@@ -108,6 +111,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		competition := m.currentCompetition()
 		if competition == nil {
 			m.loading = false
+			m.openSelector()
 			return m, nil
 		}
 		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
@@ -116,6 +120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err.Error()
+			m.openSelector()
 			return m, nil
 		}
 
@@ -133,6 +138,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.matchScroll = 0
 
 		if len(m.competitions) == 0 {
+			m.openSelector()
 			return m, nil
 		}
 
@@ -140,6 +146,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		competition := m.currentCompetition()
 		if competition == nil {
 			m.loading = false
+			m.openSelector()
 			return m, nil
 		}
 		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
@@ -154,6 +161,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if msg.err != nil {
 			m.err = msg.err.Error()
+			m.openSelector()
 			return m, nil
 		}
 
@@ -170,6 +178,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.league == nil {
 			m.err = "competition parse: empty result"
+			m.openSelector()
 			return m, nil
 		}
 
@@ -243,8 +252,6 @@ func (m *Model) toggleFocus() {
 		m.focus = order[(i+1)%len(order)]
 		return
 	}
-
-	m.focus = focusSeasons
 }
 
 func (m *Model) moveCursor(delta int) {
@@ -391,7 +398,7 @@ func (m *Model) handleReload() tea.Cmd {
 
 	m.match = nil
 	if len(m.seasons) == 0 {
-		return m.loadArchiveCmd("http://www.90minut.pl/archsezon.php")
+		return m.loadArchiveCmd(site.ArchiveURL)
 	}
 
 	if m.selectorActive() && m.focus == focusSeasons {
