@@ -1076,6 +1076,7 @@ func matchMetaAxisLine(parts []string, width int) string {
 	if len(parts) == 0 {
 		return ""
 	}
+	parts = fitMatchMetaParts(parts, width)
 	if len(parts) == 1 {
 		return padCenter(truncate(parts[0], width), width)
 	}
@@ -1090,6 +1091,59 @@ func matchMetaAxisLine(parts []string, width int) string {
 	left := strings.Join(parts[:middle], separator) + separator
 	right := separator + strings.Join(parts[middle+1:], separator)
 	return axisPlainLine(left, parts[middle], right, width)
+}
+
+func fitMatchMetaParts(parts []string, width int) []string {
+	if !matchMetaAxisTruncatesAttendance(parts, width) {
+		return parts
+	}
+
+	compact := append([]string(nil), parts...)
+	for i, part := range compact {
+		if date := compactMatchMetaDate(part); date != "" {
+			compact[i] = date
+			break
+		}
+	}
+	return compact
+}
+
+func matchMetaAxisTruncatesAttendance(parts []string, width int) bool {
+	for _, part := range parts {
+		if !strings.HasPrefix(part, "Att. ") {
+			continue
+		}
+		return !strings.Contains(matchMetaAxisLineRaw(parts, width), part)
+	}
+	return false
+}
+
+func matchMetaAxisLineRaw(parts []string, width int) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) == 1 {
+		return padCenter(truncate(parts[0], width), width)
+	}
+
+	separator := "  ·  "
+	if len(parts)%2 == 0 {
+		half := len(parts) / 2
+		return axisPlainLine(strings.Join(parts[:half], separator), separator, strings.Join(parts[half:], separator), width)
+	}
+
+	middle := len(parts) / 2
+	left := strings.Join(parts[:middle], separator) + separator
+	right := separator + strings.Join(parts[middle+1:], separator)
+	return axisPlainLine(left, parts[middle], right, width)
+}
+
+func compactMatchMetaDate(value string) string {
+	parsed, err := time.Parse("Mon 2 January 2006, 15:04", value)
+	if err != nil {
+		return ""
+	}
+	return parsed.Format("Mon 02/01 15:04")
 }
 
 func compactMatchMetaPart(part string) string {

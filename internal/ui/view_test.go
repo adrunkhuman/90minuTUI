@@ -1209,6 +1209,25 @@ func TestMatchMetaAxisLineCentersEvenMiddleSeparator(t *testing.T) {
 	}
 }
 
+func TestMatchMetaAxisLineCompactsDateBeforeTruncatingAttendance(t *testing.T) {
+	line := matchMetaAxisLine([]string{
+		"Sat 2 May 2026, 20:15",
+		"Att. 8 470",
+		"Ref. Karol Arys",
+		"15°",
+	}, 70)
+
+	if !strings.Contains(line, "Sat 02/05 20:15") {
+		t.Fatalf("expected compact date at narrow width, got %q", line)
+	}
+	if !strings.Contains(line, "Att. 8 470") {
+		t.Fatalf("expected full attendance to remain visible, got %q", line)
+	}
+	if !strings.Contains(line, "Ref. Karol Arys") {
+		t.Fatalf("expected full referee to remain visible, got %q", line)
+	}
+}
+
 func scorelineAxisColumn(width int) int {
 	scoreline := matchTitleLine("Home", "1-1", "Away", width)
 	dash := strings.Index(scoreline, "–")
