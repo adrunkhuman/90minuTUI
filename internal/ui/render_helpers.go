@@ -940,13 +940,6 @@ func matchMetaParts(meta, weather string) []string {
 	return parts
 }
 
-func renderCenteredText(text string, width int) string {
-	if width <= 0 {
-		return text
-	}
-	return padCenter(truncate(text, width), width)
-}
-
 func truncate(value string, maxLen int) string {
 	if maxLen <= 0 {
 		return ""

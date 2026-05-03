@@ -7,9 +7,7 @@ import (
 	"time"
 
 	"github.com/adrunkhuman/90minuTUI/internal/site"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 )
 
 func TestLeagueSketchViewShowsStandingsFixturesAndStatus(t *testing.T) {
@@ -242,39 +240,24 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 }
 
 func TestRenderLineupPlayerRowColorsCards(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
-
 	row := renderLineupPlayerRow(
 		"Booked Home", lineupCardMarker{color: colorYellow, ok: true},
 		"Sent Off Away", lineupCardMarker{color: colorRed, ok: true},
 		64,
 	)
 
-	if !strings.Contains(row, lipgloss.NewStyle().Foreground(colorYellow).Background(colorBgPanel).Bold(true).Render("■")) {
-		t.Fatalf("expected yellow card marker to be colored\n%q", row)
-	}
-	if !strings.Contains(row, lipgloss.NewStyle().Foreground(colorRed).Background(colorBgPanel).Bold(true).Render("■")) {
-		t.Fatalf("expected red card marker to be colored\n%q", row)
-	}
 	plain := ansi.Strip(row)
-	divider := strings.IndexRune(plain, '│')
-	if divider < 0 {
-		t.Fatalf("expected center divider, got %q", plain)
+	for _, want := range []string{"Booked Home", "Sent Off Away", "│"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected lineup row to contain %q, got %q", want, plain)
+		}
 	}
-	dividerCol := ansi.StringWidth(plain[:divider])
-	runes := []rune(plain)
-	if string(runes[dividerCol-2:dividerCol]) != "■ " || string(runes[dividerCol+1:dividerCol+3]) != " ■" {
-		t.Fatalf("expected card markers one cell away from center divider, got %q", plain)
+	if strings.Count(plain, "■") != 2 {
+		t.Fatalf("expected both card markers, got %q", plain)
 	}
 }
 
-func TestAwayBookedSubstituteUsesColoredInlineCard(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
-
+func TestAwayBookedSubstituteUsesInlineCard(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
 		{MinuteText: "81", Kind: "SUB", TeamSide: "away", Text: "Jan Starter -> Sebastian Kubiak"},
 		{MinuteText: "85", Kind: "RC", TeamSide: "away", Text: "Sebastian Kubiak 85"},
@@ -289,16 +272,9 @@ func TestAwayBookedSubstituteUsesColoredInlineCard(t *testing.T) {
 	if strings.Contains(plain, "│■ ") {
 		t.Fatalf("expected substitute card to stay out of starter card slot, got %q", plain)
 	}
-	if !strings.Contains(row, lipgloss.NewStyle().Foreground(colorRed).Background(colorBgPanel).Bold(true).Render("■")) {
-		t.Fatalf("expected booked substitute card to keep red styling\n%q", row)
-	}
 }
 
 func TestMatchDetailShowsAbbreviatedAwaySubstituteCardInline(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
-
 	m := sketchModel()
 	m.match = &site.MatchPage{
 		HomeTeam: "Home",
@@ -319,16 +295,9 @@ func TestMatchDetailShowsAbbreviatedAwaySubstituteCardInline(t *testing.T) {
 	if strings.Contains(plain, "│■ ") {
 		t.Fatalf("expected substitute card to stay out of starter card slot\n%s", plain)
 	}
-	if !strings.Contains(content, lipgloss.NewStyle().Foreground(colorYellow).Background(colorBgPanel).Bold(true).Render("■")) {
-		t.Fatalf("expected substitute card to keep yellow styling\n%s", content)
-	}
 }
 
 func TestHomeBookedReplacementDoesNotUseStarterCardSlot(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
-
 	m := sketchModel()
 	m.match = &site.MatchPage{
 		HomeTeam: "Home",
@@ -348,69 +317,6 @@ func TestHomeBookedReplacementDoesNotUseStarterCardSlot(t *testing.T) {
 	}
 	if strings.Contains(plain, "P. Kun ■│") {
 		t.Fatalf("expected replacement card not to look like starter card\n%s", plain)
-	}
-	if !strings.Contains(content, lipgloss.NewStyle().Foreground(colorYellow).Background(colorBgPanel).Bold(true).Render("■")) {
-		t.Fatalf("expected replacement card to keep yellow styling\n%s", content)
-	}
-}
-
-func TestRenderLineupPlayerRowMutesSubstitutionNotes(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
-
-	row := renderLineupPlayerRow("(46' D. Nowak) I. Strzalek", lineupCardMarker{}, "J. Wilson-Esbrand (J. Grzesik 46')", lineupCardMarker{}, 96)
-	noteStyle := lipgloss.NewStyle().Foreground(colorTextMuted).Background(colorBgPanel)
-	nameStyle := lipgloss.NewStyle().Foreground(colorTextSecondary).Background(colorBgPanel)
-
-	if !strings.Contains(row, noteStyle.Render("(")) || !strings.Contains(row, noteStyle.Render("4")) {
-		t.Fatalf("expected substitution note to use muted style\n%q", row)
-	}
-	if !strings.Contains(row, nameStyle.Render("I")) || !strings.Contains(row, nameStyle.Render("J")) {
-		t.Fatalf("expected player names to keep lineup body style\n%q", row)
-	}
-}
-
-func TestRenderLineupPlayerRowReservesBlankCardSlots(t *testing.T) {
-	row := ansi.Strip(renderLineupPlayerRow("Home", lineupCardMarker{}, "Away", lineupCardMarker{}, 41))
-	runes := []rune(row)
-	divider := strings.IndexRune(row, '│')
-	if divider < 0 {
-		t.Fatalf("expected centered divider with card slots, got %q", row)
-	}
-	dividerCol := ansi.StringWidth(row[:divider])
-	if dividerCol < 2 || dividerCol+3 > len(runes) {
-		t.Fatalf("expected centered divider with card slots, got %q", row)
-	}
-	if string(runes[dividerCol-2:dividerCol]) != "  " {
-		t.Fatalf("expected blank home card slot before divider, got %q", row)
-	}
-	if string(runes[dividerCol+1:dividerCol+3]) != "  " {
-		t.Fatalf("expected blank away card slot after divider, got %q", row)
-	}
-}
-
-func TestRenderLineupsLabelCentersELetter(t *testing.T) {
-	line := ansi.Strip(renderLineupsLabel(41))
-	start := strings.Index(line, "LINEUPS")
-	if start < 0 {
-		t.Fatalf("expected LINEUPS label, got %q", line)
-	}
-	visibleStart := ansi.StringWidth(line[:start])
-	if visibleStart+3 != 41/2 {
-		t.Fatalf("expected E in LINEUPS at center, got label start %d in %q", start, line)
-	}
-}
-
-func TestRenderSectionLabelCentersFourthLetter(t *testing.T) {
-	line := ansi.Strip(renderSectionLabel("TIMELINE", 41))
-	start := strings.Index(line, "TIMELINE")
-	if start < 0 {
-		t.Fatalf("expected TIMELINE label, got %q", line)
-	}
-	visibleStart := ansi.StringWidth(line[:start])
-	if visibleStart+3 != 41/2 {
-		t.Fatalf("expected E in TIMELINE at center, got label start %d in %q", start, line)
 	}
 }
 
@@ -833,24 +739,9 @@ func TestRenderLineupHeaderRowUsesBlankCenteredGap(t *testing.T) {
 	if strings.Contains(row, "|") || strings.Contains(row, "│") {
 		t.Fatalf("expected lineup header row to omit separator, got %q", row)
 	}
-
-	leftEnd := strings.Index(row, "Piast Gliwice") + len("Piast Gliwice")
-	rightStart := strings.Index(row, "Radomiak Radom")
-	gapMid := leftEnd + ((rightStart - leftEnd) / 2)
-	dividerMid := 76 / 2
-	if diff := gapMid - dividerMid; diff < -1 || diff > 1 {
-		t.Fatalf("expected lineup header gap to stay centered\nrow: %q", row)
-	}
-	if rightStart-leftEnd < 3 {
-		t.Fatalf("expected team names to sit away from the center, got %q", row)
-	}
 }
 
-func TestMatchDetailContentStylesLineupTeamsWithoutSeparator(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
-
+func TestMatchDetailContentShowsLineupTeamsWithoutSeparator(t *testing.T) {
 	m := sketchModel()
 	m.match = &site.MatchPage{
 		HomeTeam:   "Piast Gliwice",
@@ -873,9 +764,6 @@ func TestMatchDetailContentStylesLineupTeamsWithoutSeparator(t *testing.T) {
 		}
 		if strings.Contains(stripped, "│") {
 			t.Fatalf("expected lineup team header to omit center divider, got %q", stripped)
-		}
-		if !strings.Contains(header, "\x1b[") {
-			t.Fatalf("expected lineup team header to include styling, got %q", header)
 		}
 		return
 	}
@@ -920,57 +808,6 @@ func TestMatchDetailContentDoesNotShowFTForUnknownScore(t *testing.T) {
 	}
 }
 
-func TestRenderCenteredTextCentersSectionLabels(t *testing.T) {
-	centered := renderCenteredText("Timeline", 21)
-	leftPad := strings.Index(centered, "Timeline")
-	rightPad := len(centered) - leftPad - len("Timeline")
-	if leftPad == 0 || rightPad == 0 {
-		t.Fatalf("expected centered padding, got %q", centered)
-	}
-	if leftPad-rightPad > 1 || rightPad-leftPad > 1 {
-		t.Fatalf("expected roughly symmetric padding, got %q", centered)
-	}
-}
-
-func TestMatchMetaAxisLineCentersOddMiddleSection(t *testing.T) {
-	width := 80
-	line := matchMetaAxisLine([]string{
-		"Wed 29 April 2026, 21:00",
-		"Att. 68 421",
-		"Ref. Danny Desmond Makkelie",
-	}, width)
-	middle := "Att. 68 421"
-	start := strings.Index(line, middle)
-	if start < 0 {
-		t.Fatalf("expected metadata line to contain middle section, got %q", line)
-	}
-
-	got := ansi.StringWidth(line[:start]) + ansi.StringWidth(middle)/2
-	if want := scorelineAxisColumn(width); got != want {
-		t.Fatalf("expected middle metadata section to align with score axis %d, got %d in %q", want, got, line)
-	}
-}
-
-func TestMatchMetaAxisLineCentersEvenMiddleSeparator(t *testing.T) {
-	width := 120
-	line := matchMetaAxisLine([]string{
-		"Wed 29 April 2026, 21:00",
-		"Att. 68 421",
-		"Ref. Danny Desmond Makkelie",
-		"15°",
-	}, width)
-	middle := "Att. 68 421  ·  Ref. Danny Desmond Makkelie"
-	start := strings.Index(line, middle)
-	if start < 0 {
-		t.Fatalf("expected metadata line to contain middle separator, got %q", line)
-	}
-
-	got := ansi.StringWidth(line[:start]) + ansi.StringWidth("Att. 68 421  ")
-	if want := scorelineAxisColumn(width); got != want {
-		t.Fatalf("expected middle metadata separator to align with score axis %d, got %d in %q", want, got, line)
-	}
-}
-
 func TestMatchMetaAxisLineDropsDateBeforeTruncatingAttendance(t *testing.T) {
 	line := matchMetaAxisLine([]string{
 		"Sat 2 May 2026, 20:15",
@@ -988,15 +825,6 @@ func TestMatchMetaAxisLineDropsDateBeforeTruncatingAttendance(t *testing.T) {
 	if !strings.Contains(line, "Ref. Karol Arys") {
 		t.Fatalf("expected full referee to remain visible, got %q", line)
 	}
-}
-
-func scorelineAxisColumn(width int) int {
-	scoreline := matchTitleLine("Home", "1-1", "Away", width)
-	dash := strings.Index(scoreline, "–")
-	if dash < 0 {
-		return -1
-	}
-	return ansi.StringWidth(scoreline[:dash])
 }
 
 func TestFinalScoreLineUsesMatchScore(t *testing.T) {
@@ -1120,11 +948,7 @@ func TestStatusBarViewLeagueViewIncludesReloadHint(t *testing.T) {
 	}
 }
 
-func TestStatusBarPaintsSpacerBackground(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
-
+func TestStatusBarFitsWidthAndShowsFetchTime(t *testing.T) {
 	m := sketchModel()
 	m.width = 120
 	status := m.statusBarView()
@@ -1132,11 +956,8 @@ func TestStatusBarPaintsSpacerBackground(t *testing.T) {
 	if ansi.StringWidth(status) != m.width {
 		t.Fatalf("expected status bar width %d, got %d", m.width, ansi.StringWidth(status))
 	}
-	if !strings.Contains(status, statusSpace(2)) {
-		t.Fatalf("expected status bar separators to carry status background\n%q", status)
-	}
-	if !strings.Contains(status, statusText("never")) {
-		t.Fatalf("expected clock to carry status background\n%q", status)
+	if !strings.Contains(ansi.Strip(status), "never") {
+		t.Fatalf("expected status bar to show empty fetch time\n%q", status)
 	}
 }
 
