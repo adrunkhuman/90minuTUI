@@ -93,7 +93,7 @@ func (m Model) selectorSketchView() string {
 		return m.selectorOverlayView(m.leagueFixturesPaneViewStyled(rightWidth, true))
 	}
 
-	standings := m.standingsPaneView(leftWidth)
+	standings := m.standingsPaneViewBounded(leftWidth)
 	divider := m.verticalDivider()
 	fixtures := m.leagueFixturesPaneViewStyled(rightWidth, true)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, standings, divider, fixtures)
@@ -297,7 +297,7 @@ func (m Model) leagueSketchView() string {
 		return fixtures
 	}
 
-	standings := m.standingsPaneView(leftWidth)
+	standings := m.standingsPaneViewBounded(leftWidth)
 	divider := m.verticalDivider()
 	return lipgloss.JoinHorizontal(lipgloss.Top, standings, divider, fixtures)
 }
@@ -312,10 +312,6 @@ func (m Model) verticalDivider() string {
 		parts[i] = lipgloss.NewStyle().Foreground(colorBorder).Background(colorBg).Render("│")
 	}
 	return strings.Join(parts, "\n")
-}
-
-func (m Model) standingsPaneView(width int) string {
-	return m.standingsPaneViewBounded(width)
 }
 
 func (m Model) standingsPaneViewBounded(width int) string {

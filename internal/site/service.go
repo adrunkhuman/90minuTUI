@@ -402,14 +402,6 @@ func archiveCompetitionMenuFromURL(raw string, spec archiveGroupSpec) string {
 	return strings.TrimSpace(values.Get(spec.fragmentKey))
 }
 
-func womenTierMenuURL(archiveURL, key string) string {
-	return archiveCompetitionMenuURL(archiveURL, key, archiveGroupSpecs[0])
-}
-
-func futsalTierMenuURL(archiveURL, key string) string {
-	return archiveCompetitionMenuURL(archiveURL, key, archiveGroupSpecs[1])
-}
-
 func parseIIIligaMenu(doc *goquery.Document, resolvedURL string, c *Client) *CompetitionMenu {
 	title := competitionMenuTitle(doc, "III liga")
 	items := make([]Competition, 0, 4)

@@ -331,3 +331,11 @@ func TestParseCompetitionMenuForFutsalTierPage(t *testing.T) {
 		t.Fatalf("unexpected second futsal tier item: %+v", menu.Items[1])
 	}
 }
+
+func womenTierMenuURL(archiveURL, key string) string {
+	return archiveCompetitionMenuURL(archiveURL, key, archiveGroupSpecs[0])
+}
+
+func futsalTierMenuURL(archiveURL, key string) string {
+	return archiveCompetitionMenuURL(archiveURL, key, archiveGroupSpecs[1])
+}

@@ -190,29 +190,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.closeSelector()
 		return m, nil
 
-	case leagueLoadedMsg:
-		m.loading = false
-		if msg.err != nil {
-			m.err = msg.err.Error()
-			return m, nil
-		}
-
-		competition := m.currentCompetition()
-		// Drop stale async results after the selected competition changes.
-		if competition == nil || msg.competitionKey != competitionRequestKey(*competition) {
-			return m, nil
-		}
-
-		m.err = ""
-		m.lastFetchAt = time.Now()
-		m.matchView = false
-		m.match = nil
-		m.matchScroll = 0
-		m.league = msg.league
-		m.roundCursor, m.fixtureCursor = m.initialFixtureSelection()
-		m.closeSelector()
-		return m, nil
-
 	case matchLoadedMsg:
 		m.loading = false
 		if msg.err != nil {

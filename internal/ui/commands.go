@@ -40,15 +40,6 @@ func (m Model) loadCompetitionCmd(url, competitionKey string) tea.Cmd {
 	}
 }
 
-func (m Model) loadLeagueCmd(url, competitionKey string) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
-		defer cancel()
-		league, err := m.service.LoadLeague(ctx, url)
-		return leagueLoadedMsg{competitionKey: competitionKey, league: league, err: err}
-	}
-}
-
 func (m Model) loadMatchCmd(url, fixtureKey string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
