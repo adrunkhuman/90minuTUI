@@ -54,7 +54,7 @@ func (m Model) topBarView() string {
 
 	right := ""
 	if round := m.currentRound(); round != nil {
-		right = topBarRoundMeta(round.Name, m.roundCursor+1, len(m.league.Rounds))
+		right = topBarRoundMeta(*round, m.roundCursor+1, len(m.league.Rounds), m.league.Title)
 	}
 
 	return renderFullLine(barLine(label, right, m.width), m.width, colorBgHeader, colorTextPrimary, true)
@@ -78,8 +78,8 @@ func barLine(left, right string, width int) string {
 	return " " + leftText + strings.Repeat(" ", gap) + right + " "
 }
 
-func topBarRoundMeta(roundName string, roundIdx, total int) string {
-	label := displayRoundLabel(roundName, roundIdx)
+func topBarRoundMeta(round site.Round, roundIdx, total int, leagueTitle string) string {
+	label := displayRoundLabelWithFixtures(round.Name, roundIdx, round.Fixtures, leagueTitle)
 	roundPart, datePart, ok := strings.Cut(label, " - ")
 	if !ok || strings.TrimSpace(datePart) == "" {
 		return fmt.Sprintf("%s / %d", label, total)
