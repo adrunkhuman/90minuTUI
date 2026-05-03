@@ -51,7 +51,7 @@ func TestParseLeagueFixturesFromCorpus(t *testing.T) {
 				if len(round.Fixtures) == 0 {
 					t.Fatalf("round %q has no fixtures in %s", round.Name, fixture.Name)
 				}
-				assertFixturesSortedByDate(t, fixture.Name, round)
+				assertFixturesSortedByDate(t, fixture.Name, page.Title, round)
 			}
 
 			totalFixtures := 0
@@ -142,7 +142,7 @@ func TestParseLeagueFixturesWithoutMatchLinksFromCorpus(t *testing.T) {
 	}
 }
 
-func assertFixturesSortedByDate(t *testing.T, fixtureName string, round Round) {
+func assertFixturesSortedByDate(t *testing.T, fixtureName, leagueTitle string, round Round) {
 	t.Helper()
 
 	lastKey := 0
@@ -151,7 +151,7 @@ func assertFixturesSortedByDate(t *testing.T, fixtureName string, round Round) {
 	seenUndated := false
 
 	for _, fixture := range round.Fixtures {
-		dateKey, ok := fixtureDateKey(fixture.WhenInfo)
+		dateKey, ok := fixtureDateKey(fixture.WhenInfo, leagueTitle)
 		if !ok {
 			seenUndated = true
 			continue
