@@ -197,8 +197,10 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		"HT 1 – 0",
 		"FT 2 – 1",
 		"Wdowiak", "39'",
+		"Barkowskij", "52'", "❌",
 		"Szkurin", "60'",
 		"K. Czubak", "70'",
+		"Pllana", "85'", "■",
 		"LINEUPS",
 	} {
 		if !strings.Contains(plainView, want) {
@@ -207,7 +209,6 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 	}
 
 	for _, unwanted := range []string{
-		"❌",
 		"↕",
 	} {
 		if strings.Contains(plainView, unwanted) {

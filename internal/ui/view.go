@@ -937,15 +937,15 @@ func (m Model) matchDetailContent(width int) string {
 	b.WriteString("\n")
 	b.WriteString(renderSectionLabel("TIMELINE", width))
 	b.WriteString("\n")
-	firstHalfGoals, secondHalfGoals := splitGoalTimelineRows(m.match.Events)
-	for _, row := range firstHalfGoals {
-		b.WriteString(renderGoalTimelineRow(row.home, row.away, width))
+	firstHalfEvents, secondHalfEvents := splitTimelineRows(m.match.Events)
+	for _, row := range firstHalfEvents {
+		b.WriteString(renderTimelineRow(row, width))
 		b.WriteString("\n")
 	}
 	b.WriteString(renderScoreAxisLine(halftimeScoreDisplay(m.match), width, colorTextMuted, false))
 	b.WriteString("\n")
-	for _, row := range secondHalfGoals {
-		b.WriteString(renderGoalTimelineRow(row.home, row.away, width))
+	for _, row := range secondHalfEvents {
+		b.WriteString(renderTimelineRow(row, width))
 		b.WriteString("\n")
 	}
 	if hasFinalScore(m.match.Score) {
@@ -1218,6 +1218,59 @@ type goalTimelineRow struct {
 	away string
 }
 
+type timelineRow struct {
+	home   string
+	away   string
+	marker string
+	color  lipgloss.Color
+}
+
+func splitTimelineRows(events []site.MatchEvent) ([]timelineRow, []timelineRow) {
+	firstHalf := make([]timelineRow, 0, 4)
+	secondHalf := make([]timelineRow, 0, 4)
+	for _, event := range sortedEvents(events) {
+		marker, color, ok := timelineMarker(event.Kind)
+		if !ok {
+			continue
+		}
+		label := timelineEventLabel(event)
+		if label == "" {
+			continue
+		}
+		row := timelineRow{home: "—", away: "—", marker: marker, color: color}
+		switch event.TeamSide {
+		case "home":
+			row.home = label
+		case "away":
+			row.away = label
+		default:
+			continue
+		}
+
+		minute, ok := minuteSortKey(event.MinuteText)
+		if ok && minute <= 4599 {
+			firstHalf = append(firstHalf, row)
+		} else {
+			secondHalf = append(secondHalf, row)
+		}
+	}
+
+	return firstHalf, secondHalf
+}
+
+func timelineMarker(kind string) (string, lipgloss.Color, bool) {
+	switch kind {
+	case "GOAL":
+		return "⚽", colorAccent, true
+	case "MISS":
+		return "❌", colorLoss, true
+	case "RC":
+		return "■", colorRed, true
+	default:
+		return "", colorTextMuted, false
+	}
+}
+
 func goalTimelineRows(events []site.MatchEvent) []goalTimelineRow {
 	firstHalf, secondHalf := splitGoalTimelineRows(events)
 	rows := append(firstHalf, secondHalf...)
@@ -1260,6 +1313,10 @@ func splitGoalTimelineRows(events []site.MatchEvent) ([]goalTimelineRow, []goalT
 }
 
 func goalTimelineLabel(event site.MatchEvent) string {
+	return timelineEventLabel(event)
+}
+
+func timelineEventLabel(event site.MatchEvent) string {
 	name := ansi.Strip(trimEventMinute(event))
 	minute := formatMatchMinute(event.MinuteText)
 	if name == "" || minute == "" {
@@ -1269,6 +1326,21 @@ func goalTimelineLabel(event site.MatchEvent) string {
 		return strings.TrimSpace(minute) + " " + name
 	}
 	return name + " " + minute
+}
+
+func renderTimelineRow(row timelineRow, width int) string {
+	if row.home == "—" && row.away == "—" {
+		return renderCenteredPanelLine("—", width, colorTextMuted, false)
+	}
+	left := ""
+	right := ""
+	if row.home != "—" {
+		left = row.home
+	}
+	if row.away != "—" {
+		right = row.away
+	}
+	return renderFullLine(axisPlainLine(left, " "+row.marker+" ", right, width), width, colorBgPanel, row.color, false)
 }
 
 func renderGoalTimelineRow(home, away string, width int) string {
