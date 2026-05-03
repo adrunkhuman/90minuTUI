@@ -1373,6 +1373,46 @@ func TestMatchViewShowsFullStandingsWhenHeightAllows(t *testing.T) {
 	}
 }
 
+func TestMatchSidebarHeightsPreservesLayoutPolicy(t *testing.T) {
+	t.Run("full standings fit", func(t *testing.T) {
+		m := matchSidebarHeightModel(10, 2)
+
+		standings, fixtures := m.matchSidebarHeights()
+		if standings != m.standingsContentHeight() || standings+fixtures != m.bodyHeightLimit() {
+			t.Fatalf("expected full standings plus remaining fixture space, got standings=%d fixtures=%d", standings, fixtures)
+		}
+	})
+
+	for _, bodyHeight := range []int{6, matchSidebarCompactHeight - 1} {
+		t.Run(fmt.Sprintf("compact terminal %d", bodyHeight), func(t *testing.T) {
+			standings, fixtures := matchSidebarHeightModel(bodyHeight, 20).matchSidebarHeights()
+			if standings < matchSidebarMinPaneHeight || fixtures <= 0 || standings+fixtures != bodyHeight {
+				t.Fatalf("expected compact layout to keep both panes visible within height %d, got standings=%d fixtures=%d", bodyHeight, standings, fixtures)
+			}
+		})
+	}
+
+	for _, bodyHeight := range []int{matchSidebarCompactHeight, 18, 30} {
+		t.Run(fmt.Sprintf("normal terminal %d", bodyHeight), func(t *testing.T) {
+			standings, fixtures := matchSidebarHeightModel(bodyHeight, 40).matchSidebarHeights()
+			if standings < matchSidebarMinStandingsHeight || standings > matchSidebarMaxStandingsHeight || fixtures < matchSidebarMinPaneHeight || standings+fixtures != bodyHeight {
+				t.Fatalf("expected normal layout to stay bounded within height %d, got standings=%d fixtures=%d", bodyHeight, standings, fixtures)
+			}
+		})
+	}
+}
+
+func matchSidebarHeightModel(bodyHeight, standingsRows int) Model {
+	m := sketchModel()
+	m.suppressTopBar = true
+	m.height = bodyHeight + 1
+	m.league.Standings = make([]site.StandingRow, 0, standingsRows)
+	for i := 1; i <= standingsRows; i++ {
+		m.league.Standings = append(m.league.Standings, site.StandingRow{Position: i, Team: fmt.Sprintf("Team %02d", i)})
+	}
+	return m
+}
+
 func TestMatchViewScrollLimitIsClamped(t *testing.T) {
 	m := sketchModel()
 	m.width = 100
