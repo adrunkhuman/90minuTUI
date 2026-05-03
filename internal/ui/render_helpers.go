@@ -34,6 +34,8 @@ var roundSuffixRe = regexp.MustCompile(`(?i)\s*-\s*(?:kolejka|runda)\s+(\d+)\s*$
 var matchDatePrefixRe = regexp.MustCompile(`^\d{1,2}\s+\p{L}+\s+\d{4},\s+\d{1,2}:\d{2}`)
 var leadingAttendanceRe = regexp.MustCompile(`^(\d[\d ]*)\b`)
 var fixtureWhenInfoRe = regexp.MustCompile(`(?i)^(\d{1,2})\s+([\p{L}]+)(?:\s+\d{4})?,\s*(\d{1,2}:\d{2})`)
+var fixtureDateTimeRe = regexp.MustCompile(`(?i)(\d{1,2})\s+([\p{L}]+)(?:\s+(\d{4}))?,\s*(\d{1,2}:\d{2})`)
+var leagueSeasonYearsRe = regexp.MustCompile(`(\d{4})\s*/\s*(\d{2,4})`)
 var playerNumberPrefixRe = regexp.MustCompile(`^\(\d+\)\s*`)
 var playerNumberSuffixRe = regexp.MustCompile(`\s+\(\d+\)$`)
 var trailingParenRe = regexp.MustCompile(`^(.*?)(\s+\([^)]*\))$`)
@@ -47,17 +49,7 @@ func renderSeasonsWindow(seasons []site.Season, cursor int) []string {
 	start, end := windowBounds(len(seasons), cursor, 10)
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		prefix := "  "
-		if i == cursor {
-			prefix = "> "
-		}
-
-		marker := ""
-		if seasons[i].Current {
-			marker = " *"
-		}
-
-		lines = append(lines, fmt.Sprintf("%s%s%s", prefix, seasons[i].Label, marker))
+		lines = append(lines, seasons[i].Label)
 	}
 
 	return lines
@@ -71,11 +63,7 @@ func renderCompetitionWindow(items []site.Competition, cursor int) []string {
 	start, end := windowBounds(len(items), cursor, 18)
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		prefix := "  "
-		if i == cursor {
-			prefix = "> "
-		}
-		lines = append(lines, prefix+items[i].Name)
+		lines = append(lines, items[i].Name)
 	}
 
 	return lines
@@ -668,13 +656,8 @@ func cardAnnotation(player site.PlayerLine, idx map[string][]site.MatchEvent) st
 }
 
 func cardAnnotationName(name string, idx map[string][]site.MatchEvent) string {
-	key := playerMatchKey(name)
-	if key == "" {
-		return ""
-	}
-
-	matched, ok := idx[key]
-	if !ok {
+	matched := matchingPlayerEvents(name, idx)
+	if len(matched) == 0 {
 		return ""
 	}
 
@@ -693,26 +676,165 @@ func cardAnnotationName(name string, idx map[string][]site.MatchEvent) string {
 	return ""
 }
 
+func matchingPlayerEvents(name string, idx map[string][]site.MatchEvent) []site.MatchEvent {
+	key := playerMatchKey(name)
+	if key == "" {
+		return nil
+	}
+	matched := append([]site.MatchEvent(nil), idx[key]...)
+
+	compact := playerCompactMatchKey(name)
+	if compact == "" {
+		return matched
+	}
+	if !isAbbreviatedPlayerName(name) {
+		return matched
+	}
+
+	var compactMatched []site.MatchEvent
+	for candidate, events := range idx {
+		if candidate == key {
+			continue
+		}
+		if playerCompactMatchKey(candidate) != compact {
+			continue
+		}
+		if compactMatched != nil {
+			return matched
+		}
+		compactMatched = events
+	}
+	return append(matched, compactMatched...)
+}
+
+func matchingPlayerEventsInRoster(name string, idx map[string][]site.MatchEvent, players []site.PlayerLine) []site.MatchEvent {
+	matched := exactPlayerEvents(name, idx)
+	if compactMatchCountForName(name, players) != 1 {
+		return matched
+	}
+
+	compact := playerCompactMatchKey(name)
+	var compactMatched []site.MatchEvent
+	for candidate, events := range idx {
+		if playerMatchKey(candidate) == playerMatchKey(name) || playerCompactMatchKey(candidate) != compact {
+			continue
+		}
+		if compactMatched != nil {
+			return matched
+		}
+		compactMatched = events
+	}
+	return append(matched, compactMatched...)
+}
+
+func exactPlayerEvents(name string, idx map[string][]site.MatchEvent) []site.MatchEvent {
+	key := playerMatchKey(name)
+	if key == "" {
+		return nil
+	}
+	return append([]site.MatchEvent(nil), idx[key]...)
+}
+
+func playerCompactMatchKey(name string) string {
+	return strings.ToLower(normalizeDisplayText(formatPlayerLabel(name)))
+}
+
+func matchingSubstituteCardEvents(name string, idx map[string][]site.MatchEvent) []site.MatchEvent {
+	matched := append([]site.MatchEvent(nil), matchingPlayerEvents(name, idx)...)
+	compact := playerCompactMatchKey(name)
+	if compact == "" {
+		return matched
+	}
+
+	var compactMatched []site.MatchEvent
+	for candidate, events := range idx {
+		if playerMatchKey(candidate) == playerMatchKey(name) || playerCompactMatchKey(candidate) != compact {
+			continue
+		}
+		cardEvents := filterCardEvents(events)
+		if len(cardEvents) == 0 {
+			continue
+		}
+		if compactMatched != nil {
+			return matched
+		}
+		compactMatched = cardEvents
+	}
+	return append(matched, compactMatched...)
+}
+
+func matchingSubstituteCardEventsInRoster(name string, idx map[string][]site.MatchEvent, players []site.PlayerLine) []site.MatchEvent {
+	matched := exactPlayerEvents(name, idx)
+	if compactMatchCountForName(name, players) != 1 {
+		return matched
+	}
+
+	compact := playerCompactMatchKey(name)
+	var compactMatched []site.MatchEvent
+	for candidate, events := range idx {
+		if playerMatchKey(candidate) == playerMatchKey(name) || playerCompactMatchKey(candidate) != compact {
+			continue
+		}
+		cardEvents := filterCardEvents(events)
+		if len(cardEvents) == 0 {
+			continue
+		}
+		if compactMatched != nil {
+			return matched
+		}
+		compactMatched = cardEvents
+	}
+	return append(matched, compactMatched...)
+}
+
+func filterCardEvents(events []site.MatchEvent) []site.MatchEvent {
+	filtered := make([]site.MatchEvent, 0, len(events))
+	for _, event := range events {
+		if event.Kind == "YC" || event.Kind == "RC" {
+			filtered = append(filtered, event)
+		}
+	}
+	return filtered
+}
+
+func isAbbreviatedPlayerName(name string) bool {
+	for _, field := range strings.Fields(canonicalPlayerName(name)) {
+		if strings.HasSuffix(field, ".") {
+			return true
+		}
+	}
+	return false
+}
+
 type lineupEntry struct {
 	player       site.PlayerLine
 	enteredAt    string
 	replaced     string
-	replacedYC   string
+	replacedYC   lineupCardMarker
 	leftAt       string
 	replacedBy   string
-	replacedByYC string
+	replacedByYC lineupCardMarker
 }
+
+const (
+	lineupYellowCardToken = "\ue000"
+	lineupRedCardToken    = "\ue001"
+)
 
 // A lineup row can carry both entry and exit notes for players who came on and were later replaced.
 func formatLineupPlayer(entry lineupEntry, side string, maxWidth int) string {
+	return formatLineupPlayerWithCards(entry, side, maxWidth, false)
+}
+
+func formatLineupPlayerWithCards(entry lineupEntry, side string, maxWidth int, tokens bool) string {
 	name := formatPlayerLabel(entry.player.Name)
 	if entry.enteredAt == "" && entry.replaced == "" && entry.leftAt == "" && entry.replacedBy == "" {
 		return name
 	}
 
-	label := lineupPlayerLabel(entry, side, name, false)
+	label := lineupPlayerLabel(entry, side, name, false, tokens)
 	if maxWidth > 0 && ansi.StringWidth(label) > maxWidth {
-		shortened := lineupPlayerLabel(entry, side, name, true)
+		shortened := lineupPlayerLabel(entry, side, name, true, tokens)
 		if ansi.StringWidth(shortened) < ansi.StringWidth(label) {
 			return shortened
 		}
@@ -721,8 +843,8 @@ func formatLineupPlayer(entry lineupEntry, side string, maxWidth int) string {
 	return label
 }
 
-func lineupPlayerLabel(entry lineupEntry, side, name string, shortenNotes bool) string {
-	notes := lineupNotes(entry, side, shortenNotes)
+func lineupPlayerLabel(entry lineupEntry, side, name string, shortenNotes, tokens bool) string {
+	notes := lineupNotes(entry, side, shortenNotes, tokens)
 	if len(notes) == 0 {
 		return name
 	}
@@ -736,65 +858,90 @@ func lineupPlayerLabel(entry lineupEntry, side, name string, shortenNotes bool) 
 	return strings.Join(parts, " ")
 }
 
-func lineupNotes(entry lineupEntry, side string, shortenNotes bool) []string {
+func lineupNotes(entry lineupEntry, side string, shortenNotes, tokens bool) []string {
 	notes := make([]string, 0, 2)
 
-	if note := entryNote(entry, side, shortenNotes); note != "" {
+	if note := entryNote(entry, side, shortenNotes, tokens); note != "" {
 		notes = append(notes, note)
 	}
-	if note := exitNote(entry, side, shortenNotes); note != "" {
+	if note := exitNote(entry, side, shortenNotes, tokens); note != "" {
 		notes = append(notes, note)
 	}
 
 	return notes
 }
 
-func entryNote(entry lineupEntry, side string, shortenNotes bool) string {
+func entryNote(entry lineupEntry, side string, shortenNotes, tokens bool) string {
 	if entry.enteredAt == "" {
 		return ""
 	}
 
 	replaced := formatSubNoteName(entry.replaced, shortenNotes)
+	card := lineupCardText(entry.replacedYC, tokens)
 	if side == "home" {
 		text := "(" + entry.enteredAt
 		if replaced != "" {
-			text += " for " + replaced
-			if entry.replacedYC != "" {
-				text += entry.replacedYC
-			}
+			text += " for " + replaced + card
 		}
-		return faintText(text + ")")
+		return substitutionNoteText(text+")", tokens)
 	}
 
 	text := "(for "
+	if card != "" {
+		text += card + " "
+	}
 	if replaced != "" {
 		text += replaced + " "
 	}
-	if entry.replacedYC != "" {
-		text += entry.replacedYC + " "
-	}
 	text += entry.enteredAt
-	return faintText(text + ")")
+	return substitutionNoteText(text+")", tokens)
 }
 
-func exitNote(entry lineupEntry, side string, shortenNotes bool) string {
+func exitNote(entry lineupEntry, side string, shortenNotes, tokens bool) string {
 	if entry.replacedBy == "" {
 		return ""
 	}
 
 	replacement := formatSubNoteName(entry.replacedBy, shortenNotes)
+	card := lineupCardText(entry.replacedByYC, tokens)
 	text := "("
 	if side == "home" && entry.leftAt != "" {
 		text += entry.leftAt + " "
 	}
+	if side != "home" && card != "" {
+		text += card + " "
+	}
 	text += replacement
-	if entry.replacedByYC != "" {
-		text += entry.replacedByYC
+	if side == "home" {
+		text += card
 	}
 	if side != "home" && entry.leftAt != "" {
 		text += " " + entry.leftAt
 	}
-	return faintText(text + ")")
+	return substitutionNoteText(text+")", tokens)
+}
+
+func substitutionNoteText(text string, tokens bool) string {
+	if tokens {
+		return text
+	}
+	return faintText(text)
+}
+
+func lineupCardText(card lineupCardMarker, tokens bool) string {
+	if !card.ok {
+		return ""
+	}
+	if card.color == colorRed {
+		if tokens {
+			return lineupRedCardToken
+		}
+		return "■"
+	}
+	if tokens {
+		return lineupYellowCardToken
+	}
+	return "■"
 }
 
 // Under width pressure, shorten only substitution-note names so the main player label stays stable.
@@ -819,28 +966,81 @@ func formatSubNoteName(name string, surnameOnly bool) string {
 
 // Players can collect both entry and exit notes when they are substituted on and off in one match.
 func annotateLineupPlayer(player site.PlayerLine, idx map[string][]site.MatchEvent) lineupEntry {
+	return annotateLineupPlayerInRoster(player, idx, nil)
+}
+
+func annotateLineupPlayerInRoster(player site.PlayerLine, idx map[string][]site.MatchEvent, players []site.PlayerLine) lineupEntry {
 	entry := lineupEntry{player: player}
-	key := playerMatchKey(player.Name)
-	for _, event := range sortedEvents(idx[key]) {
+	for _, event := range sortedEvents(matchingPlayerEventsInRoster(player.Name, idx, players)) {
 		if event.Kind != "SUB" {
 			continue
 		}
 
 		out, in := substitutionPlayers(event.Text)
 		minute := strings.TrimSpace(formatMatchMinute(event.MinuteText))
-		if playerMatchKey(in) == key {
+		if playerNameMatchesInRoster(in, player.Name, players) {
 			entry.enteredAt = minute
 			entry.replaced = out
-			entry.replacedYC = cardAnnotationName(out, idx)
+			entry.replacedYC = substituteCardMarkerAnnotationNameInRoster(out, idx, players)
 		}
-		if playerMatchKey(out) == key {
+		if playerNameMatchesInRoster(out, player.Name, players) {
 			entry.leftAt = minute
 			entry.replacedBy = in
-			entry.replacedByYC = cardAnnotationName(in, idx)
+			entry.replacedByYC = substituteCardMarkerAnnotationNameInRoster(in, idx, players)
 		}
 	}
 
 	return entry
+}
+
+func playerNameMatches(left, right string) bool {
+	leftKey := playerMatchKey(left)
+	rightKey := playerMatchKey(right)
+	if leftKey == "" || rightKey == "" {
+		return false
+	}
+	if leftKey == rightKey {
+		return true
+	}
+	return isAbbreviatedPlayerName(right) && playerCompactMatchKey(left) == playerCompactMatchKey(right)
+}
+
+func playerNameMatchesInRoster(left, right string, players []site.PlayerLine) bool {
+	leftKey := playerMatchKey(left)
+	rightKey := playerMatchKey(right)
+	if leftKey != "" && leftKey == rightKey {
+		return true
+	}
+	if playerCompactMatchKey(left) == "" || playerCompactMatchKey(left) != playerCompactMatchKey(right) {
+		return false
+	}
+	if !isAbbreviatedPlayerName(left) && !isAbbreviatedPlayerName(right) {
+		return false
+	}
+	return compactMatchCountForName(right, players) == 1
+}
+
+func compactMatchCountForName(name string, players []site.PlayerLine) int {
+	compact := playerCompactMatchKey(name)
+	if compact == "" {
+		return 0
+	}
+
+	count := 0
+	foundQuery := false
+	for _, player := range players {
+		if playerCompactMatchKey(player.Name) != compact {
+			continue
+		}
+		count++
+		if playerNameMatches(name, player.Name) || playerNameMatches(player.Name, name) {
+			foundQuery = true
+		}
+	}
+	if !foundQuery {
+		count++
+	}
+	return count
 }
 
 // Synthetic entrant rows are only added when a substitute was later replaced again.
@@ -857,27 +1057,50 @@ func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent
 	entries := make([]lineupEntry, 0, len(players))
 	addedSynthetic := make(map[string]bool)
 	for _, player := range players {
-		entry := annotateLineupPlayer(player, idx)
+		entry := annotateLineupPlayerInRoster(player, idx, players)
 		entries = append(entries, entry)
 
 		inKey := playerMatchKey(entry.replacedBy)
-		if inKey == "" || addedSynthetic[inKey] {
+		syntheticKey := playerSyntheticKey(entry.replacedBy)
+		if inKey == "" || addedSynthetic[syntheticKey] {
 			continue
 		}
-		if _, exists := byKey[inKey]; exists {
+		if _, exists := byKey[inKey]; exists || lineupContainsPlayer(players, entry.replacedBy) {
 			continue
 		}
 
-		synthetic := annotateLineupPlayer(site.PlayerLine{Name: entry.replacedBy}, idx)
+		synthetic := annotateLineupPlayerInRoster(site.PlayerLine{Name: entry.replacedBy}, idx, players)
 		if synthetic.replacedBy == "" {
 			continue
 		}
 
 		entries = append(entries, synthetic)
-		addedSynthetic[inKey] = true
+		addedSynthetic[syntheticKey] = true
 	}
 
 	return entries
+}
+
+func lineupContainsPlayer(players []site.PlayerLine, name string) bool {
+	for _, player := range players {
+		if playerNameMatches(name, player.Name) || playerNameMatches(player.Name, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func playerSyntheticKey(name string) string {
+	if isAbbreviatedPlayerName(name) {
+		return playerCompactMatchKey(name)
+	}
+	if key := playerMatchKey(name); key != "" {
+		return key
+	}
+	if compact := playerCompactMatchKey(name); compact != "" {
+		return compact
+	}
+	return ""
 }
 
 // Narrow layouts fall back to the generic lineup row, which reserves a smaller per-side text budget.
@@ -1158,12 +1381,14 @@ func layoutWidths(total int, collapsed, emphasizeRight bool) (int, int) {
 	return leftWidth, rightWidth
 }
 
+const leftPaneWidth = 54
+
 func leagueLayoutWidths(total int) (int, int) {
 	if total < 88 {
 		return 0, total
 	}
 
-	leftWidth := clamp(total/3+8, 42, 58)
+	leftWidth := leftPaneWidth
 	rightWidth := total - leftWidth - 1
 	if rightWidth < 36 {
 		rightWidth = 36
@@ -1178,7 +1403,7 @@ func matchLayoutWidths(total int) (int, int, int) {
 		return 0, total, 0
 	}
 
-	leftWidth := clamp(total/3+4, 38, 54)
+	leftWidth := leftPaneWidth
 	centerWidth := total - leftWidth - 1
 	if centerWidth >= 40 {
 		return leftWidth, centerWidth, 0
@@ -1453,6 +1678,59 @@ func formatFixtureWhenInfo(value string) string {
 	}
 
 	return translatePolishDateText(cleaned)
+}
+
+func formatFixtureDateTime(value, leagueTitle string) string {
+	cleaned := normalizeDisplayText(value)
+	if cleaned == "" {
+		return ""
+	}
+
+	matches := fixtureDateTimeRe.FindStringSubmatch(cleaned)
+	if len(matches) != 5 {
+		return formatFixtureWhenInfo(cleaned)
+	}
+
+	month := polishMonthNumber(matches[2])
+	if month == "" {
+		return formatFixtureWhenInfo(cleaned)
+	}
+
+	day := atoiOrNeg(matches[1])
+	monthNum := atoiOrNeg(month)
+	year := atoiOrNeg(matches[3])
+	if year < 0 {
+		year = inferFixtureYear(monthNum, leagueTitle)
+	}
+	if day <= 0 || monthNum <= 0 || year <= 0 {
+		return fmt.Sprintf("%02d/%02d %s", max(0, day), max(0, monthNum), matches[4])
+	}
+
+	clock, err := time.Parse("15:04", matches[4])
+	if err != nil {
+		return fmt.Sprintf("%02d/%02d %s", day, monthNum, matches[4])
+	}
+	when := time.Date(year, time.Month(monthNum), day, clock.Hour(), clock.Minute(), 0, 0, time.Local)
+	return when.Format("Mon 02/01 15:04")
+}
+
+func inferFixtureYear(month int, leagueTitle string) int {
+	matches := leagueSeasonYearsRe.FindStringSubmatch(leagueTitle)
+	if len(matches) != 3 {
+		return 0
+	}
+	startYear := atoiOrNeg(matches[1])
+	endYear := atoiOrNeg(matches[2])
+	if endYear >= 0 && endYear < 100 {
+		endYear += (startYear / 100) * 100
+		if endYear < startYear {
+			endYear += 100
+		}
+	}
+	if month >= 7 {
+		return startYear
+	}
+	return endYear
 }
 
 func polishMonthNumber(value string) string {
