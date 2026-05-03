@@ -45,6 +45,8 @@ func (c *Client) Resolve(raw string) string {
 	return c.baseURL.ResolveReference(u).String()
 }
 
+// Document resolves rawURL, sends the project User-Agent, decodes legacy HTML charsets,
+// and reports request, transport, status, body-read, and parse failures with URL context.
 func (c *Client) Document(ctx context.Context, rawURL string) (*goquery.Document, error) {
 	absoluteURL := c.Resolve(rawURL)
 

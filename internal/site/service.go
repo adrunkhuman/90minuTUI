@@ -48,6 +48,9 @@ func NewService() *Service {
 	return &Service{client: NewClient()}
 }
 
+// LoadArchive returns parsed seasons, the selected season index, and top-level competitions.
+// Empty archive pages return nil results and -1; pages with seasons but no competitions
+// return the parsed season context with an error so callers can surface partial state.
 func (s *Service) LoadArchive(ctx context.Context, archiveURL string) ([]Season, int, []Competition, error) {
 	doc, err := s.client.Document(ctx, archiveURL)
 	if err != nil {
@@ -128,6 +131,8 @@ func (s *Service) LoadLeague(ctx context.Context, leagueURL string) (*LeaguePage
 	return league, nil
 }
 
+// LoadMatch returns a parsed match page. Fetch/parse failures return nil; validation failures
+// may return a partial page with stable URL/title/ID fields alongside the error.
 func (s *Service) LoadMatch(ctx context.Context, matchURL string) (*MatchPage, error) {
 	doc, err := s.client.Document(ctx, matchURL)
 	if err != nil {
