@@ -1141,8 +1141,7 @@ func halftimeScoreAlways(events []site.MatchEvent) string {
 	homeGoals := 0
 	awayGoals := 0
 	for _, event := range sortedEvents(events) {
-		minute, ok := minuteSortKey(event.MinuteText)
-		if !ok || minute > 4599 || event.Kind != "GOAL" {
+		if !event.HasMinute || event.Minute*100+event.Stoppage > 4599 || event.Kind != "GOAL" {
 			continue
 		}
 		if event.TeamSide == "home" {
@@ -1190,8 +1189,7 @@ func splitTimelineRows(events []site.MatchEvent) ([]timelineRow, []timelineRow) 
 			continue
 		}
 
-		minute, ok := minuteSortKey(event.MinuteText)
-		if ok && minute <= 4599 {
+		if event.HasMinute && event.Minute*100+event.Stoppage <= 4599 {
 			firstHalf = append(firstHalf, row)
 		} else {
 			secondHalf = append(secondHalf, row)

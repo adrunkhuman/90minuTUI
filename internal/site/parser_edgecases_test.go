@@ -136,6 +136,70 @@ func TestParseMatchPageMissedPenaltyTimelineEvent(t *testing.T) {
 	}
 }
 
+func TestParseMinuteSplitsBaseAndStoppage(t *testing.T) {
+	cases := []struct {
+		input    string
+		minute   int
+		stoppage int
+		ok       bool
+	}{
+		{"45+2", 45, 2, true},
+		{"90+5", 90, 5, true},
+		{"67", 67, 0, true},
+		{"1", 1, 0, true},
+		{"", 0, 0, false},
+		{"abc", 0, 0, false},
+		{"45+abc", 45, 0, true}, // invalid stoppage treated as 0
+	}
+
+	for _, c := range cases {
+		m, s, ok := ParseMinute(c.input)
+		if ok != c.ok || m != c.minute || s != c.stoppage {
+			t.Errorf("ParseMinute(%q) = (%d, %d, %v), want (%d, %d, %v)",
+				c.input, m, s, ok, c.minute, c.stoppage, c.ok)
+		}
+	}
+}
+
+func TestParseMatchPageEventsCarryStructuredMinutes(t *testing.T) {
+	html := `
+	<html><head><title>Match Test</title></head><body>
+	<table class="main" width="480">
+	<tr><td colspan="3"><b>Ekstraklasa</b></td></tr>
+	<tr><td colspan="3">20 marca 2026, 18:00</td></tr>
+	<tr><td>Home FC</td><td>1 - 0</td><td>Away FC</td></tr>
+	<tr><td align="right">Kowalski 45+1&nbsp;&nbsp;&nbsp;&nbsp;</td><td>1 - 0</td><td></td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse html: %v", err)
+	}
+
+	page := parseMatchPage(doc, "http://www.90minut.pl/mecz.php?id_mecz=9999")
+	if page == nil {
+		t.Fatalf("expected parsed match page")
+	}
+
+	var goalEvent *MatchEvent
+	for i := range page.Events {
+		if page.Events[i].Kind == "GOAL" {
+			goalEvent = &page.Events[i]
+			break
+		}
+	}
+	if goalEvent == nil {
+		t.Fatalf("expected GOAL event, got %#v", page.Events)
+	}
+	if !goalEvent.HasMinute {
+		t.Fatalf("expected HasMinute=true for event with MinuteText %q", goalEvent.MinuteText)
+	}
+	if goalEvent.Minute != 45 || goalEvent.Stoppage != 1 {
+		t.Fatalf("expected Minute=45 Stoppage=1, got Minute=%d Stoppage=%d", goalEvent.Minute, goalEvent.Stoppage)
+	}
+}
+
 func TestParseMatchPageSubstitutionCellAssignsCardsToBothPlayers(t *testing.T) {
 	html := `
 	<html><head><title>Match Test</title></head><body>
@@ -146,7 +210,7 @@ func TestParseMatchPageSubstitutionCellAssignsCardsToBothPlayers(t *testing.T) {
 	<tr height="20" valign="middle" align="center" bgcolor="#F5F5F5">
 	<td width="45%"><a href="/wystepy.php?id=1" class="main">Oskar Jakubczyk</a>&nbsp;<img src="http://img.90minut.pl/img/yel.gif" width="15" height="15" align="absmiddle" alt="ZK"><br>
 	<img src="http://img.90minut.pl/img/sub.gif" width="15" height="15" align="absmiddle">&nbsp;
-	72 <a href="/wystepy.php?id=2" class="main">Michal Rzuchowski</a>&nbsp;<img src="http://img.90minut.pl/img/yel.gif" width="15" height="15" align="absmiddle" alt="ZK"></td>
+	90+2 <a href="/wystepy.php?id=2" class="main">Michal Rzuchowski</a>&nbsp;<img src="http://img.90minut.pl/img/yel.gif" width="15" height="15" align="absmiddle" alt="ZK"></td>
 	<td bgcolor="#FFFFFF"></td><td width="45%"></td></tr>
 	</table>
 	</body></html>`
@@ -173,6 +237,9 @@ func TestParseMatchPageSubstitutionCellAssignsCardsToBothPlayers(t *testing.T) {
 	for _, event := range page.Events {
 		switch {
 		case event.Kind == "SUB" && event.TeamSide == "home" && event.Text == "Oskar Jakubczyk -> Michal Rzuchowski":
+			if event.MinuteText != "90+2" || event.Minute != 90 || event.Stoppage != 2 || !event.HasMinute {
+				t.Fatalf("expected structured stoppage-time substitution minute, got %#v", event)
+			}
 			seenSub = true
 		case event.Kind == "YC" && event.TeamSide == "home" && event.Text == "Oskar Jakubczyk":
 			seenStarterCard = true
