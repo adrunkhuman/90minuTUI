@@ -11,7 +11,7 @@ Repository-level working rules for coding agents.
 ## Project Intent
 
 - Build a small Go TUI for browsing `90minut.pl`.
-- Keep architecture simple: `fetch -> parse -> render`.
+- Keep architecture simple: `fetch/decode -> parse/classify -> render/present`.
 - Optimize for reliability of parsing and navigation UX.
 
 ## Code Standards
@@ -27,7 +27,9 @@ Repository-level working rules for coding agents.
 - Decode source content correctly (`iso-8859-2` aware).
 - Use semantic selectors and structural markers.
 - Avoid hardcoded row/column offsets where possible.
-- Keep parser logic out of UI package.
+- Keep HTML/source-shape parser logic out of the UI package.
+- Keep competition classification and submenu routing in the site layer.
+- UI may derive presentation state from typed site models, but must not parse raw HTML or depend on source table shapes.
 - Preserve source URLs/IDs as stable domain keys.
 
 ## Testing Rules

@@ -11,7 +11,7 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
 
 ## Current Features
 
-- Season/competition popup selector from `archsezon.php`, including submenu navigation for III liga, regional leagues, and regional cups.
+- Season/competition popup selector from `archsezon.php`, including submenu navigation for III liga, regional leagues, regional cups, and grouped women/futsal tier nodes.
 - Standings plus round/fixture browsing for the selected league, with rounds normalized by round number, fixture-derived round date spans when parseable, and fixtures within each round ordered by parsed match date.
 - Linkless fixture support for competitions where results exist without match pages; those fixtures stay browsable in standings/round context and surface an unavailable-details state instead of opening match view.
 - Match details view with:
@@ -21,6 +21,7 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
   - side-by-side lineups aligned around the same center axis, with substitutions and card badges shown in lineups, including inline substitution annotations, rather than as separate yellow-card timeline markers
   - match date/details rendered directly under the score header
   - persistent standings/fixture context beside match details
+- UI presentation helpers derive compact display rows from parsed models, including match metadata, fixture dates, inline substitution notes, card badges, and no-details fixture markers. HTML parsing and source-shape decisions stay in `internal/site`.
 
 ## Run
 
@@ -44,10 +45,10 @@ In match view, `pgup`/`pgdn` and `ctrl+u`/`ctrl+d` scroll details. `j/k` and `h/
 ## Architecture
 
 - `cmd/90minutui` - app entrypoint
-- `internal/site` - HTTP fetch + HTML parsing into typed models
-- `internal/ui` - Bubble Tea state/update/view
+- `internal/site` - HTTP fetch, legacy decoding, HTML parsing, competition classification/routing, and normalized domain models
+- `internal/ui` - Bubble Tea state/update/view plus presentation-only helpers derived from site models
 
-Core pipeline: `fetch -> parse -> render`.
+Core pipeline: `fetch/decode -> parse/classify -> render/present`.
 
 ## Development Notes
 
@@ -55,7 +56,9 @@ Core pipeline: `fetch -> parse -> render`.
 - Prefer semantic selectors over fixed table offsets.
 - URL IDs are treated as stable keys (e.g. season/match links).
 - League parsing preserves standings table order from the source page, but normalizes rounds by detected round number and fixtures by parsed `WhenInfo` date/time so all consumers see a stable sequence. Parsed fixtures may still be valid when `MatchURL` and `MatchID` are empty.
+- Archive competition parsing keeps direct league links intact, but may synthesize submenu nodes when one source section flattens multiple drill-down tiers.
 - Async UI loads are keyed by season/competition/fixture IDs so stale responses are ignored if focus changes.
+- UI helpers may interpret typed site data for display, such as fixture date spans, match metadata compaction, and lineup annotations. They should not parse raw HTML or depend on source table layout.
 - Match parsing still assumes mostly three-cell timeline rows and uses heuristic table scoring; add fixtures/tests when source layout drifts.
 
 ## Fixture Corpus Maintenance
