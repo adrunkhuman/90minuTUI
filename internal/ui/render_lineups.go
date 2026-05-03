@@ -28,7 +28,7 @@ const (
 	lineupRedCardToken    = "\ue001"
 )
 
-// A lineup row can carry both entry and exit notes for players who came on and were later replaced.
+// A substitute can enter and later leave; keep both notes on one rendered row.
 func formatLineupPlayer(entry lineupEntry, side string, maxWidth int) string {
 	return formatLineupPlayerWithCards(entry, side, maxWidth, false)
 }
@@ -171,7 +171,6 @@ func formatSubNoteName(name string, surnameOnly bool) string {
 	return faintPenaltySuffix(words[len(words)-1])
 }
 
-// Players can collect both entry and exit notes when they are substituted on and off in one match.
 func annotateLineupPlayer(player site.PlayerLine, idx map[string][]site.MatchEvent) lineupEntry {
 	return annotateLineupPlayerInRoster(player, idx, nil)
 }
@@ -224,6 +223,7 @@ func playerNameMatchesInRoster(left, right string, players []site.PlayerLine) bo
 	if !isAbbreviatedPlayerName(left) && !isAbbreviatedPlayerName(right) {
 		return false
 	}
+	// Abbreviated names are trusted only when the roster has one compact match; ambiguous initials stay unannotated.
 	return compactMatchCountForName(right, players) == 1
 }
 
@@ -250,7 +250,7 @@ func compactMatchCountForName(name string, players []site.PlayerLine) int {
 	return count
 }
 
-// Synthetic entrant rows are only added when a substitute was later replaced again.
+// Only synthesize rows for substitutes who were later subbed off; avoid inventing one-off bench entrants absent from the source lineup.
 func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
 	if len(players) == 0 {
 		return nil

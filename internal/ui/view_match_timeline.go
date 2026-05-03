@@ -37,7 +37,7 @@ func splitTimelineRows(events []site.MatchEvent) ([]timelineRow, []timelineRow) 
 			continue
 		}
 
-		if event.HasMinute && event.Minute*100+event.Stoppage <= 4599 {
+		if event.HasMinute && event.Minute*100+event.Stoppage <= firstHalfMinuteCeiling {
 			firstHalf = append(firstHalf, row)
 		} else {
 			secondHalf = append(secondHalf, row)

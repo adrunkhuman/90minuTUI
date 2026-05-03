@@ -40,6 +40,9 @@ var playerNumberSuffixRe = regexp.MustCompile(`\s+\(\d+\)$`)
 var trailingParenRe = regexp.MustCompile(`^(.*?)(\s+\([^)]*\))$`)
 var substitutionMinutePrefixRe = regexp.MustCompile(`^\d+'?\s*`)
 
+// Minute keys encode stoppage as MM*100+extra; 45+99 is the first-half ceiling.
+const firstHalfMinuteCeiling = 4599
+
 func renderSeasonsWindow(seasons []site.Season, cursor int) []string {
 	if len(seasons) == 0 {
 		return []string{"(none)"}
@@ -163,9 +166,8 @@ func halftimeScore(events []site.MatchEvent) string {
 		if !event.HasMinute {
 			continue
 		}
-		// minute encodes stoppage as MM*100+extra, so 45:59 is the first-half ceiling.
 		minute := event.Minute*100 + event.Stoppage
-		if minute <= 4599 {
+		if minute <= firstHalfMinuteCeiling {
 			if event.Kind == "GOAL" {
 				if event.TeamSide == "home" {
 					homeGoals++

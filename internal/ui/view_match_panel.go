@@ -203,7 +203,7 @@ func halftimeScoreAlways(events []site.MatchEvent) string {
 	homeGoals := 0
 	awayGoals := 0
 	for _, event := range sortedEvents(events) {
-		if !event.HasMinute || event.Minute*100+event.Stoppage > 4599 || event.Kind != "GOAL" {
+		if !event.HasMinute || event.Minute*100+event.Stoppage > firstHalfMinuteCeiling || event.Kind != "GOAL" {
 			continue
 		}
 		if event.TeamSide == "home" {

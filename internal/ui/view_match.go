@@ -173,7 +173,7 @@ func (m Model) matchFixtureRowLimit() int {
 		return len(round.Fixtures)
 	}
 
-	reserved := 1 // fixtures pane header
+	reserved := 1
 	if m.loading && m.match == nil {
 		reserved += 2
 	}
@@ -189,7 +189,7 @@ func (m Model) standingsContentHeight() int {
 	if m.league == nil || len(m.league.Standings) == 0 {
 		return 2
 	}
-	return 2 + len(m.league.Standings) // pane header + column header + rows
+	return 2 + len(m.league.Standings)
 }
 
 func (m Model) standingsRowLimit() int {
@@ -197,7 +197,7 @@ func (m Model) standingsRowLimit() int {
 	if limit == 0 {
 		return len(m.league.Standings)
 	}
-	return max(0, limit-2) // pane header + column header
+	return max(0, limit-2)
 }
 
 func (m Model) fixtureRowLimit() int {

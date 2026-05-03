@@ -228,8 +228,7 @@ func playerMatchKey(label string) string {
 	return strings.ToLower(formatted)
 }
 
-// playerEventIndex maps normalized compact player labels to events for the given side.
-// SUB events are indexed under both outgoing and incoming player names.
+// Index events by canonical player name; substitutions are keyed by both outgoing and incoming players.
 func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.MatchEvent {
 	idx := make(map[string][]site.MatchEvent)
 	for _, e := range events {

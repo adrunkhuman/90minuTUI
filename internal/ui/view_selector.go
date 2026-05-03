@@ -202,7 +202,7 @@ func selectorPaneWidths(total int, seasonLines []string) (int, int) {
 	}
 
 	leftWidth := clamp(seasonWidth+4, 18, 18)
-	rightWidth := total - leftWidth - 1 // 1 for the │ divider
+	rightWidth := total - leftWidth - 1
 	if rightWidth < 16 {
 		rightWidth = 16
 		leftWidth = max(14, total-rightWidth-1)
