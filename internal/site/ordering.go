@@ -9,14 +9,15 @@ import (
 
 var roundNumberRe = regexp.MustCompile(`\d+`)
 var fixtureDateRe = regexp.MustCompile(`(?i)(\d{1,2})\s+([\p{L}]+)(?:\s+(\d{4}))?(?:,\s*(\d{1,2}):(\d{2}))?`)
+var seasonYearsRe = regexp.MustCompile(`(\d{4})\s*/\s*(\d{2,4})`)
 
 // Normalize round and fixture order here so every caller sees the same league structure.
-func normalizeLeagueOrder(rounds []Round) []Round {
+func normalizeLeagueOrder(rounds []Round, leagueTitle string) []Round {
 	ordered := make([]Round, len(rounds))
 	copy(ordered, rounds)
 
 	for i := range ordered {
-		ordered[i].Fixtures = normalizeFixturesByDate(ordered[i].Fixtures)
+		ordered[i].Fixtures = normalizeFixturesByDate(ordered[i].Fixtures, leagueTitle)
 	}
 
 	type indexedRound struct {
@@ -50,7 +51,7 @@ func normalizeLeagueOrder(rounds []Round) []Round {
 	return ordered
 }
 
-func normalizeFixturesByDate(fixtures []Fixture) []Fixture {
+func normalizeFixturesByDate(fixtures []Fixture, leagueTitle string) []Fixture {
 	ordered := make([]Fixture, len(fixtures))
 	copy(ordered, fixtures)
 
@@ -66,8 +67,8 @@ func normalizeFixturesByDate(fixtures []Fixture) []Fixture {
 
 	// Sort parsable dates first; keep undated fixtures in source order at the end.
 	sort.SliceStable(indexed, func(i, j int) bool {
-		dateI, okI := fixtureDateKey(indexed[i].fixture.WhenInfo)
-		dateJ, okJ := fixtureDateKey(indexed[j].fixture.WhenInfo)
+		dateI, okI := fixtureDateKey(indexed[i].fixture.WhenInfo, leagueTitle)
+		dateJ, okJ := fixtureDateKey(indexed[j].fixture.WhenInfo, leagueTitle)
 
 		switch {
 		case okI && okJ && dateI != dateJ:
@@ -105,7 +106,7 @@ func roundNumber(name string) (int, bool) {
 	return value, true
 }
 
-func fixtureDateKey(whenInfo string) (int, bool) {
+func fixtureDateKey(whenInfo, leagueTitle string) (int, bool) {
 	matches := fixtureDateRe.FindStringSubmatch(normalizeWhitespace(whenInfo))
 	if len(matches) == 0 {
 		return 0, false
@@ -127,6 +128,9 @@ func fixtureDateKey(whenInfo string) (int, bool) {
 		if err != nil {
 			return 0, false
 		}
+	} else {
+		year = inferFixtureYear(month, leagueTitle)
+		// Title-less synthetic pages keep the old month/day ordering because no season boundary is available.
 	}
 
 	hour := 0
@@ -145,6 +149,34 @@ func fixtureDateKey(whenInfo string) (int, bool) {
 	}
 
 	return (((year*100)+month)*100+day)*10000 + hour*100 + minute, true
+}
+
+func inferFixtureYear(month int, leagueTitle string) int {
+	matches := seasonYearsRe.FindStringSubmatch(leagueTitle)
+	if len(matches) != 3 {
+		return 0
+	}
+
+	startYear, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0
+	}
+	endYear, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return 0
+	}
+	if endYear < 100 {
+		endYear += (startYear / 100) * 100
+		if endYear < startYear {
+			endYear += 100
+		}
+	}
+
+	// 90minut often omits fixture years; Jul-Dec belongs to the season start, Jan-Jun to the season end.
+	if month >= 7 {
+		return startYear
+	}
+	return endYear
 }
 
 func polishMonthIndex(value string) (int, bool) {

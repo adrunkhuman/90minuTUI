@@ -347,6 +347,29 @@ func TestParseLeaguePageNormalizesFixturesByDate(t *testing.T) {
 	}
 }
 
+func TestParseLeaguePageNormalizesFixturesBySeasonAwareDate(t *testing.T) {
+	html := `<html><head><title>Test liga 2025/26</title></head><body>
+<table class="main"><tr><td class="main"><b>1. kolejka</b></td></tr></table>
+<table class="main">
+<tr><td class="main">Team C</td><td class="main">-</td><td class="main">Team D</td><td class="main">15 marca, 12:00</td></tr>
+<tr><td class="main">Team A</td><td class="main">-</td><td class="main">Team B</td><td class="main">20 listopada, 18:00</td></tr>
+</table></body></html>`
+	doc, err := decodeAndParse([]byte(html), "text/html; charset=utf-8")
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga-test.html")
+	if page == nil || len(page.Rounds) != 1 || len(page.Rounds[0].Fixtures) != 2 {
+		t.Fatalf("expected one round with two fixtures, got %+v", page)
+	}
+
+	first := page.Rounds[0].Fixtures[0]
+	if first.Home != "Team A" || first.WhenInfo != "20 listopada, 18:00" {
+		t.Fatalf("expected November 2025 fixture before March 2026 fixture, got %+v", page.Rounds[0].Fixtures)
+	}
+}
+
 func TestValidateMatchPageAllowsPartialWhenTeamsPresent(t *testing.T) {
 	page := &MatchPage{
 		Title:    "Match",

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,13 @@ var playerNumberPrefixRe = regexp.MustCompile(`^\(\d+\)\s*`)
 var playerNumberSuffixRe = regexp.MustCompile(`\s+\(\d+\)$`)
 var trailingParenRe = regexp.MustCompile(`^(.*?)(\s+\([^)]*\))$`)
 var substitutionMinutePrefixRe = regexp.MustCompile(`^\d+'?\s*`)
+
+const (
+	// Round headers ignore at most three distant postponed fixtures when at least four fixtures form the main date cluster.
+	roundDateMinCluster     = 4
+	roundDateMaxOutliers    = 3
+	roundDateOutlierGapDays = 7
+)
 
 // Minute keys encode stoppage as MM*100+extra; 45+99 is the first-half ceiling.
 const firstHalfMinuteCeiling = 4599
@@ -490,24 +498,21 @@ func displayRoundLabelWithFixtures(name string, fallback int, fixtures []site.Fi
 }
 
 func roundFixtureDateSpan(fixtures []site.Fixture, leagueTitle string) string {
-	var first time.Time
-	var last time.Time
+	dates := make([]time.Time, 0, len(fixtures))
 	for _, fixture := range fixtures {
 		date, ok := fixtureDisplayDate(fixture.WhenInfo, leagueTitle)
 		if !ok {
 			continue
 		}
-		if first.IsZero() || date.Before(first) {
-			first = date
-		}
-		if last.IsZero() || date.After(last) {
-			last = date
-		}
+		dates = append(dates, date)
 	}
-
-	if first.IsZero() {
+	if len(dates) == 0 {
 		return ""
 	}
+
+	dates = roundFixtureSpanDates(dates)
+	first := dates[0]
+	last := dates[len(dates)-1]
 	if sameCalendarDate(first, last) {
 		return first.Format("Jan 2")
 	}
@@ -515,6 +520,70 @@ func roundFixtureDateSpan(fixtures []site.Fixture, leagueTitle string) string {
 		return fmt.Sprintf("%s-%d", first.Format("Jan 2"), last.Day())
 	}
 	return fmt.Sprintf("%s-%s", first.Format("Jan 2"), last.Format("Jan 2"))
+}
+
+func roundFixtureSpanDates(dates []time.Time) []time.Time {
+	ordered := append([]time.Time(nil), dates...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Before(ordered[j]) })
+
+	if len(ordered) <= roundDateMinCluster {
+		return ordered
+	}
+
+	minKeep := max(roundDateMinCluster, len(ordered)-roundDateMaxOutliers)
+	var best []time.Time
+	var bestSpan time.Duration
+	for keep := len(ordered) - 1; keep >= minKeep; keep-- {
+		if window, ok := tightRoundDateWindow(ordered, keep); ok {
+			span := window[len(window)-1].Sub(window[0])
+			if best == nil || span < bestSpan || (span == bestSpan && len(window) > len(best)) {
+				best = window
+				bestSpan = span
+			}
+		}
+	}
+	if best != nil {
+		return best
+	}
+
+	return ordered
+}
+
+func tightRoundDateWindow(dates []time.Time, keep int) ([]time.Time, bool) {
+	var best []time.Time
+	var bestSpan time.Duration
+	for start := 0; start+keep <= len(dates); start++ {
+		end := start + keep
+		window := dates[start:end]
+		if !hasOnlyDistantRoundDateOutliers(dates, start, end) {
+			continue
+		}
+
+		span := window[len(window)-1].Sub(window[0])
+		if best == nil || span < bestSpan {
+			best = window
+			bestSpan = span
+		}
+	}
+	if best == nil {
+		return nil, false
+	}
+	return append([]time.Time(nil), best...), true
+}
+
+func hasOnlyDistantRoundDateOutliers(dates []time.Time, start, end int) bool {
+	gap := time.Duration(roundDateOutlierGapDays) * 24 * time.Hour
+	for _, date := range dates[:start] {
+		if dates[start].Sub(date) <= gap {
+			return false
+		}
+	}
+	for _, date := range dates[end:] {
+		if date.Sub(dates[end-1]) <= gap {
+			return false
+		}
+	}
+	return true
 }
 
 func fixtureDisplayDate(value, leagueTitle string) (time.Time, bool) {

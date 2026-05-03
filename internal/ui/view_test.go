@@ -136,6 +136,79 @@ func TestTopBarRoundMetaShowsCrossYearFixtureDateSpan(t *testing.T) {
 	}
 }
 
+func TestTopBarRoundMetaInfersCrossYearFixtureDateSpan(t *testing.T) {
+	round := site.Round{
+		Name: "4. kolejka - 31 grudnia",
+		Fixtures: []site.Fixture{
+			{Home: "A", Away: "B", WhenInfo: "2 stycznia, 12:00"},
+			{Home: "C", Away: "D", WhenInfo: "31 grudnia, 18:00"},
+		},
+	}
+
+	got := topBarRoundMeta(round, 4, 30, "PKO Bank Polski Ekstraklasa 2025/2026")
+	if got != "Round 4 · Dec 31-Jan 2 / 30" {
+		t.Fatalf("unexpected round meta: %q", got)
+	}
+}
+
+func TestTopBarRoundMetaIgnoresPostponedDateOutliers(t *testing.T) {
+	round := site.Round{
+		Name: "6. kolejka - 20 listopada",
+		Fixtures: []site.Fixture{
+			{Home: "A", Away: "B", WhenInfo: "20 listopada, 18:00"},
+			{Home: "C", Away: "D", WhenInfo: "21 listopada, 12:00"},
+			{Home: "E", Away: "F", WhenInfo: "22 listopada, 15:00"},
+			{Home: "G", Away: "H", WhenInfo: "23 listopada, 20:00"},
+			{Home: "I", Away: "J", WhenInfo: "15 marca, 18:00"},
+			{Home: "K", Away: "L", WhenInfo: "22 marca, 18:00"},
+			{Home: "M", Away: "N", WhenInfo: "1 kwietnia, 18:00"},
+		},
+	}
+
+	got := topBarRoundMeta(round, 6, 30, "PKO Bank Polski Ekstraklasa 2025/2026")
+	if got != "Round 6 · Nov 20-23 / 30" {
+		t.Fatalf("unexpected round meta: %q", got)
+	}
+}
+
+func TestRoundFixtureDateSpanKeepsTooManyOrTooCloseOutliers(t *testing.T) {
+	tooManyOutliers := []site.Fixture{
+		{WhenInfo: "20 listopada, 18:00"},
+		{WhenInfo: "21 listopada, 12:00"},
+		{WhenInfo: "22 listopada, 15:00"},
+		{WhenInfo: "23 listopada, 20:00"},
+		{WhenInfo: "15 marca, 18:00"},
+		{WhenInfo: "22 marca, 18:00"},
+		{WhenInfo: "29 marca, 18:00"},
+		{WhenInfo: "5 kwietnia, 18:00"},
+	}
+	if got := roundFixtureDateSpan(tooManyOutliers, "PKO Bank Polski Ekstraklasa 2025/2026"); got != "Nov 20-Apr 5" {
+		t.Fatalf("expected more than three distant dates to stay in span, got %q", got)
+	}
+
+	tooCloseOutlier := []site.Fixture{
+		{WhenInfo: "20 listopada, 18:00"},
+		{WhenInfo: "21 listopada, 12:00"},
+		{WhenInfo: "22 listopada, 15:00"},
+		{WhenInfo: "23 listopada, 20:00"},
+		{WhenInfo: "30 listopada, 18:00"},
+	}
+	if got := roundFixtureDateSpan(tooCloseOutlier, "PKO Bank Polski Ekstraklasa 2025/2026"); got != "Nov 20-30" {
+		t.Fatalf("expected nearby date to stay in span, got %q", got)
+	}
+
+	tooSmallCluster := []site.Fixture{
+		{WhenInfo: "20 listopada, 18:00"},
+		{WhenInfo: "21 listopada, 12:00"},
+		{WhenInfo: "22 listopada, 15:00"},
+		{WhenInfo: "15 marca, 18:00"},
+		{WhenInfo: "22 marca, 18:00"},
+	}
+	if got := roundFixtureDateSpan(tooSmallCluster, "PKO Bank Polski Ekstraklasa 2025/2026"); got != "Nov 20-Mar 22" {
+		t.Fatalf("expected fewer than four clustered fixtures to keep full span, got %q", got)
+	}
+}
+
 func TestTopBarRoundMetaKeepsRoundLabelWhenFixtureDatesAreUnavailable(t *testing.T) {
 	round := site.Round{
 		Name: "5. kolejka - 12 czerwca",

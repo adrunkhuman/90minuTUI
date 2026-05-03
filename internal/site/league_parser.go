@@ -23,7 +23,7 @@ func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 		return nil
 	}
 
-	page.Rounds = normalizeLeagueOrder(rounds)
+	page.Rounds = normalizeLeagueOrder(rounds, page.Title)
 	return page
 }
 
