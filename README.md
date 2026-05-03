@@ -12,7 +12,7 @@ Terminal UI for browsing `90minut.pl` (Polish football archive) without an API.
 ## Current Features
 
 - Season/competition popup selector from `archsezon.php`, including submenu navigation for III liga, regional leagues, and regional cups.
-- Standings plus round/fixture browsing for the selected league, with rounds normalized by round number and fixtures within each round ordered by parsed match date.
+- Standings plus round/fixture browsing for the selected league, with rounds normalized by round number, fixture-derived round date spans when parseable, and fixtures within each round ordered by parsed match date.
 - Linkless fixture support for competitions where results exist without match pages; those fixtures stay browsable in standings/round context and surface an unavailable-details state instead of opening match view.
 - Match details view with:
   - centered score line with scorer rows anchored to a shared minute column

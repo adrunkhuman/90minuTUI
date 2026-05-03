@@ -1330,6 +1330,7 @@ func inferFixtureYear(month int, leagueTitle string) int {
 			endYear += 100
 		}
 	}
+	// 90minut often omits fixture years; Jul-Dec belongs to the season start, Jan-Jun to the season end.
 	if month >= 7 {
 		return startYear
 	}
