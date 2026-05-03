@@ -130,7 +130,7 @@ func fixtureDateKey(whenInfo, leagueTitle string) (int, bool) {
 		}
 	} else {
 		year = inferFixtureYear(month, leagueTitle)
-		// Title-less synthetic pages keep the old month/day ordering because no season boundary is available.
+		// Pages without a season in the title keep month/day ordering because no season boundary is available.
 	}
 
 	hour := 0
