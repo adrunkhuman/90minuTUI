@@ -55,12 +55,6 @@ type competitionMenuState struct {
 	cursor int
 }
 
-type leagueLoadedMsg struct {
-	competitionKey string
-	league         *site.LeaguePage
-	err            error
-}
-
 type matchLoadedMsg struct {
 	fixtureKey string
 	match      *site.MatchPage
