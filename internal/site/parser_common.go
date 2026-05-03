@@ -9,7 +9,7 @@ import (
 )
 
 var spaceRe = regexp.MustCompile(`\s+`)
-var minuteAtEndRe = regexp.MustCompile(`(\d{1,3})\s*$`)
+var minuteAtEndRe = regexp.MustCompile(`(\d{1,3}(?:\+\d{1,2})?)\s*$`)
 var minuteAnywhereRe = regexp.MustCompile(`(\d{1,3}(?:\+\d{1,2})?)`)
 var scoreLikeTextRe = regexp.MustCompile(`^\d+\s*-\s*\d+$`)
 var leaguePathKeyRe = regexp.MustCompile(`(?i)(?:^|/)liga/\d+/(liga\d+)\.html$`)
