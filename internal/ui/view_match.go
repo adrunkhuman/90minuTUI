@@ -7,6 +7,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	matchSidebarCompactHeight      = 12
+	matchSidebarMinPaneHeight      = 4
+	matchSidebarMinStandingsHeight = 8
+	matchSidebarMaxStandingsHeight = 11
+)
+
 func (m Model) matchSketchView() string {
 	leftWidth, centerWidth, _ := matchLayoutWidths(m.width)
 	if leftWidth == 0 {
@@ -54,19 +61,27 @@ func (m Model) matchSidebarHeights() (int, int) {
 	if fullStandings > 0 && total >= fullStandings+minFixtures {
 		return fullStandings, total - fullStandings
 	}
-
-	if total < 12 {
-		return max(4, total/2), max(0, total-max(4, total/2))
+	if total < matchSidebarCompactHeight {
+		standings := preferredMatchSidebarStandingsHeight(total)
+		return standings, max(0, total-standings)
 	}
 
-	standings := clamp(total/2, 8, 11)
+	standings := preferredMatchSidebarStandingsHeight(total)
 	fixtures := total - standings
-	if fixtures < minFixtures {
-		fixtures = minFixtures
-		standings = max(4, total-fixtures)
+	if fixtures >= minFixtures {
+		return standings, fixtures
 	}
 
+	fixtures = minFixtures
+	standings = max(matchSidebarMinPaneHeight, total-fixtures)
 	return standings, fixtures
+}
+
+func preferredMatchSidebarStandingsHeight(total int) int {
+	if total < matchSidebarCompactHeight {
+		return max(matchSidebarMinPaneHeight, total/2)
+	}
+	return clamp(total/2, matchSidebarMinStandingsHeight, matchSidebarMaxStandingsHeight)
 }
 
 func (m Model) matchFixtureRailView(width int) string {
