@@ -14,7 +14,7 @@ import (
 // bypass the site parser boundary while still exercising minute-aware rendering.
 func testEvent(minuteText, kind, side, text string) site.MatchEvent {
 	m, s, ok := site.ParseMinute(minuteText)
-	return site.MatchEvent{
+	event := site.MatchEvent{
 		MinuteText: minuteText,
 		Minute:     m,
 		Stoppage:   s,
@@ -22,6 +22,33 @@ func testEvent(minuteText, kind, side, text string) site.MatchEvent {
 		Kind:       kind,
 		TeamSide:   side,
 		Text:       text,
+	}
+	if kind == "SUB" {
+		event.SubstitutionOut, event.SubstitutionIn = testSubstitutionPlayers(text)
+	}
+	return event
+}
+
+func testSubstitutionPlayers(text string) (string, string) {
+	left, right, ok := strings.Cut(text, "->")
+	if !ok {
+		return "", ""
+	}
+	return strings.TrimSpace(left), strings.TrimSpace(right)
+}
+
+func testSubstitutionEvent(minuteText, side, outgoing, incoming, text string) site.MatchEvent {
+	m, s, ok := site.ParseMinute(minuteText)
+	return site.MatchEvent{
+		MinuteText:      minuteText,
+		Minute:          m,
+		Stoppage:        s,
+		HasMinute:       ok,
+		Kind:            "SUB",
+		TeamSide:        side,
+		Text:            text,
+		SubstitutionOut: outgoing,
+		SubstitutionIn:  incoming,
 	}
 }
 
@@ -341,7 +368,7 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		Score:    "2-1",
 		Events: []site.MatchEvent{
 			testEvent("39", "GOAL", "home", "Wdowiak 39"),
-			testEvent("46", "SUB", "home", "Igor Strzalek (86) -> Damian Nowak"),
+			testSubstitutionEvent("46", "home", "Igor Strzalek (86)", "Damian Nowak", "display text without arrow"),
 			testEvent("46", "SUB", "away", "O. Lesniak -> Pllana"),
 			testEvent("52", "MISS", "away", "Barkowskij 52 (nk)"),
 			testEvent("60", "GOAL", "home", "Szkurin 60"),
@@ -736,12 +763,7 @@ func TestAnnotatedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testin
 }
 
 func TestAnnotatedLineupMatchesAbbreviatedPlayerToFullSubstitution(t *testing.T) {
-	idx := playerEventIndex([]site.MatchEvent{{
-		MinuteText: "60",
-		Kind:       "SUB",
-		TeamSide:   "away",
-		Text:       "Jan Starter -> Sebastian Kubiak",
-	}}, "away")
+	idx := playerEventIndex([]site.MatchEvent{testEvent("60", "SUB", "away", "Jan Starter -> Sebastian Kubiak")}, "away")
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "S. Kubiak"}}, idx)
 	if len(got) != 1 {
@@ -779,12 +801,7 @@ func TestAnnotatedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
 }
 
 func TestAnnotatedLineupDoesNotApplyAbbreviatedSubstitutionToFullSameInitialNames(t *testing.T) {
-	idx := playerEventIndex([]site.MatchEvent{{
-		MinuteText: "60",
-		Kind:       "SUB",
-		TeamSide:   "home",
-		Text:       "J. Kowalski -> Piotr Kowalski",
-	}}, "home")
+	idx := playerEventIndex([]site.MatchEvent{testEvent("60", "SUB", "home", "J. Kowalski -> Piotr Kowalski")}, "home")
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jan Kowalski"}, {Name: "Jerzy Kowalski"}}, idx)
 	if len(got) != 2 {
@@ -798,12 +815,7 @@ func TestAnnotatedLineupDoesNotApplyAbbreviatedSubstitutionToFullSameInitialName
 }
 
 func TestAnnotatedLineupDoesNotApplyFullSubstitutionToAmbiguousAbbreviatedRow(t *testing.T) {
-	idx := playerEventIndex([]site.MatchEvent{{
-		MinuteText: "60",
-		Kind:       "SUB",
-		TeamSide:   "home",
-		Text:       "Jan Kowalski -> Piotr Kowalski",
-	}}, "home")
+	idx := playerEventIndex([]site.MatchEvent{testEvent("60", "SUB", "home", "Jan Kowalski -> Piotr Kowalski")}, "home")
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "J. Kowalski"}, {Name: "Jerzy Kowalski"}}, idx)
 	if len(got) != 2 {
@@ -811,6 +823,17 @@ func TestAnnotatedLineupDoesNotApplyFullSubstitutionToAmbiguousAbbreviatedRow(t 
 	}
 	if got[0].leftAt != "" || got[0].replacedBy != "" {
 		t.Fatalf("expected ambiguous abbreviated row to stay unannotated, got %#v", got[0])
+	}
+}
+
+func TestAnnotatedLineupUsesStructuredSubstitutionPlayers(t *testing.T) {
+	idx := playerEventIndex([]site.MatchEvent{
+		testSubstitutionEvent("60", "home", "Jan Starter", "Piotr Entrant", "display text without arrow"),
+	}, "home")
+
+	got := annotatedLineup([]site.PlayerLine{{Name: "Jan Starter"}, {Name: "Piotr Entrant"}}, idx)
+	if got[0].replacedBy != "Piotr Entrant" || got[1].replaced != "Jan Starter" {
+		t.Fatalf("expected lineup annotations to use structured substitution players, got %#v", got)
 	}
 }
 

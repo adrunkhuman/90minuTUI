@@ -285,7 +285,8 @@ func playerTimelineEvents(player PlayerLine, side string) []MatchEvent {
 			event.Kind = "SUB"
 			event.MinuteText = extractMinute(marker)
 			event.Minute, event.Stoppage, event.HasMinute = parseMinute(event.MinuteText)
-			event.Text = substitutionEventText(player.Name, marker)
+			event.SubstitutionOut, event.SubstitutionIn = substitutionEventPlayers(player.Name, marker)
+			event.Text = substitutionEventText(event.SubstitutionOut, event.SubstitutionIn, marker)
 		default:
 			event.Kind = "EVENT"
 			event.Text = marker
@@ -297,22 +298,23 @@ func playerTimelineEvents(player PlayerLine, side string) []MatchEvent {
 	return events
 }
 
-func substitutionEventText(outgoing, marker string) string {
+func substitutionEventPlayers(outgoing, marker string) (string, string) {
 	parts := strings.SplitN(marker, "->", 2)
 	if len(parts) != 2 {
-		return normalizeWhitespace(marker)
+		return normalizeWhitespace(outgoing), ""
 	}
 
 	incoming := normalizeWhitespace(parts[1])
+	return normalizeWhitespace(outgoing), incoming
+}
+
+func substitutionEventText(outgoing, incoming, marker string) string {
 	if incoming == "" {
 		return normalizeWhitespace(marker)
 	}
-
-	outgoing = normalizeWhitespace(outgoing)
 	if outgoing == "" {
 		return incoming
 	}
-
 	return outgoing + " -> " + incoming
 }
 

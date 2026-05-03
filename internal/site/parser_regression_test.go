@@ -107,6 +107,9 @@ func TestPlayerTimelineEventsKeepsOutgoingAndIncomingSubstitutionPlayers(t *test
 	if events[0].Text != "Oskar Lesniak -> Damian Nowak" {
 		t.Fatalf("unexpected substitution text: %q", events[0].Text)
 	}
+	if events[0].SubstitutionOut != "Oskar Lesniak" || events[0].SubstitutionIn != "Damian Nowak" {
+		t.Fatalf("unexpected structured substitution players: %#v", events[0])
+	}
 	if events[0].MinuteText != "66" {
 		t.Fatalf("unexpected substitution minute: %q", events[0].MinuteText)
 	}

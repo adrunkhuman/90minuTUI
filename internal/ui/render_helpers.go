@@ -39,7 +39,6 @@ var leagueSeasonYearsRe = regexp.MustCompile(`(\d{4})\s*/\s*(\d{2,4})`)
 var playerNumberPrefixRe = regexp.MustCompile(`^\(\d+\)\s*`)
 var playerNumberSuffixRe = regexp.MustCompile(`\s+\(\d+\)$`)
 var trailingParenRe = regexp.MustCompile(`^(.*?)(\s+\([^)]*\))$`)
-var substitutionMinutePrefixRe = regexp.MustCompile(`^\d+'?\s*`)
 
 const (
 	// Round headers ignore at most three distant postponed fixtures when at least four fixtures form the main date cluster.

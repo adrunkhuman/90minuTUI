@@ -182,7 +182,7 @@ func annotateLineupPlayerInRoster(player site.PlayerLine, idx map[string][]site.
 			continue
 		}
 
-		out, in := substitutionPlayers(event.Text)
+		out, in := substitutionPlayers(event)
 		minute := strings.TrimSpace(formatMatchMinute(event.MinuteText))
 		if playerNameMatchesInRoster(in, player.Name, players) {
 			entry.enteredAt = minute

@@ -240,6 +240,9 @@ func TestParseMatchPageSubstitutionCellAssignsCardsToBothPlayers(t *testing.T) {
 			if event.MinuteText != "90+2" || event.Minute != 90 || event.Stoppage != 2 || !event.HasMinute {
 				t.Fatalf("expected structured stoppage-time substitution minute, got %#v", event)
 			}
+			if event.SubstitutionOut != "Oskar Jakubczyk" || event.SubstitutionIn != "Michal Rzuchowski" {
+				t.Fatalf("expected structured substitution players, got %#v", event)
+			}
 			seenSub = true
 		case event.Kind == "YC" && event.TeamSide == "home" && event.Text == "Oskar Jakubczyk":
 			seenStarterCard = true

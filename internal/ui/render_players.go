@@ -59,21 +59,6 @@ func eventWeight(kind string) int {
 	}
 }
 
-func substitutionPlayers(text string) (string, string) {
-	parts := strings.SplitN(normalizeDisplayText(text), "->", 2)
-	if len(parts) != 2 {
-		return "", ""
-	}
-
-	outgoing := normalizeDisplayText(substitutionMinutePrefixRe.ReplaceAllString(strings.TrimSpace(parts[0]), ""))
-	incoming := normalizeDisplayText(parts[1])
-	if strings.EqualFold(outgoing, "sub") {
-		outgoing = ""
-	}
-
-	return canonicalPlayerName(outgoing), canonicalPlayerName(incoming)
-}
-
 func faintText(text string) string {
 	if text == "" {
 		return ""
@@ -236,7 +221,7 @@ func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.M
 			continue
 		}
 		if e.Kind == "SUB" {
-			out, in := substitutionPlayers(e.Text)
+			out, in := substitutionPlayers(e)
 			if key := playerMatchKey(out); key != "" {
 				idx[key] = append(idx[key], e)
 			}
@@ -251,6 +236,10 @@ func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.M
 		}
 	}
 	return idx
+}
+
+func substitutionPlayers(event site.MatchEvent) (string, string) {
+	return canonicalPlayerName(event.SubstitutionOut), canonicalPlayerName(event.SubstitutionIn)
 }
 
 func matchingPlayerEvents(name string, idx map[string][]site.MatchEvent) []site.MatchEvent {
