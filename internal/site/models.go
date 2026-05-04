@@ -10,7 +10,7 @@ type Season struct {
 type Competition struct {
 	Name string
 	// Archive grouping can emit synthetic submenu URLs like
-	// /archiwum.php#women-tier=iii-liga-kobiet for drill-down-only entries.
+	// <archive-url>#women-tier=iii-liga-kobiet for drill-down-only entries.
 	URL string
 	// LeagueKey is a stable request identity and may be synthetic for submenu nodes.
 	LeagueKey string
