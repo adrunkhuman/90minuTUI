@@ -931,29 +931,15 @@ func TestAnnotatedLineupAllowsDistinctFullSyntheticEntrantsWithSameCompactKey(t 
 	}, "home")
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Starter One"}, {Name: "Starter Two"}}, idx)
-	if len(got) != 4 {
-		t.Fatalf("expected two distinct synthetic entrants, got %#v", got)
+	if len(got) != 2 {
+		t.Fatalf("expected only starter rows, got %#v", got)
 	}
-	oskar := lineupEntryByName(got, "Oskar Lesniak")
-	olaf := lineupEntryByName(got, "Olaf Lesniak")
-	if oskar.player.Name == "" || olaf.player.Name == "" {
-		t.Fatalf("expected distinct same-compact synthetic entrants, got %#v", got)
+	if got[0].player.Name != "Starter One" || got[0].replacedBy != "Oskar Lesniak" || len(got[0].chain) != 1 || got[0].chain[0].player != "Next One" || got[0].chain[0].minute != "78'" {
+		t.Fatalf("expected first starter row to carry chained replacement, got %#v", got[0])
 	}
-	if oskar.enteredAt != "60'" || oskar.leftAt != "78'" || oskar.replacedBy != "Next One" {
-		t.Fatalf("unexpected Oskar Lesniak entry: %#v", oskar)
+	if got[1].player.Name != "Starter Two" || got[1].replacedBy != "Olaf Lesniak" || len(got[1].chain) != 1 || got[1].chain[0].player != "Next Two" || got[1].chain[0].minute != "79'" {
+		t.Fatalf("expected second starter row to carry chained replacement, got %#v", got[1])
 	}
-	if olaf.enteredAt != "61'" || olaf.leftAt != "79'" || olaf.replacedBy != "Next Two" {
-		t.Fatalf("unexpected Olaf Lesniak entry: %#v", olaf)
-	}
-}
-
-func lineupEntryByName(entries []lineupEntry, name string) lineupEntry {
-	for _, entry := range entries {
-		if entry.player.Name == name {
-			return entry
-		}
-	}
-	return lineupEntry{}
 }
 
 func TestAnnotatedLineupKeepsBookedEntrantInReplacementNote(t *testing.T) {
@@ -993,11 +979,11 @@ func TestAnnotatedLineupSyntheticEntrantKeepsLaterSubstitutionOff(t *testing.T) 
 	}, "home")
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jason Lokilo"}}, idx)
-	if len(got) != 2 {
-		t.Fatalf("expected starter plus synthetic entrant, got %#v", got)
+	if len(got) != 1 {
+		t.Fatalf("expected only starter row, got %#v", got)
 	}
-	if got[1].player.Name != "Oskar Lesniak" || got[1].enteredAt != "66'" || got[1].replaced != "Jason Lokilo" || got[1].leftAt != "78'" || got[1].replacedBy != "Michal Smith" {
-		t.Fatalf("expected synthetic entrant row to keep both substitution notes, got %#v", got[1])
+	if got[0].player.Name != "Jason Lokilo" || got[0].replacedBy != "Oskar Lesniak" || len(got[0].chain) != 1 || got[0].chain[0].player != "Michal Smith" || got[0].chain[0].minute != "78'" {
+		t.Fatalf("expected starter row to keep chained substitution notes, got %#v", got[0])
 	}
 }
 
@@ -1024,6 +1010,21 @@ func TestFormatLineupPlayerShowsBookedReplacedPlayerInsideAwayNote(t *testing.T)
 
 	if got := ansi.Strip(away); got != "J. Sypek (for ■ J. Kowalczyk 46')" {
 		t.Fatalf("unexpected away booked-replaced label: %q", got)
+	}
+}
+
+func TestFormatLineupPlayerShowsChainedReplacementOnStarterRow(t *testing.T) {
+	away := formatLineupPlayer(lineupEntry{
+		player:     site.PlayerLine{Name: "Ali Gholizadeh"},
+		leftAt:     "19'",
+		replacedBy: "Daniel Hakans",
+		chain: []lineupSubNote{
+			{minute: "65'", player: "Luis Palma"},
+		},
+	}, "away", 80)
+
+	if got := ansi.Strip(away); got != "A. Gholizadeh (D. Hakans 19') (L. Palma 65')" {
+		t.Fatalf("unexpected away chained replacement label: %q", got)
 	}
 }
 
