@@ -1,5 +1,5 @@
 {
-  "generated_at": "sha256:2bcd36d3e39dc9f5503651a6471fba9fe7e5ad32b07c36d9061403688b2521c9",
+  "generated_at": "sha256:cf427f8e4a0a8553cecbad69de680de5bcc35ecec270990c8e53b193171e2f3b",
   "source": "http://www.90minut.pl/archsezon.php",
   "fixtures": [
     {
@@ -117,6 +117,14 @@
       "season": "2025/26",
       "file": "fixtures/match_2022961.html",
       "note": "missed penalty timeline row"
+    },
+    {
+      "name": "match_2023004",
+      "kind": "match",
+      "url": "http://www.90minut.pl/mecz.php?id_mecz=2023004",
+      "season": "2025/26",
+      "file": "fixtures/match_2023004.html",
+      "note": "chained substitution cell"
     },
     {
       "name": "match_2023487",

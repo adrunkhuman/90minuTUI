@@ -255,3 +255,68 @@ func TestParseMatchPageSubstitutionCellAssignsCardsToBothPlayers(t *testing.T) {
 		t.Fatalf("expected sub and both YC events, got %#v", page.Events)
 	}
 }
+
+func TestParsePlayerCellKeepsChainedSubstitutionMinutesAndCards(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<table><tr><td>
+	<a href="/wystepy.php?id=1">Starter One</a><img src="/img/yel.gif">
+	<img src="/img/sub.gif"> 45+1 <a href="/wystepy.php?id=2">Middle Two</a><img src="/img/yel.gif">
+	<img src="/img/sub.gif"> 90+3 <a href="/wystepy.php?id=3">Late Three</a><img src="/img/yel.gif">
+	<img src="/img/sub.gif"> 90+5 <a href="/wystepy.php?id=4">Final Four</a><img src="/img/yel.gif">
+	</td></tr></table>`))
+	if err != nil {
+		t.Fatalf("parse player cell html: %v", err)
+	}
+
+	parsed := parsePlayerCell(doc.Find("td").First(), "home")
+	if parsed == nil || parsed.Player == nil {
+		t.Fatalf("expected parsed player cell")
+	}
+	if parsed.Player.Name != "Starter One" {
+		t.Fatalf("unexpected starter: %#v", parsed.Player)
+	}
+	if len(parsed.Player.Events) != 2 || parsed.Player.Events[0] != "YC" || parsed.Player.Events[1] != "45+1' -> Middle Two" {
+		t.Fatalf("unexpected starter events: %#v", parsed.Player.Events)
+	}
+
+	expectedSubs := map[string]MatchEvent{
+		"Middle Two->Late Three": {MinuteText: "90+3", Minute: 90, Stoppage: 3},
+		"Late Three->Final Four": {MinuteText: "90+5", Minute: 90, Stoppage: 5},
+	}
+	expectedCards := map[string]bool{
+		"Middle Two": false,
+		"Late Three": false,
+		"Final Four": false,
+	}
+
+	for _, event := range parsed.ExtraEvents {
+		switch event.Kind {
+		case "SUB":
+			key := event.SubstitutionOut + "->" + event.SubstitutionIn
+			want, ok := expectedSubs[key]
+			if !ok {
+				t.Fatalf("unexpected substitution event: %#v", event)
+			}
+			if event.MinuteText != want.MinuteText || event.Minute != want.Minute || event.Stoppage != want.Stoppage || !event.HasMinute {
+				t.Fatalf("unexpected chained substitution minute: got %#v want %#v", event, want)
+			}
+			delete(expectedSubs, key)
+		case "YC", "RC":
+			if _, ok := expectedCards[event.Text]; !ok {
+				continue
+			}
+			if event.Kind != "YC" || event.TeamSide != "home" {
+				t.Fatalf("unexpected card event for chained substitution player: %#v", event)
+			}
+			expectedCards[event.Text] = true
+		}
+	}
+
+	if len(expectedSubs) > 0 {
+		t.Fatalf("missing chained substitutions: %#v from events %#v", expectedSubs, parsed.ExtraEvents)
+	}
+	for player, seen := range expectedCards {
+		if !seen {
+			t.Fatalf("missing yellow card for %q in events %#v", player, parsed.ExtraEvents)
+		}
+	}
+}

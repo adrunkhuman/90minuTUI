@@ -128,3 +128,38 @@ func validMatchEventKind(kind MatchEventKind) bool {
 		return false
 	}
 }
+
+func TestParseMatchFixtureKeepsChainedSubstitutions(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/match_2023004.html")
+	page := parseMatchPage(doc, "http://www.90minut.pl/mecz.php?id_mecz=2023004")
+	if page == nil {
+		t.Fatalf("expected match page")
+	}
+
+	firstCount := 0
+	secondCount := 0
+	for _, event := range page.Events {
+		if event.Kind != EventKindSubstitution || event.TeamSide != TeamSideAway {
+			continue
+		}
+
+		switch {
+		case event.SubstitutionOut == "(8) Ali Gholizadeh" && event.SubstitutionIn == "(11) Daniel Håkans":
+			if event.MinuteText != "19" || event.Minute != 19 || event.Stoppage != 0 || !event.HasMinute {
+				t.Fatalf("unexpected first chained substitution minute: %#v", event)
+			}
+			firstCount++
+		case event.SubstitutionOut == "(11) Daniel Håkans" && event.SubstitutionIn == "(77) Luis Palma":
+			if event.MinuteText != "65" || event.Minute != 65 || event.Stoppage != 0 || !event.HasMinute {
+				t.Fatalf("unexpected second chained substitution minute: %#v", event)
+			}
+			secondCount++
+		case event.SubstitutionOut == "(8) Ali Gholizadeh" && event.SubstitutionIn == "(77) Luis Palma":
+			t.Fatalf("parser collapsed chained substitutions into final entrant: %#v", event)
+		}
+	}
+
+	if firstCount != 1 || secondCount != 1 {
+		t.Fatalf("expected both chained substitution events, got %#v", page.Events)
+	}
+}

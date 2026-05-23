@@ -373,8 +373,8 @@ func parsePlayerCell(cell *goquery.Selection, side TeamSide) *parsedPlayerCell {
 	events := append([]string(nil), markersByPlayer[name]...)
 
 	if cell.Find("img[src*='sub.gif']").Length() > 0 && len(anchors) > 1 {
-		// In 90minut substitution cells, the last linked player is the replacement.
-		replacement := anchors[len(anchors)-1]
+		// A single lineup cell can contain a chain: starter -> entrant -> next entrant.
+		replacement := anchors[1]
 		minute := substitutionMinute(raw, replacement)
 		if minute != "" {
 			events = append(events, fmt.Sprintf("%s' -> %s", minute, replacement))
@@ -390,6 +390,23 @@ func parsePlayerCell(cell *goquery.Selection, side TeamSide) *parsedPlayerCell {
 				Kind:     MatchEventKind(marker),
 				TeamSide: side,
 				Text:     anchors[i],
+			})
+		}
+	}
+	if cell.Find("img[src*='sub.gif']").Length() > 0 {
+		for i := 2; i < len(anchors); i++ {
+			minute := substitutionMinute(raw, anchors[i])
+			m, s, ok := parseMinute(minute)
+			extraEvents = append(extraEvents, MatchEvent{
+				MinuteText:      minute,
+				Minute:          m,
+				Stoppage:        s,
+				HasMinute:       ok,
+				Kind:            "SUB",
+				TeamSide:        side,
+				Text:            substitutionEventText(anchors[i-1], anchors[i], ""),
+				SubstitutionOut: anchors[i-1],
+				SubstitutionIn:  anchors[i],
 			})
 		}
 	}

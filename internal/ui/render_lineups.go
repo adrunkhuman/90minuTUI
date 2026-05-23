@@ -21,6 +21,13 @@ type lineupEntry struct {
 	leftAt       string
 	replacedBy   string
 	replacedByYC lineupCardMarker
+	chain        []lineupSubNote
+}
+
+type lineupSubNote struct {
+	minute string
+	player string
+	card   lineupCardMarker
 }
 
 const (
@@ -35,7 +42,7 @@ func formatLineupPlayer(entry lineupEntry, side site.TeamSide, maxWidth int) str
 
 func formatLineupPlayerWithCards(entry lineupEntry, side site.TeamSide, maxWidth int, tokens bool) string {
 	name := formatPlayerLabel(entry.player.Name)
-	if entry.enteredAt == "" && entry.replaced == "" && entry.leftAt == "" && entry.replacedBy == "" {
+	if entry.enteredAt == "" && entry.replaced == "" && entry.leftAt == "" && entry.replacedBy == "" && len(entry.chain) == 0 {
 		return name
 	}
 
@@ -73,6 +80,11 @@ func lineupNotes(entry lineupEntry, side site.TeamSide, shortenNotes, tokens boo
 	}
 	if note := exitNote(entry, side, shortenNotes, tokens); note != "" {
 		notes = append(notes, note)
+	}
+	for _, chained := range entry.chain {
+		if note := chainNote(chained, side, shortenNotes, tokens); note != "" {
+			notes = append(notes, note)
+		}
 	}
 
 	return notes
@@ -124,6 +136,30 @@ func exitNote(entry lineupEntry, side site.TeamSide, shortenNotes, tokens bool) 
 	}
 	if side != site.TeamSideHome && entry.leftAt != "" {
 		text += " " + entry.leftAt
+	}
+	return substitutionNoteText(text+")", tokens)
+}
+
+func chainNote(note lineupSubNote, side site.TeamSide, shortenNotes, tokens bool) string {
+	if note.player == "" {
+		return ""
+	}
+
+	replacement := formatSubNoteName(note.player, shortenNotes)
+	card := lineupCardText(note.card, tokens)
+	text := "("
+	if side == site.TeamSideHome && note.minute != "" {
+		text += note.minute + " "
+	}
+	if side != site.TeamSideHome && card != "" {
+		text += card + " "
+	}
+	text += replacement
+	if side == site.TeamSideHome {
+		text += card
+	}
+	if side != site.TeamSideHome && note.minute != "" {
+		text += " " + note.minute
 	}
 	return substitutionNoteText(text+")", tokens)
 }
@@ -193,10 +229,48 @@ func annotateLineupPlayerInRoster(player site.PlayerLine, idx map[string][]site.
 			entry.leftAt = minute
 			entry.replacedBy = in
 			entry.replacedByYC = substituteCardMarkerAnnotationNameInRoster(in, idx, players)
+			entry.chain = chainedReplacementNotes(in, idx, players)
 		}
 	}
 
 	return entry
+}
+
+func chainedReplacementNotes(name string, idx map[string][]site.MatchEvent, players []site.PlayerLine) []lineupSubNote {
+	seen := map[string]bool{playerMatchKey(name): true}
+	chain := make([]lineupSubNote, 0, 2)
+	current := name
+
+	for {
+		next, ok := nextReplacementNote(current, idx, players)
+		if !ok || seen[playerMatchKey(next.player)] {
+			return chain
+		}
+		chain = append(chain, next)
+		seen[playerMatchKey(next.player)] = true
+		current = next.player
+	}
+}
+
+func nextReplacementNote(name string, idx map[string][]site.MatchEvent, players []site.PlayerLine) (lineupSubNote, bool) {
+	for _, event := range sortedEvents(matchingPlayerEventsInRoster(name, idx, players)) {
+		if event.Kind != "SUB" {
+			continue
+		}
+
+		out, in := substitutionPlayers(event)
+		if !playerNameMatchesInRoster(out, name, players) {
+			continue
+		}
+
+		return lineupSubNote{
+			minute: strings.TrimSpace(formatMatchMinute(event.MinuteText)),
+			player: in,
+			card:   substituteCardMarkerAnnotationNameInRoster(in, idx, players),
+		}, true
+	}
+
+	return lineupSubNote{}, false
 }
 
 func playerNameMatches(left, right string) bool {
@@ -250,62 +324,15 @@ func compactMatchCountForName(name string, players []site.PlayerLine) int {
 	return count
 }
 
-// Only synthesize rows for substitutes who were later subbed off; avoid inventing one-off bench entrants absent from the source lineup.
 func annotatedLineup(players []site.PlayerLine, idx map[string][]site.MatchEvent) []lineupEntry {
 	if len(players) == 0 {
 		return nil
 	}
 
-	byKey := make(map[string]site.PlayerLine, len(players))
-	for _, player := range players {
-		byKey[playerMatchKey(player.Name)] = player
-	}
-
 	entries := make([]lineupEntry, 0, len(players))
-	addedSynthetic := make(map[string]bool)
 	for _, player := range players {
-		entry := annotateLineupPlayerInRoster(player, idx, players)
-		entries = append(entries, entry)
-
-		inKey := playerMatchKey(entry.replacedBy)
-		syntheticKey := playerSyntheticKey(entry.replacedBy)
-		if inKey == "" || addedSynthetic[syntheticKey] {
-			continue
-		}
-		if _, exists := byKey[inKey]; exists || lineupContainsPlayer(players, entry.replacedBy) {
-			continue
-		}
-
-		synthetic := annotateLineupPlayerInRoster(site.PlayerLine{Name: entry.replacedBy}, idx, players)
-		if synthetic.replacedBy == "" {
-			continue
-		}
-
-		entries = append(entries, synthetic)
-		addedSynthetic[syntheticKey] = true
+		entries = append(entries, annotateLineupPlayerInRoster(player, idx, players))
 	}
 
 	return entries
-}
-
-func lineupContainsPlayer(players []site.PlayerLine, name string) bool {
-	for _, player := range players {
-		if playerNameMatches(name, player.Name) || playerNameMatches(player.Name, name) {
-			return true
-		}
-	}
-	return false
-}
-
-func playerSyntheticKey(name string) string {
-	if isAbbreviatedPlayerName(name) {
-		return playerCompactMatchKey(name)
-	}
-	if key := playerMatchKey(name); key != "" {
-		return key
-	}
-	if compact := playerCompactMatchKey(name); compact != "" {
-		return compact
-	}
-	return ""
 }
