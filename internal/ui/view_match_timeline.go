@@ -29,9 +29,9 @@ func splitTimelineRows(events []site.MatchEvent) ([]timelineRow, []timelineRow) 
 		}
 		row := timelineRow{home: "—", away: "—", marker: marker, color: color}
 		switch event.TeamSide {
-		case "home":
+		case site.TeamSideHome:
 			row.home = label
-		case "away":
+		case site.TeamSideAway:
 			row.away = label
 		default:
 			continue
@@ -47,13 +47,13 @@ func splitTimelineRows(events []site.MatchEvent) ([]timelineRow, []timelineRow) 
 	return firstHalf, secondHalf
 }
 
-func timelineMarker(kind string) (string, color.Color, bool) {
+func timelineMarker(kind site.MatchEventKind) (string, color.Color, bool) {
 	switch kind {
-	case "GOAL":
+	case site.EventKindGoal:
 		return "⚽", colorAccent, true
-	case "MISS":
+	case site.EventKindMiss:
 		return "❌", colorLoss, true
-	case "RC":
+	case site.EventKindRedCard:
 		return "■", colorRed, true
 	default:
 		return "", colorTextMuted, false
@@ -66,7 +66,7 @@ func timelineEventLabel(event site.MatchEvent) string {
 	if name == "" || minute == "" {
 		return ""
 	}
-	if event.TeamSide == "away" {
+	if event.TeamSide == site.TeamSideAway {
 		return strings.TrimSpace(minute) + " " + name
 	}
 	return name + " " + minute

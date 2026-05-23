@@ -81,7 +81,7 @@ func TestParseMatchPageGoalSideAssignmentAndStoppageMinutes(t *testing.T) {
 
 	goals := make([]MatchEvent, 0, 2)
 	for _, event := range page.Events {
-		if event.Kind == "GOAL" {
+		if event.Kind == EventKindGoal {
 			goals = append(goals, event)
 		}
 	}
@@ -89,10 +89,10 @@ func TestParseMatchPageGoalSideAssignmentAndStoppageMinutes(t *testing.T) {
 	if len(goals) != 2 {
 		t.Fatalf("expected 2 goals, got %d", len(goals))
 	}
-	if goals[0].TeamSide != "home" || goals[0].MinuteText != "45+1" {
+	if goals[0].TeamSide != TeamSideHome || goals[0].MinuteText != "45+1" {
 		t.Fatalf("unexpected first goal: %#v", goals[0])
 	}
-	if goals[1].TeamSide != "away" || goals[1].MinuteText != "90+2" {
+	if goals[1].TeamSide != TeamSideAway || goals[1].MinuteText != "90+2" {
 		t.Fatalf("unexpected second goal: %#v", goals[1])
 	}
 }
@@ -122,10 +122,10 @@ func TestParseMatchPageMissedPenaltyTimelineEvent(t *testing.T) {
 	}
 
 	event := page.Events[0]
-	if event.Kind != "MISS" {
+	if event.Kind != EventKindMiss {
 		t.Fatalf("unexpected event kind: %#v", event)
 	}
-	if event.TeamSide != "home" {
+	if event.TeamSide != TeamSideHome {
 		t.Fatalf("unexpected event side: %#v", event)
 	}
 	if event.MinuteText != "52" {
@@ -184,7 +184,7 @@ func TestParseMatchPageEventsCarryStructuredMinutes(t *testing.T) {
 
 	var goalEvent *MatchEvent
 	for i := range page.Events {
-		if page.Events[i].Kind == "GOAL" {
+		if page.Events[i].Kind == EventKindGoal {
 			goalEvent = &page.Events[i]
 			break
 		}
@@ -236,7 +236,7 @@ func TestParseMatchPageSubstitutionCellAssignsCardsToBothPlayers(t *testing.T) {
 	seenEntrantCard := false
 	for _, event := range page.Events {
 		switch {
-		case event.Kind == "SUB" && event.TeamSide == "home" && event.Text == "Oskar Jakubczyk -> Michal Rzuchowski":
+		case event.Kind == EventKindSubstitution && event.TeamSide == TeamSideHome && event.Text == "Oskar Jakubczyk -> Michal Rzuchowski":
 			if event.MinuteText != "90+2" || event.Minute != 90 || event.Stoppage != 2 || !event.HasMinute {
 				t.Fatalf("expected structured stoppage-time substitution minute, got %#v", event)
 			}
@@ -244,9 +244,9 @@ func TestParseMatchPageSubstitutionCellAssignsCardsToBothPlayers(t *testing.T) {
 				t.Fatalf("expected structured substitution players, got %#v", event)
 			}
 			seenSub = true
-		case event.Kind == "YC" && event.TeamSide == "home" && event.Text == "Oskar Jakubczyk":
+		case event.Kind == EventKindYellowCard && event.TeamSide == TeamSideHome && event.Text == "Oskar Jakubczyk":
 			seenStarterCard = true
-		case event.Kind == "YC" && event.TeamSide == "home" && event.Text == "Michal Rzuchowski":
+		case event.Kind == EventKindYellowCard && event.TeamSide == TeamSideHome && event.Text == "Michal Rzuchowski":
 			seenEntrantCard = true
 		}
 	}

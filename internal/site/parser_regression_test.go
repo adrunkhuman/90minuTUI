@@ -97,11 +97,11 @@ func TestPlayerTimelineEventsKeepsOutgoingAndIncomingSubstitutionPlayers(t *test
 		Events: []string{"66' -> Damian Nowak"},
 	}
 
-	events := playerTimelineEvents(player, "home")
+	events := playerTimelineEvents(player, TeamSideHome)
 	if len(events) != 1 {
 		t.Fatalf("expected one event, got %d", len(events))
 	}
-	if events[0].Kind != "SUB" {
+	if events[0].Kind != EventKindSubstitution {
 		t.Fatalf("expected substitution event, got %#v", events[0])
 	}
 	if events[0].Text != "Oskar Lesniak -> Damian Nowak" {

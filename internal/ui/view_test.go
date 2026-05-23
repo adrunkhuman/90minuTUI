@@ -12,7 +12,7 @@ import (
 
 // testEvent creates a site.MatchEvent with minute fields pre-populated so tests
 // bypass the site parser boundary while still exercising minute-aware rendering.
-func testEvent(minuteText, kind, side, text string) site.MatchEvent {
+func testEvent(minuteText string, kind site.MatchEventKind, side site.TeamSide, text string) site.MatchEvent {
 	m, s, ok := site.ParseMinute(minuteText)
 	event := site.MatchEvent{
 		MinuteText: minuteText,
@@ -23,7 +23,7 @@ func testEvent(minuteText, kind, side, text string) site.MatchEvent {
 		TeamSide:   side,
 		Text:       text,
 	}
-	if kind == "SUB" {
+	if kind == site.EventKindSubstitution {
 		event.SubstitutionOut, event.SubstitutionIn = testSubstitutionPlayers(text)
 	}
 	return event
@@ -37,14 +37,14 @@ func testSubstitutionPlayers(text string) (string, string) {
 	return strings.TrimSpace(left), strings.TrimSpace(right)
 }
 
-func testSubstitutionEvent(minuteText, side, outgoing, incoming, text string) site.MatchEvent {
+func testSubstitutionEvent(minuteText string, side site.TeamSide, outgoing, incoming, text string) site.MatchEvent {
 	m, s, ok := site.ParseMinute(minuteText)
 	return site.MatchEvent{
 		MinuteText:      minuteText,
 		Minute:          m,
 		Stoppage:        s,
 		HasMinute:       ok,
-		Kind:            "SUB",
+		Kind:            site.EventKindSubstitution,
 		TeamSide:        side,
 		Text:            text,
 		SubstitutionOut: outgoing,
@@ -345,8 +345,8 @@ func TestMatchDetailRemovesRedundantMetadata(t *testing.T) {
 		Meta:        "13 marca 2026, 18:00 3542 Damian Kos",
 		Weather:     "15 C",
 		Events: []site.MatchEvent{
-			testEvent("17", "GOAL", "home", "Krzysztof Kubica 17"),
-			testEvent("62", "GOAL", "away", "Samuel Mraz 62"),
+			testEvent("17", site.EventKindGoal, site.TeamSideHome, "Krzysztof Kubica 17"),
+			testEvent("62", site.EventKindGoal, site.TeamSideAway, "Samuel Mraz 62"),
 		},
 		NewsTitle: "PKO BP Ekstraklasa: Bruk-Bet Termalica 1-2 Motor",
 		NewsURL:   "http://www.90minut.pl/news/example.html",
@@ -395,13 +395,13 @@ func TestMatchDetailShowsEventsInScoreHeaderAndLineups(t *testing.T) {
 		AwayTeam: "Lechia Gdansk",
 		Score:    "2-1",
 		Events: []site.MatchEvent{
-			testEvent("39", "GOAL", "home", "Wdowiak 39"),
-			testSubstitutionEvent("46", "home", "Igor Strzalek (86)", "Damian Nowak", "display text without arrow"),
-			testEvent("46", "SUB", "away", "O. Lesniak -> Pllana"),
-			testEvent("52", "MISS", "away", "Barkowskij 52 (nk)"),
-			testEvent("60", "GOAL", "home", "Szkurin 60"),
-			testEvent("70", "GOAL", "away", "Karol Czubak (k) 70"),
-			testEvent("85", "RC", "away", "Pllana 85"),
+			testEvent("39", site.EventKindGoal, site.TeamSideHome, "Wdowiak 39"),
+			testSubstitutionEvent("46", site.TeamSideHome, "Igor Strzalek (86)", "Damian Nowak", "display text without arrow"),
+			testEvent("46", site.EventKindSubstitution, site.TeamSideAway, "O. Lesniak -> Pllana"),
+			testEvent("52", site.EventKindMiss, site.TeamSideAway, "Barkowskij 52 (nk)"),
+			testEvent("60", site.EventKindGoal, site.TeamSideHome, "Szkurin 60"),
+			testEvent("70", site.EventKindGoal, site.TeamSideAway, "Karol Czubak (k) 70"),
+			testEvent("85", site.EventKindRedCard, site.TeamSideAway, "Pllana 85"),
 		},
 		HomeLineup: []site.PlayerLine{
 			{Name: "Wdowiak"},
@@ -490,11 +490,11 @@ func TestRenderLineupPlayerRowColorsCards(t *testing.T) {
 
 func TestAwayBookedSubstituteUsesInlineCard(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("81", "SUB", "away", "Jan Starter -> Sebastian Kubiak"),
-		testEvent("85", "RC", "away", "Sebastian Kubiak 85"),
-	}, "away")
+		testEvent("81", site.EventKindSubstitution, site.TeamSideAway, "Jan Starter -> Sebastian Kubiak"),
+		testEvent("85", site.EventKindRedCard, site.TeamSideAway, "Sebastian Kubiak 85"),
+	}, site.TeamSideAway)
 	entry := annotateLineupPlayer(site.PlayerLine{Name: "Jan Starter"}, idx)
-	row := renderLineupPlayerRow("", lineupCardMarker{}, lineupDisplayName(entry, "away", 64), lineupCardForEntry(entry, idx), 96)
+	row := renderLineupPlayerRow("", lineupCardMarker{}, lineupDisplayName(entry, site.TeamSideAway, 64), lineupCardForEntry(entry, idx), 96)
 	plain := ansi.Strip(row)
 
 	if !strings.Contains(plain, "J. Starter (■ S. Kubiak 81')") {
@@ -512,8 +512,8 @@ func TestMatchDetailShowsAbbreviatedAwaySubstituteCardInline(t *testing.T) {
 		AwayTeam: "Away",
 		Score:    "1-1",
 		Events: []site.MatchEvent{
-			testEvent("81", "SUB", "away", "Jan Starter -> Sebastian Kubiak"),
-			testEvent("85", "YC", "away", "S. Kubiak 85"),
+			testEvent("81", site.EventKindSubstitution, site.TeamSideAway, "Jan Starter -> Sebastian Kubiak"),
+			testEvent("85", site.EventKindYellowCard, site.TeamSideAway, "S. Kubiak 85"),
 		},
 		AwayLineup: []site.PlayerLine{{Name: "Jan Starter"}},
 	}
@@ -535,8 +535,8 @@ func TestHomeBookedReplacementDoesNotUseStarterCardSlot(t *testing.T) {
 		AwayTeam: "Away",
 		Score:    "1-1",
 		Events: []site.MatchEvent{
-			testEvent("77", "SUB", "home", "Pawel Kun -> Kacper Chodyna"),
-			testEvent("85", "YC", "home", "K. Chodyna 85"),
+			testEvent("77", site.EventKindSubstitution, site.TeamSideHome, "Pawel Kun -> Kacper Chodyna"),
+			testEvent("85", site.EventKindYellowCard, site.TeamSideHome, "K. Chodyna 85"),
 		},
 		HomeLineup: []site.PlayerLine{{Name: "Pawel Kun"}},
 	}
@@ -558,8 +558,8 @@ func TestMatchDetailDoesNotMisattributeAmbiguousAbbreviatedSubstitution(t *testi
 		AwayTeam: "Away",
 		Score:    "0-0",
 		Events: []site.MatchEvent{
-			testEvent("60", "SUB", "home", "J. Kowalski -> Piotr Nowak"),
-			testEvent("75", "SUB", "home", "J. Kowalski -> Adam Zielinski"),
+			testEvent("60", site.EventKindSubstitution, site.TeamSideHome, "J. Kowalski -> Piotr Nowak"),
+			testEvent("75", site.EventKindSubstitution, site.TeamSideHome, "J. Kowalski -> Adam Zielinski"),
 		},
 		HomeLineup: []site.PlayerLine{{Name: "Jan Kowalski"}, {Name: "Jerzy Kowalski"}},
 	}
@@ -580,8 +580,8 @@ func TestMatchDetailDoesNotAttachAmbiguousReplacementCardToLineup(t *testing.T) 
 		AwayTeam: "Away",
 		Score:    "0-0",
 		Events: []site.MatchEvent{
-			testEvent("60", "SUB", "home", "J. Kowalski -> Piotr Nowak"),
-			testEvent("70", "YC", "home", "Piotr Nowak 70"),
+			testEvent("60", site.EventKindSubstitution, site.TeamSideHome, "J. Kowalski -> Piotr Nowak"),
+			testEvent("70", site.EventKindYellowCard, site.TeamSideHome, "Piotr Nowak 70"),
 		},
 		HomeLineup: []site.PlayerLine{{Name: "Jan Kowalski"}, {Name: "Jerzy Kowalski"}},
 	}
@@ -599,7 +599,7 @@ func TestHalftimeScoreDisplayAvoidsInventingSparseHT(t *testing.T) {
 	if got := halftimeScoreDisplay(&site.MatchPage{Score: "1-0"}); got != "HT —" {
 		t.Fatalf("expected sparse match to avoid invented HT score, got %q", got)
 	}
-	got := halftimeScoreDisplay(&site.MatchPage{Events: []site.MatchEvent{testEvent("90", "GOAL", "home", "Winner 90")}})
+	got := halftimeScoreDisplay(&site.MatchPage{Events: []site.MatchEvent{testEvent("90", site.EventKindGoal, site.TeamSideHome, "Winner 90")}})
 	if got != "HT 0 – 0" {
 		t.Fatalf("expected second-half goal to imply goalless HT, got %q", got)
 	}
@@ -612,8 +612,8 @@ func TestMatchDetailOrdersScorersAroundHTAndFT(t *testing.T) {
 		AwayTeam: "Away",
 		Score:    "1-1",
 		Events: []site.MatchEvent{
-			testEvent("35", "GOAL", "home", "First Scorer 35"),
-			testEvent("56", "GOAL", "away", "Second Scorer 56"),
+			testEvent("35", site.EventKindGoal, site.TeamSideHome, "First Scorer 35"),
+			testEvent("56", site.EventKindGoal, site.TeamSideAway, "Second Scorer 56"),
 		},
 	}
 
@@ -635,12 +635,12 @@ func TestFormatLineupPlayerMirrorsSubstitutionNote(t *testing.T) {
 		player:     site.PlayerLine{Name: "Igor Strzalek"},
 		leftAt:     "46'",
 		replacedBy: "Damian Nowak",
-	}, "home", 64)
+	}, site.TeamSideHome, 64)
 	away := formatLineupPlayer(lineupEntry{
 		player:     site.PlayerLine{Name: "J. Wilson-Esbrand"},
 		leftAt:     "46'",
 		replacedBy: "J. Grzesik",
-	}, "away", 64)
+	}, site.TeamSideAway, 64)
 
 	if got := ansi.Strip(home); got != "(46' D. Nowak) I. Strzalek" {
 		t.Fatalf("unexpected home lineup substitution label: %q", got)
@@ -667,14 +667,14 @@ func TestFormatLineupPlayerShowsEntryAndExitNotes(t *testing.T) {
 		replaced:   "Jason Lokilo",
 		leftAt:     "82'",
 		replacedBy: "Michal Smith",
-	}, "home", 64)
+	}, site.TeamSideHome, 64)
 	away := formatLineupPlayer(lineupEntry{
 		player:     site.PlayerLine{Name: "Oskar Lesniak"},
 		enteredAt:  "66'",
 		replaced:   "Jason Lokilo",
 		leftAt:     "82'",
 		replacedBy: "Michal Smith",
-	}, "away", 64)
+	}, site.TeamSideAway, 64)
 
 	if got := ansi.Strip(home); got != "(66' for J. Lokilo) (82' M. Smith) O. Lesniak" {
 		t.Fatalf("unexpected home double substitution label: %q", got)
@@ -691,7 +691,7 @@ func TestFormatLineupPlayerShortensOnlySubstitutionNotesWhenNeeded(t *testing.T)
 		replaced:   "Christopher Hyperextendedname",
 		leftAt:     "82'",
 		replacedBy: "Maximilian Unnecessarilylongsurname",
-	}, "home", 40))
+	}, site.TeamSideHome, 40))
 
 	if got != "(66' for Hyperextendedname) (82' Unnecessarilylongsurname) A. Verylongsurname" {
 		t.Fatalf("unexpected shortened substitution label: %q", got)
@@ -707,8 +707,8 @@ func TestMatchDetailKeepsInlineSubstitutionAnnotationsInLineups(t *testing.T) {
 		AwayTeam: "Radomiak Radom",
 		Score:    "3-1",
 		Events: []site.MatchEvent{
-			testEvent("66", "SUB", "home", "Jason Lokilo -> Oskar Lesniak"),
-			testEvent("46", "SUB", "away", "J. Wilson-Esbrand -> J. Grzesik"),
+			testEvent("66", site.EventKindSubstitution, site.TeamSideHome, "Jason Lokilo -> Oskar Lesniak"),
+			testEvent("46", site.EventKindSubstitution, site.TeamSideAway, "J. Wilson-Esbrand -> J. Grzesik"),
 		},
 		HomeLineup: []site.PlayerLine{{Name: "Jason Lokilo"}},
 		AwayLineup: []site.PlayerLine{{Name: "J. Wilson-Esbrand"}},
@@ -775,8 +775,8 @@ func TestRenderPlayerLineAbbreviatesNameAndDropsEvents(t *testing.T) {
 
 func TestAnnotatedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("60", "SUB", "home", "Jan Kowalski -> Piotr Kowalski"),
-	}, "home")
+		testEvent("60", site.EventKindSubstitution, site.TeamSideHome, "Jan Kowalski -> Piotr Kowalski"),
+	}, site.TeamSideHome)
 
 	players := []site.PlayerLine{
 		{Name: "Adam Kowalski"},
@@ -803,7 +803,7 @@ func TestAnnotatedLineupMatchesSubstitutionByCompactNameNotSurnameOnly(t *testin
 }
 
 func TestAnnotatedLineupMatchesAbbreviatedPlayerToFullSubstitution(t *testing.T) {
-	idx := playerEventIndex([]site.MatchEvent{testEvent("60", "SUB", "away", "Jan Starter -> Sebastian Kubiak")}, "away")
+	idx := playerEventIndex([]site.MatchEvent{testEvent("60", site.EventKindSubstitution, site.TeamSideAway, "Jan Starter -> Sebastian Kubiak")}, site.TeamSideAway)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "S. Kubiak"}}, idx)
 	if len(got) != 1 {
@@ -816,8 +816,8 @@ func TestAnnotatedLineupMatchesAbbreviatedPlayerToFullSubstitution(t *testing.T)
 
 func TestAnnotatedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("60", "SUB", "home", "Jan Kowalski -> Piotr Kowalski"),
-	}, "home")
+		testEvent("60", site.EventKindSubstitution, site.TeamSideHome, "Jan Kowalski -> Piotr Kowalski"),
+	}, site.TeamSideHome)
 
 	players := []site.PlayerLine{
 		{Name: "Jerzy Kowalski"},
@@ -841,7 +841,7 @@ func TestAnnotatedLineupDistinguishesSameInitialSameSurname(t *testing.T) {
 }
 
 func TestAnnotatedLineupDoesNotApplyAbbreviatedSubstitutionToFullSameInitialNames(t *testing.T) {
-	idx := playerEventIndex([]site.MatchEvent{testEvent("60", "SUB", "home", "J. Kowalski -> Piotr Kowalski")}, "home")
+	idx := playerEventIndex([]site.MatchEvent{testEvent("60", site.EventKindSubstitution, site.TeamSideHome, "J. Kowalski -> Piotr Kowalski")}, site.TeamSideHome)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jan Kowalski"}, {Name: "Jerzy Kowalski"}}, idx)
 	if len(got) != 2 {
@@ -855,7 +855,7 @@ func TestAnnotatedLineupDoesNotApplyAbbreviatedSubstitutionToFullSameInitialName
 }
 
 func TestAnnotatedLineupDoesNotApplyFullSubstitutionToAmbiguousAbbreviatedRow(t *testing.T) {
-	idx := playerEventIndex([]site.MatchEvent{testEvent("60", "SUB", "home", "Jan Kowalski -> Piotr Kowalski")}, "home")
+	idx := playerEventIndex([]site.MatchEvent{testEvent("60", site.EventKindSubstitution, site.TeamSideHome, "Jan Kowalski -> Piotr Kowalski")}, site.TeamSideHome)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "J. Kowalski"}, {Name: "Jerzy Kowalski"}}, idx)
 	if len(got) != 2 {
@@ -868,8 +868,8 @@ func TestAnnotatedLineupDoesNotApplyFullSubstitutionToAmbiguousAbbreviatedRow(t 
 
 func TestAnnotatedLineupUsesStructuredSubstitutionPlayers(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testSubstitutionEvent("60", "home", "Jan Starter", "Piotr Entrant", "display text without arrow"),
-	}, "home")
+		testSubstitutionEvent("60", site.TeamSideHome, "Jan Starter", "Piotr Entrant", "display text without arrow"),
+	}, site.TeamSideHome)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jan Starter"}, {Name: "Piotr Entrant"}}, idx)
 	if got[0].replacedBy != "Piotr Entrant" || got[1].replaced != "Jan Starter" {
@@ -879,9 +879,9 @@ func TestAnnotatedLineupUsesStructuredSubstitutionPlayers(t *testing.T) {
 
 func TestAnnotatedLineupDoesNotDuplicateExistingAbbreviatedSyntheticEntrant(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("60", "SUB", "away", "Jan Starter -> Sebastian Kubiak"),
-		testEvent("78", "SUB", "away", "Sebastian Kubiak -> Adam Next"),
-	}, "away")
+		testEvent("60", site.EventKindSubstitution, site.TeamSideAway, "Jan Starter -> Sebastian Kubiak"),
+		testEvent("78", site.EventKindSubstitution, site.TeamSideAway, "Sebastian Kubiak -> Adam Next"),
+	}, site.TeamSideAway)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jan Starter"}, {Name: "S. Kubiak"}}, idx)
 	if len(got) != 2 {
@@ -894,9 +894,9 @@ func TestAnnotatedLineupDoesNotDuplicateExistingAbbreviatedSyntheticEntrant(t *t
 
 func TestAnnotatedLineupDoesNotDuplicateExistingFullEntrantFromAbbreviatedSubstitution(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("60", "SUB", "away", "Jan Starter -> S. Kubiak"),
-		testEvent("78", "SUB", "away", "Sebastian Kubiak -> Adam Next"),
-	}, "away")
+		testEvent("60", site.EventKindSubstitution, site.TeamSideAway, "Jan Starter -> S. Kubiak"),
+		testEvent("78", site.EventKindSubstitution, site.TeamSideAway, "Sebastian Kubiak -> Adam Next"),
+	}, site.TeamSideAway)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jan Starter"}, {Name: "Sebastian Kubiak"}}, idx)
 	if len(got) != 2 {
@@ -909,9 +909,9 @@ func TestAnnotatedLineupDoesNotDuplicateExistingFullEntrantFromAbbreviatedSubsti
 
 func TestAnnotatedLineupDoesNotAttachAmbiguousAbbreviatedCardToSubstituteNote(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("60", "SUB", "home", "Starter One -> Jan Kowalski"),
-		testEvent("85", "YC", "home", "J. Kowalski 85"),
-	}, "home")
+		testEvent("60", site.EventKindSubstitution, site.TeamSideHome, "Starter One -> Jan Kowalski"),
+		testEvent("85", site.EventKindYellowCard, site.TeamSideHome, "J. Kowalski 85"),
+	}, site.TeamSideHome)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Starter One"}, {Name: "Jerzy Kowalski"}}, idx)
 	if len(got) != 2 {
@@ -924,11 +924,11 @@ func TestAnnotatedLineupDoesNotAttachAmbiguousAbbreviatedCardToSubstituteNote(t 
 
 func TestAnnotatedLineupAllowsDistinctFullSyntheticEntrantsWithSameCompactKey(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("60", "SUB", "home", "Starter One -> Oskar Lesniak"),
-		testEvent("61", "SUB", "home", "Starter Two -> Olaf Lesniak"),
-		testEvent("78", "SUB", "home", "Oskar Lesniak -> Next One"),
-		testEvent("79", "SUB", "home", "Olaf Lesniak -> Next Two"),
-	}, "home")
+		testEvent("60", site.EventKindSubstitution, site.TeamSideHome, "Starter One -> Oskar Lesniak"),
+		testEvent("61", site.EventKindSubstitution, site.TeamSideHome, "Starter Two -> Olaf Lesniak"),
+		testEvent("78", site.EventKindSubstitution, site.TeamSideHome, "Oskar Lesniak -> Next One"),
+		testEvent("79", site.EventKindSubstitution, site.TeamSideHome, "Olaf Lesniak -> Next Two"),
+	}, site.TeamSideHome)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Starter One"}, {Name: "Starter Two"}}, idx)
 	if len(got) != 2 {
@@ -944,9 +944,9 @@ func TestAnnotatedLineupAllowsDistinctFullSyntheticEntrantsWithSameCompactKey(t 
 
 func TestAnnotatedLineupKeepsBookedEntrantInReplacementNote(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("66", "SUB", "home", "Jason Lokilo -> Oskar Lesniak"),
-		testEvent("84", "YC", "home", "Oskar Lesniak 84"),
-	}, "home")
+		testEvent("66", site.EventKindSubstitution, site.TeamSideHome, "Jason Lokilo -> Oskar Lesniak"),
+		testEvent("84", site.EventKindYellowCard, site.TeamSideHome, "Oskar Lesniak 84"),
+	}, site.TeamSideHome)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jason Lokilo"}}, idx)
 	if len(got) != 1 {
@@ -959,8 +959,8 @@ func TestAnnotatedLineupKeepsBookedEntrantInReplacementNote(t *testing.T) {
 
 func TestAnnotatedLineupSkipsMissingEntrantWithoutBadgeEvent(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("66", "SUB", "home", "Jason Lokilo -> Oskar Lesniak"),
-	}, "home")
+		testEvent("66", site.EventKindSubstitution, site.TeamSideHome, "Jason Lokilo -> Oskar Lesniak"),
+	}, site.TeamSideHome)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jason Lokilo"}}, idx)
 	if len(got) != 1 {
@@ -973,10 +973,10 @@ func TestAnnotatedLineupSkipsMissingEntrantWithoutBadgeEvent(t *testing.T) {
 
 func TestAnnotatedLineupSyntheticEntrantKeepsLaterSubstitutionOff(t *testing.T) {
 	idx := playerEventIndex([]site.MatchEvent{
-		testEvent("66", "SUB", "home", "Jason Lokilo -> Oskar Lesniak"),
-		testEvent("78", "SUB", "home", "Oskar Lesniak -> Michal Smith"),
-		testEvent("72", "YC", "home", "Oskar Lesniak 72"),
-	}, "home")
+		testEvent("66", site.EventKindSubstitution, site.TeamSideHome, "Jason Lokilo -> Oskar Lesniak"),
+		testEvent("78", site.EventKindSubstitution, site.TeamSideHome, "Oskar Lesniak -> Michal Smith"),
+		testEvent("72", site.EventKindYellowCard, site.TeamSideHome, "Oskar Lesniak 72"),
+	}, site.TeamSideHome)
 
 	got := annotatedLineup([]site.PlayerLine{{Name: "Jason Lokilo"}}, idx)
 	if len(got) != 1 {
@@ -993,7 +993,7 @@ func TestFormatLineupPlayerShowsBookedReplacementInsideHomeNote(t *testing.T) {
 		leftAt:       "72'",
 		replacedBy:   "Michal Rzuchowski",
 		replacedByYC: lineupCardMarker{color: colorYellow, ok: true},
-	}, "home", 64)
+	}, site.TeamSideHome, 64)
 
 	if got := ansi.Strip(home); got != "(72' M. Rzuchowski■) O. Jakubczyk" {
 		t.Fatalf("unexpected home booked-replacement label: %q", got)
@@ -1006,7 +1006,7 @@ func TestFormatLineupPlayerShowsBookedReplacedPlayerInsideAwayNote(t *testing.T)
 		enteredAt:  "46'",
 		replaced:   "Jan Kowalczyk",
 		replacedYC: lineupCardMarker{color: colorYellow, ok: true},
-	}, "away", 64)
+	}, site.TeamSideAway, 64)
 
 	if got := ansi.Strip(away); got != "J. Sypek (for ■ J. Kowalczyk 46')" {
 		t.Fatalf("unexpected away booked-replaced label: %q", got)
@@ -1076,8 +1076,8 @@ func TestMatchDetailContentShowsFTDividerWithoutVisibleHeaderEvents(t *testing.T
 		AwayTeam: "Zaglebie Lubin",
 		Score:    "1-0",
 		Events: []site.MatchEvent{
-			testEvent("46", "SUB", "home", "Jan Kowalski -> Piotr Kowalski"),
-			testEvent("72", "YC", "away", "Nowak 72"),
+			testEvent("46", site.EventKindSubstitution, site.TeamSideHome, "Jan Kowalski -> Piotr Kowalski"),
+			testEvent("72", site.EventKindYellowCard, site.TeamSideAway, "Nowak 72"),
 		},
 	}
 

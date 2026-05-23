@@ -169,10 +169,10 @@ func halftimeScore(events []site.MatchEvent) string {
 		}
 		minute := event.Minute*100 + event.Stoppage
 		if minute <= firstHalfMinuteCeiling {
-			if event.Kind == "GOAL" {
-				if event.TeamSide == "home" {
+			if event.Kind == site.EventKindGoal {
+				if event.TeamSide == site.TeamSideHome {
 					homeGoals++
-				} else if event.TeamSide == "away" {
+				} else if event.TeamSide == site.TeamSideAway {
 					awayGoals++
 				}
 			}
@@ -625,14 +625,14 @@ func eventPlayerText(event site.MatchEvent) string {
 	re = regexp.MustCompile(`\s+` + minute + `(\s*(?:\([^)]*\))?)$`)
 	text = strings.TrimSpace(re.ReplaceAllString(text, `$1`))
 
-	if event.Kind == "SUB" {
+	if event.Kind == site.EventKindSubstitution {
 		text = strings.TrimSpace(strings.TrimPrefix(text, "->"))
 		text = normalizeSubstitutionText(text)
 	}
-	if event.Kind == "GOAL" {
+	if event.Kind == site.EventKindGoal {
 		text = strings.ReplaceAll(text, "(k)", "(pen)")
 	}
-	if event.Kind == "MISS" {
+	if event.Kind == site.EventKindMiss {
 		text = strings.ReplaceAll(text, "(nk)", "(pen)")
 	}
 

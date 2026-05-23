@@ -42,17 +42,17 @@ func sortedEvents(events []site.MatchEvent) []site.MatchEvent {
 	return ordered
 }
 
-func eventWeight(kind string) int {
+func eventWeight(kind site.MatchEventKind) int {
 	switch kind {
-	case "GOAL":
+	case site.EventKindGoal:
 		return 0
-	case "MISS":
+	case site.EventKindMiss:
 		return 1
-	case "RC":
+	case site.EventKindRedCard:
 		return 2
-	case "YC":
+	case site.EventKindYellowCard:
 		return 3
-	case "SUB":
+	case site.EventKindSubstitution:
 		return 4
 	default:
 		return 9
@@ -73,17 +73,17 @@ func faintPenaltySuffix(text string) string {
 	return strings.ReplaceAll(text, "(pen)", faintText("(pen)"))
 }
 
-func eventPrefix(kind string) string {
+func eventPrefix(kind site.MatchEventKind) string {
 	switch kind {
-	case "GOAL":
+	case site.EventKindGoal:
 		return "⚽"
-	case "MISS":
+	case site.EventKindMiss:
 		return "❌"
-	case "SUB":
+	case site.EventKindSubstitution:
 		return "↕"
-	case "YC":
+	case site.EventKindYellowCard:
 		return styleYellow.Render("■")
-	case "RC":
+	case site.EventKindRedCard:
 		return styleRed.Render("■")
 	default:
 		return "•"
@@ -213,14 +213,14 @@ func playerMatchKey(label string) string {
 	return strings.ToLower(formatted)
 }
 
-// Index events by canonical player name; substitutions are keyed by both outgoing and incoming players.
-func playerEventIndex(events []site.MatchEvent, side string) map[string][]site.MatchEvent {
+// Key substitutions by both players so lineup annotations can find entries and exits.
+func playerEventIndex(events []site.MatchEvent, side site.TeamSide) map[string][]site.MatchEvent {
 	idx := make(map[string][]site.MatchEvent)
 	for _, e := range events {
 		if e.TeamSide != side {
 			continue
 		}
-		if e.Kind == "SUB" {
+		if e.Kind == site.EventKindSubstitution {
 			out, in := substitutionPlayers(e)
 			if key := playerMatchKey(out); key != "" {
 				idx[key] = append(idx[key], e)
@@ -356,7 +356,7 @@ func matchingSubstituteCardEventsInRoster(name string, idx map[string][]site.Mat
 func filterCardEvents(events []site.MatchEvent) []site.MatchEvent {
 	filtered := make([]site.MatchEvent, 0, len(events))
 	for _, event := range events {
-		if event.Kind == "YC" || event.Kind == "RC" {
+		if event.Kind == site.EventKindYellowCard || event.Kind == site.EventKindRedCard {
 			filtered = append(filtered, event)
 		}
 	}
