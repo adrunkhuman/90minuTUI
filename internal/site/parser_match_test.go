@@ -4,17 +4,17 @@ import (
 	"testing"
 )
 
-var expectedCardSidesByFixture = map[string]map[string]string{
+var expectedCardSidesByFixture = map[string]map[string]TeamSide{
 	"match_2022810": {
-		"(2) Paskal Meyer":    "away",
-		"(39) Filip Kocaba":   "home",
-		"(68) Bartosz Wolski": "away",
+		"(2) Paskal Meyer":    TeamSideAway,
+		"(39) Filip Kocaba":   TeamSideHome,
+		"(68) Bartosz Wolski": TeamSideAway,
 	},
 }
 
 var expectedMissedPenaltiesByFixture = map[string][]MatchEvent{
 	"match_2022961": {
-		{MinuteText: "52", Kind: "MISS", TeamSide: "home", Text: "Gierman Barkowskij 52 (nk)"},
+		{MinuteText: "52", Kind: EventKindMiss, TeamSide: TeamSideHome, Text: "Gierman Barkowskij 52 (nk)"},
 	},
 }
 
@@ -60,8 +60,11 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 			seenExpectedMissed := make([]bool, len(expectedMissedPenalties))
 
 			for _, event := range page.Events {
-				if event.TeamSide != "home" && event.TeamSide != "away" {
+				if event.TeamSide != TeamSideHome && event.TeamSide != TeamSideAway {
 					t.Fatalf("invalid event side %q in %s", event.TeamSide, fixture.Name)
+				}
+				if !validMatchEventKind(event.Kind) {
+					t.Fatalf("invalid event kind %q in %s", event.Kind, fixture.Name)
 				}
 
 				for i, want := range expectedMissedPenalties {
@@ -71,7 +74,7 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 					seenExpectedMissed[i] = true
 				}
 
-				if event.Kind != "YC" && event.Kind != "RC" {
+				if event.Kind != EventKindYellowCard && event.Kind != EventKindRedCard {
 					continue
 				}
 				if event.Text == "" {
@@ -114,5 +117,14 @@ func TestParseMatchFixturesFromCorpus(t *testing.T) {
 	}
 	if !foundPlayerSideEvidence {
 		t.Fatalf("expected at least one YC/RC event tied to lineup players")
+	}
+}
+
+func validMatchEventKind(kind MatchEventKind) bool {
+	switch kind {
+	case EventKindGoal, EventKindMiss, EventKindYellowCard, EventKindRedCard, EventKindSubstitution, EventKindGeneric:
+		return true
+	default:
+		return false
 	}
 }

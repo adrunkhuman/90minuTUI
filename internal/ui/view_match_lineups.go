@@ -42,7 +42,7 @@ func renderLineupHeaderRow(home, away string, width int) string {
 	return renderFullLine(axisPlainLine(home, "   ", away, width), width, colorBgHeader, colorAccent, true)
 }
 
-func lineupDisplayName(entry lineupEntry, side string, maxWidth int) string {
+func lineupDisplayName(entry lineupEntry, side site.TeamSide, maxWidth int) string {
 	return formatLineupPlayerWithCards(entry, side, maxWidth, true)
 }
 
@@ -70,9 +70,9 @@ func cardMarkerFromEvents(matched []site.MatchEvent) lineupCardMarker {
 	hasYellow := false
 	for _, event := range matched {
 		switch event.Kind {
-		case "RC":
+		case site.EventKindRedCard:
 			return lineupCardMarker{color: colorRed, ok: true}
-		case "YC":
+		case site.EventKindYellowCard:
 			hasYellow = true
 		}
 	}
@@ -92,8 +92,8 @@ func renderLineupPlayerRow(home string, homeCard lineupCardMarker, away string, 
 	defaultStyle := lipgloss.NewStyle().Foreground(colorTextSecondary).Background(colorBgPanel)
 	divider := defaultStyle.Render("│")
 
-	left := lineupSideCell(home, homeCard, leftWidth, "home", defaultStyle)
-	right := lineupSideCell(away, awayCard, rightWidth, "away", defaultStyle)
+	left := lineupSideCell(home, homeCard, leftWidth, site.TeamSideHome, defaultStyle)
+	right := lineupSideCell(away, awayCard, rightWidth, site.TeamSideAway, defaultStyle)
 	return left + divider + right
 }
 
@@ -103,7 +103,7 @@ func lineupPlayerNameWidth(width int) int {
 	return max(1, min(leftWidth, rightWidth)-2)
 }
 
-func lineupSideCell(name string, card lineupCardMarker, width int, side string, defaultStyle lipgloss.Style) string {
+func lineupSideCell(name string, card lineupCardMarker, width int, side site.TeamSide, defaultStyle lipgloss.Style) string {
 	if width <= 0 {
 		return ""
 	}
@@ -112,14 +112,14 @@ func lineupSideCell(name string, card lineupCardMarker, width int, side string, 
 	cardStyle := lipgloss.NewStyle().Foreground(card.color).Background(colorBgPanel).Bold(true)
 
 	switch side {
-	case "home":
-		text := renderLineupLabel(name, nameWidth, "home", defaultStyle)
+	case site.TeamSideHome:
+		text := renderLineupLabel(name, nameWidth, site.TeamSideHome, defaultStyle)
 		if !card.ok {
 			return text + defaultStyle.Render("  ")
 		}
 		return text + cardStyle.Render("■") + defaultStyle.Render(" ")
 	default:
-		text := renderLineupLabel(name, nameWidth, "away", defaultStyle)
+		text := renderLineupLabel(name, nameWidth, site.TeamSideAway, defaultStyle)
 		if !card.ok {
 			return defaultStyle.Render("  ") + text
 		}
@@ -127,9 +127,9 @@ func lineupSideCell(name string, card lineupCardMarker, width int, side string, 
 	}
 }
 
-func renderLineupLabel(label string, width int, side string, defaultStyle lipgloss.Style) string {
+func renderLineupLabel(label string, width int, side site.TeamSide, defaultStyle lipgloss.Style) string {
 	text := truncate(label, width)
-	if side == "home" {
+	if side == site.TeamSideHome {
 		text = padLeft(text, width)
 	} else {
 		text = padRight(text, width)

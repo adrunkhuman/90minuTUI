@@ -16,7 +16,6 @@ type Competition struct {
 	LeagueKey string
 }
 
-// CompetitionMenu is an intermediate archive node that expands into more competitions.
 type CompetitionMenu struct {
 	Title string
 	URL   string
@@ -53,7 +52,6 @@ type StandingRow struct {
 	Points   int
 }
 
-// LeaguePage is the normalized league view returned by the site layer.
 type LeaguePage struct {
 	Title     string
 	URL       string
@@ -74,11 +72,12 @@ type MatchPage struct {
 	HomeTeam    string
 	AwayTeam    string
 	Score       string
-	Events      []MatchEvent
-	HomeLineup  []PlayerLine
-	AwayLineup  []PlayerLine
-	NewsTitle   string
-	NewsURL     string
+	// Events combines score-row incidents and lineup-derived cards/substitutions; consumers sort when order matters.
+	Events     []MatchEvent
+	HomeLineup []PlayerLine
+	AwayLineup []PlayerLine
+	NewsTitle  string
+	NewsURL    string
 }
 
 type MatchEvent struct {
@@ -88,16 +87,40 @@ type MatchEvent struct {
 	Minute    int
 	Stoppage  int
 	HasMinute bool
-	Kind      string
-	TeamSide  string
-	Text      string
-	// SUB events preserve both participants so UI code does not reparse display text.
+	Kind      MatchEventKind
+	// TeamSide is event ownership relative to the parsed home/away teams.
+	TeamSide TeamSide
+	// Text is normalized source text; substitution callers should prefer SubstitutionOut/SubstitutionIn.
+	Text string
+	// Substitution events keep parsed participants so UI code doesn't reparse display text.
 	SubstitutionOut string
 	SubstitutionIn  string
 }
 
+// MatchEventKind is the parser's normalized event vocabulary.
+type MatchEventKind string
+
+const (
+	EventKindGoal         MatchEventKind = "GOAL"
+	EventKindMiss         MatchEventKind = "MISS"
+	EventKindYellowCard   MatchEventKind = "YC"
+	EventKindRedCard      MatchEventKind = "RC"
+	EventKindSubstitution MatchEventKind = "SUB"
+	// EventKindGeneric preserves lineup markers without dedicated UI handling.
+	EventKindGeneric MatchEventKind = "EVENT"
+)
+
+// TeamSide uses the parser's closed home/away vocabulary for match-owned events.
+type TeamSide string
+
+const (
+	TeamSideHome TeamSide = "home"
+	TeamSideAway TeamSide = "away"
+)
+
 type PlayerLine struct {
-	Name    string
+	Name string
+	// Events stores raw lineup-cell markers until parser normalization emits MatchEvent values.
 	Events  []string
 	RawText string
 }

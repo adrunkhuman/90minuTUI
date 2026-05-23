@@ -308,8 +308,8 @@ func (m Model) matchDetailContent(width int) string {
 		b.WriteString(renderLineupHeaderRow(m.match.HomeTeam, m.match.AwayTeam, width))
 		b.WriteString("\n")
 
-		homeIdx := playerEventIndex(m.match.Events, "home")
-		awayIdx := playerEventIndex(m.match.Events, "away")
+		homeIdx := playerEventIndex(m.match.Events, site.TeamSideHome)
+		awayIdx := playerEventIndex(m.match.Events, site.TeamSideAway)
 		homeEntries := annotatedLineup(m.match.HomeLineup, homeIdx)
 		awayEntries := annotatedLineup(m.match.AwayLineup, awayIdx)
 		maxPlayers := max(len(homeEntries), len(awayEntries))
@@ -325,8 +325,8 @@ func (m Model) matchDetailContent(width int) string {
 			}
 
 			b.WriteString(renderLineupPlayerRow(
-				lineupDisplayName(hEntry, "home", playerWidth), lineupCardForEntry(hEntry, homeIdx),
-				lineupDisplayName(aEntry, "away", playerWidth), lineupCardForEntry(aEntry, awayIdx),
+				lineupDisplayName(hEntry, site.TeamSideHome, playerWidth), lineupCardForEntry(hEntry, homeIdx),
+				lineupDisplayName(aEntry, site.TeamSideAway, playerWidth), lineupCardForEntry(aEntry, awayIdx),
 				width,
 			))
 			b.WriteString("\n")

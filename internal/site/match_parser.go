@@ -57,7 +57,7 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 					Stoppage:   s,
 					HasMinute:  ok,
 					Kind:       kind,
-					TeamSide:   "home",
+					TeamSide:   TeamSideHome,
 					Text:       left,
 				})
 			}
@@ -71,7 +71,7 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 					Stoppage:   s,
 					HasMinute:  ok,
 					Kind:       kind,
-					TeamSide:   "away",
+					TeamSide:   TeamSideAway,
 					Text:       right,
 				})
 			}
@@ -88,16 +88,16 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 			return
 		}
 
-		if parsed := parsePlayerCell(tds.Eq(0), "home"); parsed != nil {
+		if parsed := parsePlayerCell(tds.Eq(0), TeamSideHome); parsed != nil {
 			page.HomeLineup = append(page.HomeLineup, *parsed.Player)
-			for _, event := range playerTimelineEvents(*parsed.Player, "home") {
+			for _, event := range playerTimelineEvents(*parsed.Player, TeamSideHome) {
 				page.Events = append(page.Events, event)
 			}
 			page.Events = append(page.Events, parsed.ExtraEvents...)
 		}
-		if parsed := parsePlayerCell(tds.Eq(2), "away"); parsed != nil {
+		if parsed := parsePlayerCell(tds.Eq(2), TeamSideAway); parsed != nil {
 			page.AwayLineup = append(page.AwayLineup, *parsed.Player)
-			for _, event := range playerTimelineEvents(*parsed.Player, "away") {
+			for _, event := range playerTimelineEvents(*parsed.Player, TeamSideAway) {
 				page.Events = append(page.Events, event)
 			}
 			page.Events = append(page.Events, parsed.ExtraEvents...)
@@ -117,14 +117,14 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 	return page
 }
 
-func scoreRowEventKind(row *goquery.Selection) (string, bool) {
+func scoreRowEventKind(row *goquery.Selection) (MatchEventKind, bool) {
 	tds := row.Find("td")
 	if tds.Length() != 3 {
 		return "", false
 	}
 	middle := normalizeWhitespace(tds.Eq(1).Text())
 	if middle == "-" || isScoreLikeText(middle) {
-		return "GOAL", true
+		return EventKindGoal, true
 	}
 
 	leftKind := scoreCellEventKind(tds.Eq(0))
@@ -142,12 +142,12 @@ func scoreRowEventKind(row *goquery.Selection) (string, bool) {
 	return "", false
 }
 
-func scoreCellEventKind(cell *goquery.Selection) string {
+func scoreCellEventKind(cell *goquery.Selection) MatchEventKind {
 	switch {
 	case cell.Find("img[src*='goal.gif']").Length() > 0:
-		return "GOAL"
+		return EventKindGoal
 	case cell.Find("img[src*='missed.gif']").Length() > 0:
-		return "MISS"
+		return EventKindMiss
 	default:
 		return ""
 	}
@@ -270,25 +270,25 @@ func isLineupRow(row *goquery.Selection) bool {
 	return tds.Eq(0).Find("a").Length() > 0 || tds.Eq(2).Find("a").Length() > 0
 }
 
-func playerTimelineEvents(player PlayerLine, side string) []MatchEvent {
+func playerTimelineEvents(player PlayerLine, side TeamSide) []MatchEvent {
 	events := make([]MatchEvent, 0, 2)
 
 	for _, marker := range player.Events {
 		event := MatchEvent{TeamSide: side, Text: player.Name}
 
 		switch {
-		case marker == "YC":
-			event.Kind = "YC"
-		case marker == "RC":
-			event.Kind = "RC"
+		case marker == string(EventKindYellowCard):
+			event.Kind = EventKindYellowCard
+		case marker == string(EventKindRedCard):
+			event.Kind = EventKindRedCard
 		case strings.Contains(marker, "->"):
-			event.Kind = "SUB"
+			event.Kind = EventKindSubstitution
 			event.MinuteText = extractMinute(marker)
 			event.Minute, event.Stoppage, event.HasMinute = parseMinute(event.MinuteText)
 			event.SubstitutionOut, event.SubstitutionIn = substitutionEventPlayers(player.Name, marker)
 			event.Text = substitutionEventText(event.SubstitutionOut, event.SubstitutionIn, marker)
 		default:
-			event.Kind = "EVENT"
+			event.Kind = EventKindGeneric
 			event.Text = marker
 		}
 
@@ -323,7 +323,7 @@ type parsedPlayerCell struct {
 	ExtraEvents []MatchEvent
 }
 
-func parsePlayerCell(cell *goquery.Selection, side string) *parsedPlayerCell {
+func parsePlayerCell(cell *goquery.Selection, side TeamSide) *parsedPlayerCell {
 	raw := normalizeWhitespace(cell.Text())
 	if raw == "" {
 		return nil
@@ -362,9 +362,9 @@ func parsePlayerCell(cell *goquery.Selection, side string) *parsedPlayerCell {
 				case currentPlayer == "":
 					continue
 				case strings.Contains(src, "yel.gif"):
-					markersByPlayer[currentPlayer] = append(markersByPlayer[currentPlayer], "YC")
+					markersByPlayer[currentPlayer] = append(markersByPlayer[currentPlayer], string(EventKindYellowCard))
 				case strings.Contains(src, "red.gif"), strings.Contains(src, "red2.gif"):
-					markersByPlayer[currentPlayer] = append(markersByPlayer[currentPlayer], "RC")
+					markersByPlayer[currentPlayer] = append(markersByPlayer[currentPlayer], string(EventKindRedCard))
 				}
 			}
 		}
@@ -387,7 +387,7 @@ func parsePlayerCell(cell *goquery.Selection, side string) *parsedPlayerCell {
 	for i := 1; i < len(anchors); i++ {
 		for _, marker := range markersByPlayer[anchors[i]] {
 			extraEvents = append(extraEvents, MatchEvent{
-				Kind:     marker,
+				Kind:     MatchEventKind(marker),
 				TeamSide: side,
 				Text:     anchors[i],
 			})

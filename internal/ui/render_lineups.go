@@ -29,11 +29,11 @@ const (
 )
 
 // A substitute can enter and later leave; keep both notes on one rendered row.
-func formatLineupPlayer(entry lineupEntry, side string, maxWidth int) string {
+func formatLineupPlayer(entry lineupEntry, side site.TeamSide, maxWidth int) string {
 	return formatLineupPlayerWithCards(entry, side, maxWidth, false)
 }
 
-func formatLineupPlayerWithCards(entry lineupEntry, side string, maxWidth int, tokens bool) string {
+func formatLineupPlayerWithCards(entry lineupEntry, side site.TeamSide, maxWidth int, tokens bool) string {
 	name := formatPlayerLabel(entry.player.Name)
 	if entry.enteredAt == "" && entry.replaced == "" && entry.leftAt == "" && entry.replacedBy == "" {
 		return name
@@ -50,13 +50,13 @@ func formatLineupPlayerWithCards(entry lineupEntry, side string, maxWidth int, t
 	return label
 }
 
-func lineupPlayerLabel(entry lineupEntry, side, name string, shortenNotes, tokens bool) string {
+func lineupPlayerLabel(entry lineupEntry, side site.TeamSide, name string, shortenNotes, tokens bool) string {
 	notes := lineupNotes(entry, side, shortenNotes, tokens)
 	if len(notes) == 0 {
 		return name
 	}
 
-	if side == "home" {
+	if side == site.TeamSideHome {
 		parts := append(notes, name)
 		return strings.Join(parts, " ")
 	}
@@ -65,7 +65,7 @@ func lineupPlayerLabel(entry lineupEntry, side, name string, shortenNotes, token
 	return strings.Join(parts, " ")
 }
 
-func lineupNotes(entry lineupEntry, side string, shortenNotes, tokens bool) []string {
+func lineupNotes(entry lineupEntry, side site.TeamSide, shortenNotes, tokens bool) []string {
 	notes := make([]string, 0, 2)
 
 	if note := entryNote(entry, side, shortenNotes, tokens); note != "" {
@@ -78,14 +78,14 @@ func lineupNotes(entry lineupEntry, side string, shortenNotes, tokens bool) []st
 	return notes
 }
 
-func entryNote(entry lineupEntry, side string, shortenNotes, tokens bool) string {
+func entryNote(entry lineupEntry, side site.TeamSide, shortenNotes, tokens bool) string {
 	if entry.enteredAt == "" {
 		return ""
 	}
 
 	replaced := formatSubNoteName(entry.replaced, shortenNotes)
 	card := lineupCardText(entry.replacedYC, tokens)
-	if side == "home" {
+	if side == site.TeamSideHome {
 		text := "(" + entry.enteredAt
 		if replaced != "" {
 			text += " for " + replaced + card
@@ -104,7 +104,7 @@ func entryNote(entry lineupEntry, side string, shortenNotes, tokens bool) string
 	return substitutionNoteText(text+")", tokens)
 }
 
-func exitNote(entry lineupEntry, side string, shortenNotes, tokens bool) string {
+func exitNote(entry lineupEntry, side site.TeamSide, shortenNotes, tokens bool) string {
 	if entry.replacedBy == "" {
 		return ""
 	}
@@ -112,17 +112,17 @@ func exitNote(entry lineupEntry, side string, shortenNotes, tokens bool) string 
 	replacement := formatSubNoteName(entry.replacedBy, shortenNotes)
 	card := lineupCardText(entry.replacedByYC, tokens)
 	text := "("
-	if side == "home" && entry.leftAt != "" {
+	if side == site.TeamSideHome && entry.leftAt != "" {
 		text += entry.leftAt + " "
 	}
-	if side != "home" && card != "" {
+	if side != site.TeamSideHome && card != "" {
 		text += card + " "
 	}
 	text += replacement
-	if side == "home" {
+	if side == site.TeamSideHome {
 		text += card
 	}
-	if side != "home" && entry.leftAt != "" {
+	if side != site.TeamSideHome && entry.leftAt != "" {
 		text += " " + entry.leftAt
 	}
 	return substitutionNoteText(text+")", tokens)
@@ -178,7 +178,7 @@ func annotateLineupPlayer(player site.PlayerLine, idx map[string][]site.MatchEve
 func annotateLineupPlayerInRoster(player site.PlayerLine, idx map[string][]site.MatchEvent, players []site.PlayerLine) lineupEntry {
 	entry := lineupEntry{player: player}
 	for _, event := range sortedEvents(matchingPlayerEventsInRoster(player.Name, idx, players)) {
-		if event.Kind != "SUB" {
+		if event.Kind != site.EventKindSubstitution {
 			continue
 		}
 
