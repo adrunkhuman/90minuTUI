@@ -1417,10 +1417,11 @@ func TestSelectorPopupNormalizesNewlinesInLeagueNames(t *testing.T) {
 	m.seasons = []site.Season{{Label: "2025 /\n2026"}}
 	m.competitionTitle = "Women\r\nLeagues"
 	m.competitions = []site.Competition{{
-		Name: "V liga kobiet 2025/2026\ngrupa: małopolska",
+		Name: "V liga kobiet 2025/2026\ngrupa: małopolska, bardzo długa nazwa rozgrywek",
 	}}
 
-	plain := ansi.Strip(m.selectorPopupView(80))
+	popupWidth := 44
+	plain := ansi.Strip(m.selectorPopupView(popupWidth))
 	if strings.Contains(plain, "2025/2026\ngrupa") || strings.Contains(plain, "2025 /\n2026") || strings.Contains(plain, "Women\r\nLeagues") {
 		t.Fatalf("expected embedded newline to be normalized\n%s", plain)
 	}
@@ -1430,11 +1431,62 @@ func TestSelectorPopupNormalizesNewlinesInLeagueNames(t *testing.T) {
 	if !strings.Contains(plain, "WOMEN LEAGUES") {
 		t.Fatalf("expected normalized selector heading in one row\n%s", plain)
 	}
-	if !strings.Contains(plain, "V liga kobiet 2025/2026 grupa") {
-		t.Fatalf("expected normalized league name in one row\n%s", plain)
+	if !strings.Contains(plain, "V liga kobiet 2025/2") {
+		t.Fatalf("expected normalized truncated league name in one row\n%s", plain)
 	}
-	if got := selectorCompetitionWidthLines(m.competitions); len(got) != 1 || got[0] != "V liga kobiet 2025/2026 grupa: małopolska" {
+	if strings.Contains(plain, "2025/2…\n") {
+		t.Fatalf("expected truncated league name not to wrap\n%s", plain)
+	}
+	for _, line := range strings.Split(plain, "\n") {
+		if width := ansi.StringWidth(line); width > popupWidth {
+			t.Fatalf("expected selector line within popup width %d, got %d: %q\n%s", popupWidth, width, line, plain)
+		}
+	}
+	if got := selectorCompetitionWidthLines(m.competitions); len(got) != 1 || got[0] != "V liga kobiet 2025/2026 grupa: małopolska, bardzo długa nazwa rozgrywek" {
 		t.Fatalf("expected width lines to normalize league names, got %+v", got)
+	}
+	if got := selectorPopupWidth(popupWidth, []string{"2025 /\n2026"}, "Women\r\nLeagues", []string{m.competitions[0].Name}); got != popupWidth-2 {
+		t.Fatalf("expected popup width to clamp to terminal body, got %d", got)
+	}
+}
+
+func TestSelectorPopupWidthNormalizesUnclampedInputs(t *testing.T) {
+	raw := selectorPopupWidth(
+		160,
+		[]string{"2025 /\n2026"},
+		"Women\r\nLeagues",
+		[]string{"V liga kobiet 2025/2026\ngrupa: małopolska"},
+	)
+	normalized := selectorPopupWidth(
+		160,
+		[]string{"2025 / 2026"},
+		"Women Leagues",
+		[]string{"V liga kobiet 2025/2026 grupa: małopolska"},
+	)
+	if raw != normalized {
+		t.Fatalf("expected raw and normalized selector widths to match, got raw=%d normalized=%d", raw, normalized)
+	}
+}
+
+func TestSelectorOverlayKeepsLongNewlineLeagueNameWithinTerminalWidth(t *testing.T) {
+	m := sketchModel()
+	m.width = 44
+	m.height = 12
+	m.selectorVisible = true
+	m.focus = focusCompetitions
+	m.competitionTitle = "Women\nLeagues"
+	m.competitions = []site.Competition{{
+		Name: "V liga kobiet 2025/2026\ngrupa: małopolska, bardzo długa nazwa rozgrywek",
+	}}
+
+	plain := ansi.Strip(m.viewContent())
+	for _, line := range strings.Split(plain, "\n") {
+		if width := ansi.StringWidth(line); width > m.width {
+			t.Fatalf("expected rendered line within terminal width %d, got %d: %q\n%s", m.width, width, line, plain)
+		}
+	}
+	if strings.Contains(plain, "2025/2026\ngrupa") || strings.Contains(plain, "Women\nLeagues") {
+		t.Fatalf("expected selector overlay to normalize embedded newlines\n%s", plain)
 	}
 }
 

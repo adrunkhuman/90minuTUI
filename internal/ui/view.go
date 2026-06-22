@@ -197,13 +197,13 @@ func selectorPopupWidth(total int, seasonLines []string, rightHeading string, co
 func selectorContentWidths(seasonLines []string, rightHeading string, competitionLines []string) (int, int) {
 	seasonWidth := lipgloss.Width("SEASON")
 	for _, line := range seasonLines {
-		seasonWidth = max(seasonWidth, lipgloss.Width(line))
+		seasonWidth = max(seasonWidth, lipgloss.Width(normalizeDisplayText(line)))
 	}
 	leftWidth := clamp(seasonWidth+4, 18, 18)
 
-	rightWidth := lipgloss.Width(rightHeading)
+	rightWidth := lipgloss.Width(normalizeDisplayText(rightHeading))
 	for _, line := range competitionLines {
-		rightWidth = max(rightWidth, lipgloss.Width(line))
+		rightWidth = max(rightWidth, lipgloss.Width(normalizeDisplayText(line)))
 	}
 	rightWidth = max(16, rightWidth+1)
 
