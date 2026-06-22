@@ -48,10 +48,7 @@ func (m Model) selectorSketchView() string {
 
 func (m Model) selectorOverlayView(body string) string {
 	seasonLines := renderSeasonsWindow(m.seasons, m.seasonCursor)
-	rightHeading := "Leagues"
-	if strings.TrimSpace(m.competitionTitle) != "" {
-		rightHeading = m.competitionTitle
-	}
+	rightHeading := selectorRightHeading(m.competitionTitle)
 	competitionLines := selectorCompetitionWidthLines(m.competitions)
 	popup := m.selectorPopupView(selectorPopupWidth(m.width, seasonLines, rightHeading, competitionLines))
 	bodyLines := strings.Split(body, "\n")
@@ -120,7 +117,8 @@ func (m Model) selectorPopupView(width int) string {
 	}
 
 	panel := lipgloss.NewStyle().
-		Width(innerWidth).
+		// Tiny terminals already use the full-screen overlay path; keep a minimum useful modal width.
+		Width(max(26, width)).
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(colorBorderStrong).
 		Background(colorBgModal)
