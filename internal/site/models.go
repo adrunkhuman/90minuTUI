@@ -34,9 +34,25 @@ type Fixture struct {
 	MatchID string
 }
 
-// Round fixtures are normalized to ascending parsed date/time when available;
+// RoundPhase preserves source competition semantics for mixed tournament pages.
+// Regular rounds are the zero value and are the only rounds eligible for plain league numeric ordering.
+type RoundPhase string
+
+const (
+	RoundPhaseRegular       RoundPhase = ""
+	RoundPhasePreliminary   RoundPhase = "preliminary"
+	RoundPhaseQualification RoundPhase = "qualification"
+	RoundPhaseGroup         RoundPhase = "group"
+	RoundPhaseKnockout      RoundPhase = "knockout"
+)
+
+// Round keeps one source fixture group. Section stores an enclosing source heading
+// such as "Grupa A" so repeated names like "Kolejka 1" stay distinct.
+// Fixtures are normalized to ascending parsed date/time when available;
 // undated entries keep their relative source order after dated fixtures.
 type Round struct {
+	Phase    RoundPhase
+	Section  string
 	Name     string
 	Fixtures []Fixture
 }
@@ -58,7 +74,7 @@ type LeaguePage struct {
 	LeagueKey string
 	// Standings stays empty when the page has no detectable table.
 	Standings []StandingRow
-	// Rounds are ordered by detected round number when available.
+	// Rounds use numeric order only for plain league matchdays; staged competitions keep source order.
 	Rounds []Round
 }
 

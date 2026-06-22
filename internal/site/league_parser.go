@@ -30,12 +30,45 @@ func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 func parseRounds(doc *goquery.Document) []Round {
 	rounds := make([]Round, 0, 16)
 	currentName := ""
+	currentPhase := RoundPhaseRegular
+	currentSection := ""
+	sectionOneShot := false
 	hasNamedRounds := false
 
+	processHeading := func(name string) {
+		if looksLikeSectionHeading(name) {
+			// Some pages use a standalone group heading for one fixture table; others keep it for repeated matchdays.
+			currentName = ""
+			currentSection = name
+			currentPhase = RoundPhaseGroup
+			sectionOneShot = true
+			return
+		}
+
+		currentName = name
+		matchdayHeading := looksLikeMatchdayHeading(name)
+		if currentSection != "" && !matchdayHeading && !sectionOneShot {
+			currentSection = ""
+		}
+		currentPhase = classifyRoundPhase(name, currentSection)
+		if currentSection != "" && matchdayHeading {
+			sectionOneShot = false
+		}
+		if currentSection != "" && !matchdayHeading {
+			sectionOneShot = true
+		}
+	}
+
 	leagueTables(doc).Each(func(_ int, table *goquery.Selection) {
-		if name, ok := roundNameFromTable(table); ok {
-			currentName = name
+		if names := roundNamesFromTable(table); len(names) > 0 {
+			for _, name := range names {
+				processHeading(name)
+			}
 			hasNamedRounds = true
+			return
+		}
+
+		if table.Find("table").Length() > 0 {
 			return
 		}
 
@@ -45,14 +78,23 @@ func parseRounds(doc *goquery.Document) []Round {
 		}
 
 		roundName := strings.TrimSpace(currentName)
+		round := Round{Phase: currentPhase, Section: currentSection, Name: roundName, Fixtures: fixtures}
 
-		if len(rounds) > 0 && rounds[len(rounds)-1].Name == roundName {
+		if len(rounds) > 0 && sameRoundContext(rounds[len(rounds)-1], round) {
 			// 90minut sometimes splits one round across adjacent tables under the same heading.
 			rounds[len(rounds)-1].Fixtures = append(rounds[len(rounds)-1].Fixtures, fixtures...)
+			if sectionOneShot {
+				currentSection = ""
+				sectionOneShot = false
+			}
 			return
 		}
 
-		rounds = append(rounds, Round{Name: roundName, Fixtures: fixtures})
+		rounds = append(rounds, round)
+		if sectionOneShot {
+			currentSection = ""
+			sectionOneShot = false
+		}
 	})
 
 	if hasNamedRounds {
@@ -60,7 +102,7 @@ func parseRounds(doc *goquery.Document) []Round {
 		// not separate rounds.
 		namedOnly := make([]Round, 0, len(rounds))
 		for _, round := range rounds {
-			if strings.TrimSpace(round.Name) == "" {
+			if strings.TrimSpace(round.Name) == "" && strings.TrimSpace(round.Section) == "" {
 				continue
 			}
 			namedOnly = append(namedOnly, round)
@@ -74,11 +116,46 @@ func parseRounds(doc *goquery.Document) []Round {
 		if strings.TrimSpace(rounds[i].Name) != "" {
 			continue
 		}
+		if strings.TrimSpace(rounds[i].Section) != "" {
+			continue
+		}
 		// Headerless fixture pages still need a stable round label for downstream rendering.
 		rounds[i].Name = "Wyniki"
 	}
 
 	return rounds
+}
+
+func sameRoundContext(a, b Round) bool {
+	return a.Name == b.Name && a.Section == b.Section && a.Phase == b.Phase
+}
+
+func roundNamesFromTable(table *goquery.Selection) []string {
+	if table.Find("a[href*='mecz.php']").Length() > 0 || len(parseFixturesTable(table)) > 0 {
+		return nil
+	}
+
+	var names []string
+	table.Find("u").Each(func(_ int, s *goquery.Selection) {
+		heading := normalizeWhitespace(s.Text())
+		if looksLikeRoundHeading(heading) || looksLikeStageHeading(heading) || looksLikeSectionHeading(heading) {
+			names = append(names, heading)
+		}
+	})
+	if len(names) > 0 {
+		return names
+	}
+
+	if !looksLikeStandaloneHeadingTable(table) {
+		return nil
+	}
+
+	text := normalizeWhitespace(table.ChildrenFiltered("tbody, tr").Text())
+	if looksLikeRoundHeading(text) || looksLikeStageHeading(text) || looksLikeSectionHeading(text) {
+		return []string{text}
+	}
+
+	return nil
 }
 
 func leagueTables(doc *goquery.Document) *goquery.Selection {
@@ -91,25 +168,11 @@ func leagueTables(doc *goquery.Document) *goquery.Selection {
 }
 
 func roundNameFromTable(table *goquery.Selection) (string, bool) {
-	if table.Find("a[href*='mecz.php']").Length() > 0 {
+	names := roundNamesFromTable(table)
+	if len(names) == 0 {
 		return "", false
 	}
-
-	heading := normalizeWhitespace(table.Find("u").First().Text())
-	if looksLikeRoundHeading(heading) || looksLikeStageHeading(heading) {
-		return heading, true
-	}
-
-	if !looksLikeStandaloneHeadingTable(table) {
-		return "", false
-	}
-
-	text := normalizeWhitespace(table.ChildrenFiltered("tbody, tr").Text())
-	if looksLikeRoundHeading(text) || looksLikeStageHeading(text) {
-		return text, true
-	}
-
-	return "", false
+	return names[len(names)-1], true
 }
 
 func looksLikeStandaloneHeadingTable(table *goquery.Selection) bool {
@@ -145,7 +208,11 @@ func looksLikeRoundHeading(text string) bool {
 	}
 
 	lower := strings.ToLower(text)
-	return strings.Contains(lower, "kolejka") || strings.Contains(lower, "runda")
+	return looksLikeMatchdayHeading(lower) || strings.Contains(lower, "runda")
+}
+
+func looksLikeMatchdayHeading(text string) bool {
+	return strings.Contains(strings.ToLower(text), "kolejka")
 }
 
 func looksLikeStageHeading(text string) bool {
@@ -155,6 +222,32 @@ func looksLikeStageHeading(text string) bool {
 
 	lower := strings.ToLower(text)
 	return strings.Contains(lower, "fina") || strings.Contains(lower, "bara") || strings.Contains(lower, "play-off") || strings.Contains(lower, "playoff")
+}
+
+func looksLikeSectionHeading(text string) bool {
+	fields := strings.Fields(normalizeWhitespace(text))
+	if len(fields) < 2 || !strings.EqualFold(fields[0], "grupa") {
+		return false
+	}
+
+	lower := strings.ToLower(text)
+	return !strings.Contains(lower, "kolejka") && !strings.Contains(lower, "runda")
+}
+
+func classifyRoundPhase(name, section string) RoundPhase {
+	lower := strings.ToLower(normalizeWhitespace(name))
+	switch {
+	case strings.Contains(lower, "elimin"):
+		return RoundPhaseQualification
+	case strings.Contains(lower, "przedwst") || strings.Contains(lower, "wst"):
+		return RoundPhasePreliminary
+	case strings.Contains(lower, "fina") || strings.Contains(lower, "bara") || strings.Contains(lower, "play-off") || strings.Contains(lower, "playoff"):
+		return RoundPhaseKnockout
+	case section != "" && strings.Contains(lower, "kolejka"):
+		return RoundPhaseGroup
+	default:
+		return RoundPhaseRegular
+	}
 }
 
 func parseFixturesTable(table *goquery.Selection) []Fixture {

@@ -173,6 +173,224 @@ func TestParseLeaguePageSeparatesKnockoutStageFromLeagueRound(t *testing.T) {
 	}
 }
 
+func TestParseLeaguePagePreservesChampionsLeagueStageOrder(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_14077.html")
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga14077.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+
+	want := []struct {
+		name  string
+		phase RoundPhase
+	}{
+		{"I runda eliminacyjna - 8-9 lipca, 15-16 lipca", RoundPhaseQualification},
+		{"II runda eliminacyjna - 22-23 lipca, 29-30 lipca", RoundPhaseQualification},
+		{"III runda eliminacyjna - 5-6 sierpnia, 12-13 sierpnia", RoundPhaseQualification},
+		{"IV runda eliminacyjna - 19-20 sierpnia, 26-27 sierpnia", RoundPhaseQualification},
+		{"Kolejka 1 - 16-18 września", RoundPhaseGroup},
+	}
+	if len(page.Rounds) < len(want) {
+		t.Fatalf("expected at least %d rounds, got %d", len(want), len(page.Rounds))
+	}
+	for i, expected := range want {
+		if page.Rounds[i].Name != expected.name || page.Rounds[i].Phase != expected.phase {
+			t.Fatalf("round %d got %q/%q want %q/%q", i, page.Rounds[i].Name, page.Rounds[i].Phase, expected.name, expected.phase)
+		}
+	}
+	if page.Rounds[4].Section != "Grupa LM" {
+		t.Fatalf("expected league-phase section, got %q", page.Rounds[4].Section)
+	}
+}
+
+func TestParseLeaguePageKeepsRepeatedGroupMatchdaysSeparate(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_12909.html")
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga12909.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+
+	groupRounds := make([]Round, 0, 12)
+	for _, round := range page.Rounds {
+		if round.Section == "Grupa A" || round.Section == "Grupa B" {
+			groupRounds = append(groupRounds, round)
+		}
+	}
+	if len(groupRounds) < 12 {
+		t.Fatalf("expected at least 12 group rounds, got %d", len(groupRounds))
+	}
+
+	want := []struct{ section, name string }{
+		{"Grupa A", "Kolejka 1 - 19-20 września"},
+		{"Grupa A", "Kolejka 2 - 3-4 października"},
+		{"Grupa A", "Kolejka 3 - 24-25 października"},
+		{"Grupa A", "Kolejka 4 - 7-8 listopada"},
+		{"Grupa A", "Kolejka 5 - 28-29 listopada"},
+		{"Grupa A", "Kolejka 6 - 12-13 grudnia"},
+		{"Grupa B", "Kolejka 1 - 19-20 września"},
+	}
+	for i, expected := range want {
+		if groupRounds[i].Section != expected.section || groupRounds[i].Name != expected.name {
+			t.Fatalf("group round %d got %q/%q want %q/%q", i, groupRounds[i].Section, groupRounds[i].Name, expected.section, expected.name)
+		}
+		if groupRounds[i].Phase != RoundPhaseGroup {
+			t.Fatalf("expected group phase for %q/%q, got %q", groupRounds[i].Section, groupRounds[i].Name, groupRounds[i].Phase)
+		}
+	}
+	for _, round := range page.Rounds {
+		if !strings.Contains(round.Name, "finału") {
+			continue
+		}
+		if round.Section != "" {
+			t.Fatalf("knockout round inherited group section: %+v", round)
+		}
+		return
+	}
+	t.Fatalf("expected knockout round after group phase")
+}
+
+func TestParseLeaguePageHandlesTournamentGroupsWithoutHeadingDates(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_13459.html")
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga13459.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+
+	var firstGroupRound *Round
+	for i := range page.Rounds {
+		if page.Rounds[i].Section == "Grupa A" && page.Rounds[i].Name == "Kolejka 1" {
+			firstGroupRound = &page.Rounds[i]
+			break
+		}
+	}
+	if firstGroupRound == nil {
+		t.Fatalf("expected Grupa A / Kolejka 1 round")
+	}
+	if firstGroupRound.Phase != RoundPhaseGroup {
+		t.Fatalf("expected group phase, got %q", firstGroupRound.Phase)
+	}
+	if len(firstGroupRound.Fixtures) == 0 || !strings.Contains(firstGroupRound.Fixtures[0].WhenInfo, "14 czerwca") {
+		t.Fatalf("expected fixture row date in WhenInfo, got %+v", firstGroupRound.Fixtures)
+	}
+}
+
+func TestParseLeaguePageKeepsSectionOnlyFixtureGroup(t *testing.T) {
+	html := `
+	<html><head><title>Section Only</title></head><body>
+	<table><tr><td><u>Grupa finałowa</u></td></tr></table>
+	<table>
+	<tr><td>Team A</td><td><a href="/mecz.php?id_mecz=1">1-0</a></td><td>Team B</td><td>1 maja, 18:00</td></tr>
+	</table>
+	<table><tr><td><u>1/2 finału</u></td></tr></table>
+	<table>
+	<tr><td>Team C</td><td><a href="/mecz.php?id_mecz=2">2-0</a></td><td>Team D</td><td>8 maja, 18:00</td></tr>
+	</table>
+	</body></html>`
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("parse synthetic HTML: %v", err)
+	}
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/section-only.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Rounds) != 2 {
+		t.Fatalf("expected 2 rounds, got %d", len(page.Rounds))
+	}
+	if page.Rounds[0].Section != "Grupa finałowa" || page.Rounds[0].Name != "" || page.Rounds[0].Phase != RoundPhaseGroup {
+		t.Fatalf("unexpected section-only round: %+v", page.Rounds[0])
+	}
+	if page.Rounds[1].Section != "" || page.Rounds[1].Name != "1/2 finału" || page.Rounds[1].Phase != RoundPhaseKnockout {
+		t.Fatalf("knockout round inherited section context: %+v", page.Rounds[1])
+	}
+}
+
+func TestParseLeaguePagePreservesSectionedQualifierSourceOrder(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_14042.html")
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga14042.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+
+	indexes := map[string]int{}
+	for i, round := range page.Rounds {
+		key := round.Section + "/" + round.Name
+		if _, exists := indexes[key]; !exists {
+			indexes[key] = i
+		}
+	}
+	groupAEnd, ok := indexes["Grupa A/Kolejka 10 - 16-18 listopada"]
+	if !ok {
+		t.Fatalf("expected Grupa A final matchday")
+	}
+	groupBStart, ok := indexes["Grupa B/Kolejka 5 - 4-6 września"]
+	if !ok {
+		t.Fatalf("expected Grupa B first matchday")
+	}
+	if groupAEnd >= groupBStart {
+		t.Fatalf("expected source order to finish Grupa A before Grupa B")
+	}
+}
+
+func TestParseLeaguePageDoesNotTreatUnderlinedFixtureTeamsAsSections(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_10529.html")
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga10529.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+
+	foundRound := false
+	foundNextRound := false
+	for _, round := range page.Rounds {
+		if round.Name != "1/16 finału - 26-27 stycznia" {
+			if round.Name == "1/8 finału - 13-14 lutego" {
+				foundNextRound = true
+				if round.Section != "" {
+					t.Fatalf("fixture team section leaked into next round: %+v", round)
+				}
+			}
+			continue
+		}
+		foundRound = true
+		if round.Section != "" {
+			t.Fatalf("underlined team name should not become a section: %q", round.Section)
+		}
+	}
+	if !foundRound {
+		t.Fatalf("expected 1/16 final round")
+	}
+	if !foundNextRound {
+		t.Fatalf("expected 1/8 final round")
+	}
+}
+
+func TestParseLeaguePageKeepsPlainLeagueNumericOrder(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_8694.html")
+
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/0/liga8694.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+	if len(page.Rounds) < 37 {
+		t.Fatalf("expected at least 37 rounds, got %d", len(page.Rounds))
+	}
+	if page.Rounds[0].Name != "Kolejka 1 - 16-17 lipca" || page.Rounds[36].Name != "Kolejka 37 - 2-4 czerwca" {
+		t.Fatalf("unexpected plain league order: first=%q last=%q", page.Rounds[0].Name, page.Rounds[36].Name)
+	}
+	for _, round := range page.Rounds[:37] {
+		if round.Phase != RoundPhaseRegular || round.Section != "" {
+			t.Fatalf("expected plain league round, got %+v", round)
+		}
+	}
+}
+
 func TestParseFixturesTableSkipsRowsWithMultipleMatchLinks(t *testing.T) {
 	html := `
 	<table>

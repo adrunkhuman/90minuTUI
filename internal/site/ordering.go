@@ -11,13 +11,17 @@ var roundNumberRe = regexp.MustCompile(`\d+`)
 var fixtureDateRe = regexp.MustCompile(`(?i)(\d{1,2})\s+([\p{L}]+)(?:\s+(\d{4}))?(?:,\s*(\d{1,2}):(\d{2}))?`)
 var seasonYearsRe = regexp.MustCompile(`(\d{4})\s*/\s*(\d{2,4})`)
 
-// Normalize round and fixture order here so every caller sees the same league structure.
+// Normalize fixture order for every round. Round reordering is limited to plain leagues;
+// staged tournaments rely on source order to preserve qualification/group/knockout flow.
 func normalizeLeagueOrder(rounds []Round, leagueTitle string) []Round {
 	ordered := make([]Round, len(rounds))
 	copy(ordered, rounds)
 
 	for i := range ordered {
 		ordered[i].Fixtures = normalizeFixturesByDate(ordered[i].Fixtures, leagueTitle)
+	}
+	if !plainLeagueRounds(ordered) {
+		return ordered
 	}
 
 	type indexedRound struct {
@@ -49,6 +53,26 @@ func normalizeLeagueOrder(rounds []Round, leagueTitle string) []Round {
 	}
 
 	return ordered
+}
+
+func plainLeagueRounds(rounds []Round) bool {
+	if len(rounds) == 0 {
+		return false
+	}
+
+	for _, round := range rounds {
+		if round.Phase != RoundPhaseRegular || strings.TrimSpace(round.Section) != "" {
+			return false
+		}
+		if !looksLikeMatchdayHeading(round.Name) {
+			return false
+		}
+		if _, ok := roundNumber(round.Name); !ok {
+			return false
+		}
+	}
+
+	return true
 }
 
 func normalizeFixturesByDate(fixtures []Fixture, leagueTitle string) []Fixture {

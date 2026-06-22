@@ -160,6 +160,21 @@ func TestTopBarRoundMetaShowsSingleFixtureDate(t *testing.T) {
 	}
 }
 
+func TestTopBarRoundMetaShowsRoundSection(t *testing.T) {
+	round := site.Round{
+		Section: "Grupa A",
+		Name:    "Kolejka 1",
+		Fixtures: []site.Fixture{
+			{Home: "A", Away: "B", WhenInfo: "14 czerwca 2024, 21:00"},
+		},
+	}
+
+	got := topBarRoundMeta(round, 1, 12, "Mistrzostwa Europy - Niemcy 2024")
+	if got != "Grupa A · Round 1 · Jun 14 / 12" {
+		t.Fatalf("unexpected round meta: %q", got)
+	}
+}
+
 func TestTopBarRoundMetaShowsCrossMonthFixtureDateSpan(t *testing.T) {
 	round := site.Round{
 		Name: "3. kolejka - 30 kwietnia",
