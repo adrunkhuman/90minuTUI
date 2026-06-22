@@ -32,6 +32,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "tab":
+			if !m.selectorActive() {
+				m.openSelector()
+				return m, nil
+			}
 			m.toggleFocus()
 			return m, nil
 		case "pgup", "ctrl+u":
@@ -44,21 +48,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.matchView {
 				return m, m.moveMatchFixture(-1)
 			}
-			m.moveCursor(-1)
-			return m, nil
+			return m, m.moveCursor(-1)
 		case "down", "j":
 			if m.matchView {
 				return m, m.moveMatchFixture(1)
 			}
-			m.moveCursor(1)
-			return m, nil
+			return m, m.moveCursor(1)
 		case "left", "h":
+			if m.selectorActive() {
+				m.focus = focusSeasons
+				return m, nil
+			}
 			if m.matchView {
 				return m, m.moveMatchRound(-1)
 			}
 			m.shiftRound(-1)
 			return m, nil
 		case "right", "l":
+			if m.selectorActive() {
+				m.focus = focusCompetitions
+				return m, nil
+			}
 			if m.matchView {
 				return m, m.moveMatchRound(1)
 			}
@@ -117,16 +127,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
 
 	case competitionsLoadedMsg:
+		season := m.currentSeason()
+		// Drop stale async results after the selected season changes.
+		if season == nil || msg.seasonKey != seasonRequestKey(*season) {
+			return m, nil
+		}
+
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err.Error()
 			m.openSelector()
-			return m, nil
-		}
-
-		season := m.currentSeason()
-		// Drop stale async results after the selected season changes.
-		if season == nil || msg.seasonKey != seasonRequestKey(*season) {
 			return m, nil
 		}
 
@@ -136,6 +146,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.matchView = false
 		m.match = nil
 		m.matchScroll = 0
+		if msg.selectorOnly {
+			m.openSelector()
+			return m, nil
+		}
 
 		if len(m.competitions) == 0 {
 			m.openSelector()
@@ -210,6 +224,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.match = msg.match
 		m.matchScroll = 0
 		return m, nil
+
+	case seasonSelectionSettledMsg:
+		season := m.currentSeason()
+		if season == nil || msg.seasonKey != seasonRequestKey(*season) {
+			return m, nil
+		}
+		m.loading = true
+		m.err = ""
+		m.competitionTitle = "Competitions"
+		m.competitions = nil
+		m.competitionCursor = 0
+		m.competitionStack = nil
+		return m, m.loadSeasonCompetitionsCmd(msg.seasonURL, msg.seasonKey, true)
 	}
 
 	return m, nil
@@ -231,22 +258,36 @@ func (m *Model) toggleFocus() {
 	}
 }
 
-func (m *Model) moveCursor(delta int) {
+func (m *Model) moveCursor(delta int) tea.Cmd {
 	if !m.selectorActive() {
 		round := m.currentRound()
 		if round == nil {
-			return
+			return nil
 		}
 		m.fixtureCursor = clamp(m.fixtureCursor+delta, 0, len(round.Fixtures)-1)
-		return
+		return nil
 	}
 
 	switch m.focus {
 	case focusSeasons:
-		m.seasonCursor = clamp(m.seasonCursor+delta, 0, len(m.seasons)-1)
+		if len(m.seasons) == 0 {
+			return nil
+		}
+		next := clamp(m.seasonCursor+delta, 0, len(m.seasons)-1)
+		if next == m.seasonCursor {
+			return nil
+		}
+		m.seasonCursor = next
+		m.err = ""
+		season := m.currentSeason()
+		if season == nil {
+			return nil
+		}
+		return m.settleSeasonSelectionCmd(season.URL, seasonRequestKey(*season))
 	case focusCompetitions:
 		m.competitionCursor = clamp(m.competitionCursor+delta, 0, len(m.competitions)-1)
 	}
+	return nil
 }
 
 func (m *Model) shiftRound(delta int) {
@@ -310,7 +351,7 @@ func (m *Model) handleEnter() tea.Cmd {
 				m.loading = false
 				return nil
 			}
-			return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season))
+			return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season), false)
 
 		case focusCompetitions:
 			if len(m.competitions) == 0 {
@@ -384,7 +425,7 @@ func (m *Model) handleReload() tea.Cmd {
 			m.loading = false
 			return nil
 		}
-		return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season))
+		return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season), false)
 	}
 
 	competition := m.currentCompetition()
@@ -394,7 +435,7 @@ func (m *Model) handleReload() tea.Cmd {
 			m.loading = false
 			return nil
 		}
-		return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season))
+		return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season), false)
 	}
 
 	m.matchView = false

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -29,19 +30,23 @@ type recordingLoader struct {
 	menuCalls    int
 	matchCalls   int
 
-	seasons      []site.Season
-	selectedIdx  int
-	competitions []site.Competition
-	menus        map[string]*site.CompetitionMenu
-	league       *site.LeaguePage
-	match        *site.MatchPage
+	seasons             []site.Season
+	selectedIdx         int
+	competitions        []site.Competition
+	archiveCompetitions map[string][]site.Competition
+	menus               map[string]*site.CompetitionMenu
+	league              *site.LeaguePage
+	match               *site.MatchPage
 
 	// compErr, when non-nil, is returned by LoadCompetition instead of the league.
 	compErr error
 }
 
-func (l *recordingLoader) LoadArchive(context.Context, string) ([]site.Season, int, []site.Competition, error) {
+func (l *recordingLoader) LoadArchive(_ context.Context, rawURL string) ([]site.Season, int, []site.Competition, error) {
 	l.archiveCalls++
+	if competitions, ok := l.archiveCompetitions[strings.TrimSpace(rawURL)]; ok {
+		return l.seasons, l.selectedIdx, competitions, nil
+	}
 	return l.seasons, l.selectedIdx, l.competitions, nil
 }
 
@@ -792,6 +797,178 @@ func TestToggleFocusCyclesBetweenSeasonsAndCompetitions(t *testing.T) {
 	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyTab))
 	if m.focus != focusCompetitions {
 		t.Fatalf("expected competitions focus after second tab, got %v", m.focus)
+	}
+}
+
+func TestSelectorLeftRightSwitchesSeasonAndCompetitionFocus(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
+
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyLeft))
+	if cmd != nil {
+		t.Fatalf("expected focus switch without command")
+	}
+	if m.focus != focusSeasons {
+		t.Fatalf("expected left to focus seasons, got %v", m.focus)
+	}
+
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyRight))
+	if cmd != nil {
+		t.Fatalf("expected focus switch without command")
+	}
+	if m.focus != focusCompetitions {
+		t.Fatalf("expected right to focus competitions, got %v", m.focus)
+	}
+}
+
+func TestTabOpensSelectorFromFixturesAndMatchViews(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyTab))
+	if cmd != nil {
+		t.Fatalf("expected tab to open selector without command")
+	}
+	if !m.selectorVisible || m.focus != focusCompetitions {
+		t.Fatalf("expected tab to open selector from fixtures, focus=%v selector=%v", m.focus, m.selectorVisible)
+	}
+
+	m.closeSelector()
+	m.matchView = true
+	m.match = loader.match
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyTab))
+	if cmd != nil {
+		t.Fatalf("expected tab to open selector from match view without command")
+	}
+	if !m.selectorVisible || m.focus != focusCompetitions || !m.matchView {
+		t.Fatalf("expected tab to overlay selector on match view, focus=%v selector=%v match=%v", m.focus, m.selectorVisible, m.matchView)
+	}
+}
+
+func TestSelectorSeasonMoveRefreshesCompetitionsInPlace(t *testing.T) {
+	loader := newRecordingLoader()
+	season2024 := site.Season{Label: "2024/2025", URL: "http://www.90minut.pl/archsezon.php?id_sezon=105", SeasonID: "105"}
+	season2025 := site.Season{Label: "2025/2026", URL: "http://www.90minut.pl/archsezon.php?id_sezon=107", SeasonID: "107", Current: true}
+	loader.seasons = []site.Season{season2024, season2025}
+	loader.selectedIdx = 0
+	loader.competitions = []site.Competition{{Name: "Ekstraklasa 2024/2025", URL: "http://www.90minut.pl/liga/1/liga13482.html", LeagueKey: "liga13482"}}
+	loader.archiveCompetitions = map[string][]site.Competition{
+		season2025.URL: []site.Competition{{Name: "Ekstraklasa 2025/2026", URL: "http://www.90minut.pl/liga/1/liga14072.html", LeagueKey: "liga14072"}},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyLeft))
+
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyDown))
+	if cmd == nil {
+		t.Fatalf("expected season cursor move to schedule delayed competition load")
+	}
+	if m.loading || m.focus != focusSeasons || !m.selectorVisible || len(m.competitions) != 1 {
+		t.Fatalf("expected delayed selector refresh without immediate load, loading=%v focus=%v selector=%v competitions=%+v", m.loading, m.focus, m.selectorVisible, m.competitions)
+	}
+
+	m, cmd = updateModelWithMsg(t, m, seasonSelectionSettledMsg{seasonKey: seasonRequestKey(season2025), seasonURL: season2025.URL})
+	if cmd == nil {
+		t.Fatalf("expected settled season to load competitions")
+	}
+	if !m.loading || len(m.competitions) != 0 {
+		t.Fatalf("expected settled season to enter loading state and clear stale competitions, loading=%v competitions=%+v", m.loading, m.competitions)
+	}
+
+	m, cmd = updateModelWithMsg(t, m, cmd())
+	if cmd != nil {
+		t.Fatalf("expected selector-only competition load to settle without league load")
+	}
+	if !m.selectorVisible || m.focus != focusSeasons {
+		t.Fatalf("expected selector to stay on seasons, focus=%v selector=%v", m.focus, m.selectorVisible)
+	}
+	if len(m.competitions) != 1 || m.competitions[0].Name != "Ekstraklasa 2025/2026" {
+		t.Fatalf("expected competitions from selected season, got %+v", m.competitions)
+	}
+	if loader.leagueCalls != 1 {
+		t.Fatalf("season cursor refresh should not auto-load a league, got %d league calls", loader.leagueCalls)
+	}
+}
+
+func TestStaleSeasonCompetitionResultsDoNotOverwriteCurrentSelectorLoad(t *testing.T) {
+	loader := newRecordingLoader()
+	season2024 := site.Season{Label: "2024/2025", URL: "http://www.90minut.pl/archsezon.php?id_sezon=105", SeasonID: "105"}
+	season2025 := site.Season{Label: "2025/2026", URL: "http://www.90minut.pl/archsezon.php?id_sezon=107", SeasonID: "107", Current: true}
+	loader.seasons = []site.Season{season2024, season2025}
+	loader.selectedIdx = 0
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyLeft))
+
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyDown))
+	if cmd == nil {
+		t.Fatalf("expected selected season settle command")
+	}
+	m, staleCmd := updateModelWithMsg(t, m, seasonSelectionSettledMsg{seasonKey: seasonRequestKey(season2024), seasonURL: season2024.URL})
+	if staleCmd != nil {
+		t.Fatalf("expected stale settle message to be ignored without command")
+	}
+	if m.loading || len(m.competitions) != 1 {
+		t.Fatalf("stale settle changed selector before current load: loading=%v competitions=%+v", m.loading, m.competitions)
+	}
+	m, cmd = updateModelWithMsg(t, m, seasonSelectionSettledMsg{seasonKey: seasonRequestKey(season2025), seasonURL: season2025.URL})
+	if cmd == nil {
+		t.Fatalf("expected current settle message to start load")
+	}
+
+	staleKey := seasonRequestKey(season2024)
+	m, staleCmd = updateModelWithMsg(t, m, competitionsLoadedMsg{
+		seasonKey:    staleKey,
+		competitions: []site.Competition{{Name: "Stale league"}},
+		selectorOnly: true,
+	})
+	if staleCmd != nil {
+		t.Fatalf("expected stale success to be ignored without command")
+	}
+	m, staleCmd = updateModelWithMsg(t, m, competitionsLoadedMsg{
+		seasonKey:    staleKey,
+		selectorOnly: true,
+		err:          errors.New("stale season failed"),
+	})
+	if staleCmd != nil {
+		t.Fatalf("expected stale error to be ignored without command")
+	}
+	if !m.loading || m.err != "" || len(m.competitions) != 0 {
+		t.Fatalf("stale result changed active selector load: loading=%v err=%q competitions=%+v", m.loading, m.err, m.competitions)
+	}
+}
+
+func TestSelectorSeasonEnterLoadsFirstCompetition(t *testing.T) {
+	loader := newRecordingLoader()
+	season2024 := site.Season{Label: "2024/2025", URL: "http://www.90minut.pl/archsezon.php?id_sezon=105", SeasonID: "105"}
+	season2025 := site.Season{Label: "2025/2026", URL: "http://www.90minut.pl/archsezon.php?id_sezon=107", SeasonID: "107", Current: true}
+	loader.seasons = []site.Season{season2024, season2025}
+	loader.selectedIdx = 1
+	loader.archiveCompetitions = map[string][]site.Competition{
+		season2025.URL: []site.Competition{{Name: "Ekstraklasa 2025/2026", URL: "http://www.90minut.pl/liga/1/liga14072.html", LeagueKey: "liga14072"}},
+	}
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyLeft))
+
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
+	if cmd == nil {
+		t.Fatalf("expected season enter to load competitions")
+	}
+	m, cmd = updateModelWithMsg(t, m, cmd())
+	if cmd == nil {
+		t.Fatalf("expected season competition load to schedule first competition load")
+	}
+	m, cmd = updateModelWithMsg(t, m, cmd())
+	if cmd != nil {
+		t.Fatalf("expected first competition load to settle")
+	}
+	if m.selectorVisible {
+		t.Fatalf("expected season enter flow to close selector after league load")
+	}
+	if loader.leagueCalls != 2 {
+		t.Fatalf("expected startup plus selected season league load, got %d", loader.leagueCalls)
 	}
 }
 

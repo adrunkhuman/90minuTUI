@@ -39,7 +39,13 @@ type archiveLoadedMsg struct {
 type competitionsLoadedMsg struct {
 	seasonKey    string
 	competitions []site.Competition
+	selectorOnly bool
 	err          error
+}
+
+type seasonSelectionSettledMsg struct {
+	seasonKey string
+	seasonURL string
 }
 
 type competitionMenuLoadedMsg struct {

@@ -116,7 +116,7 @@ func (m Model) statusBarView() string {
 
 	switch {
 	case m.selectorActive():
-		parts = []statusBarItem{{"j/k", "move"}, {"tab", "focus"}, {"enter", "load"}}
+		parts = []statusBarItem{{"j/k", "move"}, {"h/l", "pane"}, {"enter", "load"}}
 		if len(m.competitionStack) > 0 {
 			parts[2] = statusBarItem{"enter", "open"}
 			parts = append(parts, statusBarItem{"esc", "back"})
@@ -217,7 +217,7 @@ func selectorCompetitionWidthLines(items []site.Competition) []string {
 
 	lines := make([]string, 0, len(items))
 	for _, item := range items {
-		lines = append(lines, item.Name)
+		lines = append(lines, normalizeDisplayText(item.Name))
 	}
 	return lines
 }

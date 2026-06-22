@@ -58,7 +58,7 @@ func renderSeasonsWindow(seasons []site.Season, cursor int) []string {
 	start, end := windowBounds(len(seasons), cursor, 10)
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		lines = append(lines, seasons[i].Label)
+		lines = append(lines, normalizeDisplayText(seasons[i].Label))
 	}
 
 	return lines
