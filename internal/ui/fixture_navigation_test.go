@@ -29,6 +29,8 @@ type recordingLoader struct {
 	leagueCalls  int
 	menuCalls    int
 	matchCalls   int
+	freshMenus   int
+	freshMatches int
 
 	seasons             []site.Season
 	selectedIdx         int
@@ -37,6 +39,7 @@ type recordingLoader struct {
 	menus               map[string]*site.CompetitionMenu
 	league              *site.LeaguePage
 	match               *site.MatchPage
+	cached              map[string]bool
 
 	// compErr, when non-nil, is returned by LoadCompetition instead of the league.
 	compErr error
@@ -48,6 +51,14 @@ func (l *recordingLoader) LoadArchive(_ context.Context, rawURL string) ([]site.
 		return l.seasons, l.selectedIdx, competitions, nil
 	}
 	return l.seasons, l.selectedIdx, l.competitions, nil
+}
+
+func (l *recordingLoader) LoadArchiveFresh(ctx context.Context, rawURL string) ([]site.Season, int, []site.Competition, error) {
+	return l.LoadArchive(ctx, rawURL)
+}
+
+func (l *recordingLoader) Cached(rawURL string) bool {
+	return l.cached[strings.TrimSpace(rawURL)]
 }
 
 func (l *recordingLoader) LoadLeague(context.Context, string) (*site.LeaguePage, error) {
@@ -67,9 +78,19 @@ func (l *recordingLoader) LoadCompetition(_ context.Context, rawURL string) (*si
 	return nil, l.league, nil
 }
 
+func (l *recordingLoader) LoadCompetitionFresh(ctx context.Context, rawURL string) (*site.CompetitionMenu, *site.LeaguePage, error) {
+	l.freshMenus++
+	return l.LoadCompetition(ctx, rawURL)
+}
+
 func (l *recordingLoader) LoadMatch(context.Context, string) (*site.MatchPage, error) {
 	l.matchCalls++
 	return l.match, nil
+}
+
+func (l *recordingLoader) LoadMatchFresh(ctx context.Context, rawURL string) (*site.MatchPage, error) {
+	l.freshMatches++
+	return l.LoadMatch(ctx, rawURL)
 }
 
 func TestFixtureNavigationDoesNotReloadLeague(t *testing.T) {
@@ -169,6 +190,9 @@ func TestPrintableReloadAndQuitKeys(t *testing.T) {
 	}
 	if loader.leagueCalls != 2 {
 		t.Fatalf("expected reload to load league again, got %d league loads", loader.leagueCalls)
+	}
+	if loader.freshMenus != 1 {
+		t.Fatalf("expected reload to bypass cached competition load, got %d fresh loads", loader.freshMenus)
 	}
 
 	_, cmd = updateModelWithMsg(t, m, testRune('q'))
@@ -577,6 +601,28 @@ func TestMatchViewNavigationLoadsAdjacentFixture(t *testing.T) {
 	}
 }
 
+func TestMatchViewReloadUsesFreshMatchLoad(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m.roundCursor = 0
+	m.fixtureCursor = 0
+
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyEnter))
+	if cmd == nil {
+		t.Fatalf("expected match load command on enter")
+	}
+	m, _ = updateModelWithMsg(t, m, cmd())
+
+	m, cmd = updateModelWithMsg(t, m, testRune('r'))
+	if cmd == nil {
+		t.Fatalf("expected match reload command")
+	}
+	m, _ = updateModelWithMsg(t, m, cmd())
+	if loader.freshMatches != 1 {
+		t.Fatalf("expected match reload to bypass cache, got %d fresh loads", loader.freshMatches)
+	}
+}
+
 func TestMatchViewRoundNavigationLoadsFirstFixture(t *testing.T) {
 	loader := newRecordingLoader()
 	m := bootstrapLeagueLoadedModel(t, loader)
@@ -888,6 +934,57 @@ func TestSelectorSeasonMoveRefreshesCompetitionsInPlace(t *testing.T) {
 	}
 	if loader.leagueCalls != 1 {
 		t.Fatalf("season cursor refresh should not auto-load a league, got %d league calls", loader.leagueCalls)
+	}
+}
+
+func TestSelectorSeasonMoveLoadsCachedCompetitionsImmediately(t *testing.T) {
+	loader := newRecordingLoader()
+	season2024 := site.Season{Label: "2024/2025", URL: "http://www.90minut.pl/archsezon.php?id_sezon=105", SeasonID: "105"}
+	season2025 := site.Season{Label: "2025/2026", URL: "http://www.90minut.pl/archsezon.php?id_sezon=107", SeasonID: "107", Current: true}
+	loader.seasons = []site.Season{season2024, season2025}
+	loader.selectedIdx = 0
+	loader.competitions = []site.Competition{{Name: "Ekstraklasa 2024/2025", URL: "http://www.90minut.pl/liga/1/liga13482.html", LeagueKey: "liga13482"}}
+	loader.archiveCompetitions = map[string][]site.Competition{
+		season2025.URL: {{Name: "Ekstraklasa 2025/2026", URL: "http://www.90minut.pl/liga/1/liga14072.html", LeagueKey: "liga14072"}},
+	}
+	loader.cached = map[string]bool{season2025.URL: true}
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyLeft))
+
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyDown))
+	if cmd == nil {
+		t.Fatalf("expected cached season cursor move to load competitions immediately")
+	}
+	if !m.loading || len(m.competitions) != 0 {
+		t.Fatalf("expected cached season move to enter loading state and clear stale competitions, loading=%v competitions=%+v", m.loading, m.competitions)
+	}
+	if msg, ok := cmd().(competitionsLoadedMsg); !ok || msg.seasonKey != seasonRequestKey(season2025) {
+		t.Fatalf("expected immediate competitions load message for cached season, got %#v", msg)
+	}
+}
+
+func TestSelectorSeasonReloadFreshLoadsSelectedCompetition(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyEsc))
+	m, _ = updateModelWithMsg(t, m, testKey(tea.KeyLeft))
+
+	m, cmd := updateModelWithMsg(t, m, testRune('r'))
+	if cmd == nil {
+		t.Fatalf("expected season reload command")
+	}
+	msg, ok := cmd().(competitionsLoadedMsg)
+	if !ok || !msg.fresh {
+		t.Fatalf("expected fresh competitions message, got %#v", msg)
+	}
+	m, cmd = updateModelWithMsg(t, m, msg)
+	if cmd == nil {
+		t.Fatalf("expected selected competition load after season reload")
+	}
+	m, _ = updateModelWithMsg(t, m, cmd())
+	if loader.freshMenus != 1 {
+		t.Fatalf("expected selected competition to load fresh after season reload, got %d fresh loads", loader.freshMenus)
 	}
 }
 

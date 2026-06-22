@@ -124,6 +124,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openSelector()
 			return m, nil
 		}
+		if msg.fresh {
+			return m, m.loadCompetitionFreshCmd(competition.URL, competitionRequestKey(*competition))
+		}
 		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
 
 	case competitionsLoadedMsg:
@@ -162,6 +165,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = false
 			m.openSelector()
 			return m, nil
+		}
+		if msg.fresh {
+			return m, m.loadCompetitionFreshCmd(competition.URL, competitionRequestKey(*competition))
 		}
 		return m, m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
 
@@ -230,13 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if season == nil || msg.seasonKey != seasonRequestKey(*season) {
 			return m, nil
 		}
-		m.loading = true
-		m.err = ""
-		m.competitionTitle = "Competitions"
-		m.competitions = nil
-		m.competitionCursor = 0
-		m.competitionStack = nil
-		return m, m.loadSeasonCompetitionsCmd(msg.seasonURL, msg.seasonKey, true)
+		return m, m.startSeasonCompetitionLoad(msg.seasonURL, msg.seasonKey, true)
 	}
 
 	return m, nil
@@ -283,11 +283,29 @@ func (m *Model) moveCursor(delta int) tea.Cmd {
 		if season == nil {
 			return nil
 		}
+		if m.cached(season.URL) {
+			return m.startSeasonCompetitionLoad(season.URL, seasonRequestKey(*season), true)
+		}
 		return m.settleSeasonSelectionCmd(season.URL, seasonRequestKey(*season))
 	case focusCompetitions:
 		m.competitionCursor = clamp(m.competitionCursor+delta, 0, len(m.competitions)-1)
 	}
 	return nil
+}
+
+func (m *Model) startSeasonCompetitionLoad(url, seasonKey string, selectorOnly bool) tea.Cmd {
+	m.loading = true
+	m.err = ""
+	m.competitionTitle = "Competitions"
+	m.competitions = nil
+	m.competitionCursor = 0
+	m.competitionStack = nil
+	return m.loadSeasonCompetitionsCmd(url, seasonKey, selectorOnly)
+}
+
+func (m Model) cached(rawURL string) bool {
+	loader, ok := m.service.(cachedLoader)
+	return ok && loader.Cached(rawURL)
 }
 
 func (m *Model) shiftRound(delta int) {
@@ -411,12 +429,12 @@ func (m *Model) handleReload() tea.Cmd {
 		}
 		m.match = nil
 		m.matchScroll = 0
-		return m.loadMatchCmd(fixture.MatchURL, fixtureRequestKey(*fixture))
+		return m.loadMatchFreshCmd(fixture.MatchURL, fixtureRequestKey(*fixture))
 	}
 
 	m.match = nil
 	if len(m.seasons) == 0 {
-		return m.loadArchiveCmd(site.ArchiveURL)
+		return m.loadArchiveFreshCmd(site.ArchiveURL)
 	}
 
 	if m.selectorActive() && m.focus == focusSeasons {
@@ -425,7 +443,7 @@ func (m *Model) handleReload() tea.Cmd {
 			m.loading = false
 			return nil
 		}
-		return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season), false)
+		return m.loadSeasonCompetitionsFreshCmd(season.URL, seasonRequestKey(*season), false)
 	}
 
 	competition := m.currentCompetition()
@@ -435,11 +453,11 @@ func (m *Model) handleReload() tea.Cmd {
 			m.loading = false
 			return nil
 		}
-		return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season), false)
+		return m.loadSeasonCompetitionsFreshCmd(season.URL, seasonRequestKey(*season), false)
 	}
 
 	m.matchView = false
-	return m.loadCompetitionCmd(competition.URL, competitionRequestKey(*competition))
+	return m.loadCompetitionFreshCmd(competition.URL, competitionRequestKey(*competition))
 }
 
 func (m *Model) scrollMatch(delta int) {
