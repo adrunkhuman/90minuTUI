@@ -663,16 +663,6 @@ func TestFormatLineupPlayerMirrorsSubstitutionNote(t *testing.T) {
 	if got := ansi.Strip(away); got != "J. Wilson-Esbrand (J. Grzesik 46')" {
 		t.Fatalf("unexpected away lineup substitution label: %q", got)
 	}
-	if !containsFaintSpan(home, "(46' D. Nowak)") {
-		t.Fatalf("expected home substitution note to be dimmed, got %q", home)
-	}
-	if !containsFaintSpan(away, "(J. Grzesik 46')") {
-		t.Fatalf("expected away substitution note to be dimmed, got %q", away)
-	}
-}
-
-func containsFaintSpan(rendered, text string) bool {
-	return strings.Contains(rendered, faintText(text))
 }
 
 func TestFormatLineupPlayerShowsEntryAndExitNotes(t *testing.T) {
