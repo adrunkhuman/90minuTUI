@@ -129,7 +129,7 @@ func (m Model) selectorPopupView(width int) string {
 }
 
 func selectorRightHeading(title string) string {
-	cleaned := strings.TrimSpace(title)
+	cleaned := normalizeDisplayText(title)
 	if cleaned == "" || strings.EqualFold(cleaned, "Competitions") {
 		return "COMPETITIONS"
 	}
@@ -143,7 +143,7 @@ func selectorSeasonRows(seasons []site.Season, cursor int) []string {
 	start, end := windowBounds(len(seasons), cursor, 10)
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		rows = append(rows, seasons[i].Label)
+		rows = append(rows, normalizeDisplayText(seasons[i].Label))
 	}
 	return rows
 }
@@ -155,14 +155,14 @@ func selectorCompetitionRows(items []site.Competition, cursor int) []string {
 	start, end := windowBounds(len(items), cursor, 18)
 	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		rows = append(rows, items[i].Name)
+		rows = append(rows, normalizeDisplayText(items[i].Name))
 	}
 	return rows
 }
 
 func selectorModalPane(width int, heading string, rows []string, cursor, visibleRows int, focused bool) string {
 	var b strings.Builder
-	b.WriteString(renderFullLine(" "+truncate(heading, max(1, width-1)), width, colorBgHeader, colorAccent, true))
+	b.WriteString(renderFullLine(" "+truncate(normalizeDisplayText(heading), max(1, width-1)), width, colorBgHeader, colorAccent, true))
 	for i := range visibleRows {
 		b.WriteString("\n")
 		row := ""
@@ -184,7 +184,7 @@ func selectorModalRow(text string, selected, focused bool, width int) string {
 		fg = colorAccent
 		bar = "▌ "
 	}
-	return renderFullLine(bar+truncate(text, max(1, width-2)), width, bg, fg, selected)
+	return renderFullLine(bar+truncate(normalizeDisplayText(text), max(1, width-2)), width, bg, fg, selected)
 }
 
 func selectorModalDivider(height int) string {

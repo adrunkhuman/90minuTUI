@@ -22,12 +22,13 @@ func (m Model) loadArchiveCmd(url string) tea.Cmd {
 	}
 }
 
-func (m Model) loadSeasonCompetitionsCmd(url, seasonKey string) tea.Cmd {
+// selectorOnly refreshes the selector list without auto-loading a competition or closing the selector.
+func (m Model) loadSeasonCompetitionsCmd(url, seasonKey string, selectorOnly bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
 		defer cancel()
 		_, _, competitions, err := m.service.LoadArchive(ctx, url)
-		return competitionsLoadedMsg{seasonKey: seasonKey, competitions: competitions, err: err}
+		return competitionsLoadedMsg{seasonKey: seasonKey, competitions: competitions, selectorOnly: selectorOnly, err: err}
 	}
 }
 

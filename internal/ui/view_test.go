@@ -1411,6 +1411,33 @@ func TestSelectorPopupWidthDoesNotDependOnCurrentScrollWindow(t *testing.T) {
 	}
 }
 
+func TestSelectorPopupNormalizesNewlinesInLeagueNames(t *testing.T) {
+	m := sketchModel()
+	m.focus = focusCompetitions
+	m.seasons = []site.Season{{Label: "2025 /\n2026"}}
+	m.competitionTitle = "Women\r\nLeagues"
+	m.competitions = []site.Competition{{
+		Name: "V liga kobiet 2025/2026\ngrupa: małopolska",
+	}}
+
+	plain := ansi.Strip(m.selectorPopupView(80))
+	if strings.Contains(plain, "2025/2026\ngrupa") || strings.Contains(plain, "2025 /\n2026") || strings.Contains(plain, "Women\r\nLeagues") {
+		t.Fatalf("expected embedded newline to be normalized\n%s", plain)
+	}
+	if !strings.Contains(plain, "2025 / 2026") {
+		t.Fatalf("expected normalized season label in one row\n%s", plain)
+	}
+	if !strings.Contains(plain, "WOMEN LEAGUES") {
+		t.Fatalf("expected normalized selector heading in one row\n%s", plain)
+	}
+	if !strings.Contains(plain, "V liga kobiet 2025/2026 grupa") {
+		t.Fatalf("expected normalized league name in one row\n%s", plain)
+	}
+	if got := selectorCompetitionWidthLines(m.competitions); len(got) != 1 || got[0] != "V liga kobiet 2025/2026 grupa: małopolska" {
+		t.Fatalf("expected width lines to normalize league names, got %+v", got)
+	}
+}
+
 func TestOverlayLinePreservesContentOutsidePopup(t *testing.T) {
 	got := overlayLine("left-center-right", "     POPUP", 5)
 	if !strings.HasPrefix(got, "left-") {

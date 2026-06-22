@@ -16,8 +16,8 @@ go run ./cmd/90minutui
 
 ## Controls
 
-- `j/k` move selection; in match view, previous/next fixture
-- `h/l` previous/next round
+- `j/k` move selection; in season selector, updates competitions for that season
+- `h/l` previous/next round; in selector, switch season/competition pane
 - `enter` open selected season, competition, league, or match
 - `esc` close match view, back out of submenus, or toggle the selector
 - `tab` switch selector focus
