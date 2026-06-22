@@ -32,10 +32,7 @@ go run ./cmd/90minutui
 - Competition submenus for III liga, regional leagues/cups, women, and futsal
 - Linkless fixtures that have scores but no match page
 - Match score, timeline, metadata, lineups, substitutions, and cards
-
-## Planned
-
-- CLI/query API for scripts and non-interactive use
+- CLI/query API for scripts and non-interactive use: see [CLI Data Export](docs/cli.md)
 
 ## Boundaries
 
