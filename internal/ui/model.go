@@ -29,10 +29,21 @@ type archiveLoader interface {
 	LoadMatch(ctx context.Context, matchURL string) (*site.MatchPage, error)
 }
 
+type cachedLoader interface {
+	Cached(rawURL string) bool
+}
+
+type freshLoader interface {
+	LoadArchiveFresh(ctx context.Context, archiveURL string) ([]site.Season, int, []site.Competition, error)
+	LoadCompetitionFresh(ctx context.Context, competitionURL string) (*site.CompetitionMenu, *site.LeaguePage, error)
+	LoadMatchFresh(ctx context.Context, matchURL string) (*site.MatchPage, error)
+}
+
 type archiveLoadedMsg struct {
 	seasons      []site.Season
 	selectedIdx  int
 	competitions []site.Competition
+	fresh        bool
 	err          error
 }
 
@@ -40,6 +51,7 @@ type competitionsLoadedMsg struct {
 	seasonKey    string
 	competitions []site.Competition
 	selectorOnly bool
+	fresh        bool
 	err          error
 }
 

@@ -22,7 +22,7 @@ go run ./cmd/90minutui
 - `esc` close match view, back out of submenus, or toggle the selector
 - `tab` open selector, or switch selector focus when already open
 - `pgup`/`pgdn`, `ctrl+u`/`ctrl+d` scroll match details
-- `r` reload
+- `r` fresh reload current page or match from the network
 - `q` quit
 
 ## What Works

@@ -48,11 +48,25 @@ func NewService() *Service {
 	return &Service{client: NewClient()}
 }
 
+// Cached reports whether rawURL resolves to a successfully cached document.
+func (s *Service) Cached(rawURL string) bool {
+	return s.client.Cached(rawURL)
+}
+
 // LoadArchive returns parsed seasons, the selected season index, and top-level competitions.
 // Empty archive pages return nil results and -1; pages with seasons but no competitions
 // return the parsed season context with an error so callers can surface partial state.
 func (s *Service) LoadArchive(ctx context.Context, archiveURL string) ([]Season, int, []Competition, error) {
-	doc, err := s.client.Document(ctx, archiveURL)
+	return s.loadArchive(ctx, archiveURL, false)
+}
+
+// LoadArchiveFresh has the same result/error contract as LoadArchive, but bypasses and replaces cache.
+func (s *Service) LoadArchiveFresh(ctx context.Context, archiveURL string) ([]Season, int, []Competition, error) {
+	return s.loadArchive(ctx, archiveURL, true)
+}
+
+func (s *Service) loadArchive(ctx context.Context, archiveURL string, fresh bool) ([]Season, int, []Competition, error) {
+	doc, err := s.document(ctx, archiveURL, fresh)
 	if err != nil {
 		return nil, -1, nil, err
 	}
@@ -76,7 +90,16 @@ func (s *Service) LoadArchive(ctx context.Context, archiveURL string) ([]Season,
 // League fixtures keep empty MatchURL and MatchID values when the source row has no match page.
 // It returns an error when the page cannot be classified as a supported submenu or a valid league.
 func (s *Service) LoadCompetition(ctx context.Context, competitionURL string) (*CompetitionMenu, *LeaguePage, error) {
-	doc, err := s.client.Document(ctx, competitionURL)
+	return s.loadCompetition(ctx, competitionURL, false)
+}
+
+// LoadCompetitionFresh has the same result/error contract as LoadCompetition, but bypasses and replaces cache.
+func (s *Service) LoadCompetitionFresh(ctx context.Context, competitionURL string) (*CompetitionMenu, *LeaguePage, error) {
+	return s.loadCompetition(ctx, competitionURL, true)
+}
+
+func (s *Service) loadCompetition(ctx context.Context, competitionURL string, fresh bool) (*CompetitionMenu, *LeaguePage, error) {
+	doc, err := s.document(ctx, competitionURL, fresh)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -134,7 +157,16 @@ func (s *Service) LoadLeague(ctx context.Context, leagueURL string) (*LeaguePage
 // LoadMatch returns a parsed match page. Fetch/parse failures return nil; validation failures
 // may return a partial page with stable URL/title/ID fields alongside the error.
 func (s *Service) LoadMatch(ctx context.Context, matchURL string) (*MatchPage, error) {
-	doc, err := s.client.Document(ctx, matchURL)
+	return s.loadMatch(ctx, matchURL, false)
+}
+
+// LoadMatchFresh has the same result/error contract as LoadMatch, but bypasses and replaces cache.
+func (s *Service) LoadMatchFresh(ctx context.Context, matchURL string) (*MatchPage, error) {
+	return s.loadMatch(ctx, matchURL, true)
+}
+
+func (s *Service) loadMatch(ctx context.Context, matchURL string, fresh bool) (*MatchPage, error) {
+	doc, err := s.document(ctx, matchURL, fresh)
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +185,13 @@ func (s *Service) LoadMatch(ctx context.Context, matchURL string) (*MatchPage, e
 	}
 
 	return match, nil
+}
+
+func (s *Service) document(ctx context.Context, rawURL string, fresh bool) (*goquery.Document, error) {
+	if fresh {
+		return s.client.DocumentFresh(ctx, rawURL)
+	}
+	return s.client.Document(ctx, rawURL)
 }
 
 func validateLeaguePage(page *LeaguePage) error {
