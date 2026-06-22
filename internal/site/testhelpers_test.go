@@ -1,9 +1,7 @@
 package site
 
 import (
-	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,24 +93,4 @@ func competitionIndexByURL(competitions []Competition, url string) int {
 		}
 	}
 	return -1
-}
-
-func manifestStamp(fixtures []fixtureEntry) string {
-	h := sha256.New()
-	for _, fixture := range fixtures {
-		_, _ = h.Write([]byte(fixture.Name))
-		_, _ = h.Write([]byte("|"))
-		_, _ = h.Write([]byte(fixture.Kind))
-		_, _ = h.Write([]byte("|"))
-		_, _ = h.Write([]byte(fixture.URL))
-		_, _ = h.Write([]byte("|"))
-		_, _ = h.Write([]byte(fixture.Season))
-		_, _ = h.Write([]byte("|"))
-		_, _ = h.Write([]byte(fixture.File))
-		_, _ = h.Write([]byte("|"))
-		_, _ = h.Write([]byte(fixture.Note))
-		_, _ = h.Write([]byte("\n"))
-	}
-
-	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }

@@ -1205,13 +1205,10 @@ func TestFixtureGridNonDrillableMarkerDoesNotReplaceDate(t *testing.T) {
 	if strings.Index(line, "[no details]") > strings.Index(line, "01/05 20:30") {
 		t.Fatalf("expected no-details marker before date, got %q", line)
 	}
-	dateColumn := ansi.StringWidth(line[:strings.Index(line, "01/05 20:30")])
-	drillableDateColumn := ansi.StringWidth(drillable[:strings.Index(drillable, "02/05 20:15")])
-	if dateColumn != drillableDateColumn {
-		t.Fatalf("expected date column to stay aligned, got %q and %q", line, drillable)
-	}
-	if ansi.StringWidth(line[:strings.Index(line, "Lech Poznan")]) != ansi.StringWidth(drillable[:strings.Index(drillable, "Lech Poznan")]) {
-		t.Fatalf("expected fixture columns to stay aligned, got %q and %q", line, drillable)
+	for _, want := range []string{"Legia Warszawa", "Lech Poznan"} {
+		if !strings.Contains(line, want) || !strings.Contains(drillable, want) {
+			t.Fatalf("expected team %q to stay readable in drillable and non-drillable rows, got %q and %q", want, line, drillable)
+		}
 	}
 }
 

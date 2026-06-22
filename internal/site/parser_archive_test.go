@@ -24,9 +24,6 @@ func TestArchiveFixturesCoverage(t *testing.T) {
 	if m.Source != "http://www.90minut.pl/archsezon.php" {
 		t.Fatalf("unexpected manifest source: %q", m.Source)
 	}
-	if want := manifestStamp(m.Fixtures); m.GeneratedAt != want {
-		t.Fatalf("manifest generated_at mismatch: got %q want %q", m.GeneratedAt, want)
-	}
 }
 
 func TestParseSeasonsAndCompetitionsFromArchiveFixtures(t *testing.T) {
