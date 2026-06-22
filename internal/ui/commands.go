@@ -12,6 +12,7 @@ import (
 
 // cmdTimeout is generous enough for slow archive pages without blocking the TUI indefinitely.
 const cmdTimeout = 20 * time.Second
+const selectorSeasonLoadDelay = 150 * time.Millisecond
 
 func (m Model) loadArchiveCmd(url string) tea.Cmd {
 	return func() tea.Msg {
@@ -30,6 +31,12 @@ func (m Model) loadSeasonCompetitionsCmd(url, seasonKey string, selectorOnly boo
 		_, _, competitions, err := m.service.LoadArchive(ctx, url)
 		return competitionsLoadedMsg{seasonKey: seasonKey, competitions: competitions, selectorOnly: selectorOnly, err: err}
 	}
+}
+
+func (m Model) settleSeasonSelectionCmd(url, seasonKey string) tea.Cmd {
+	return tea.Tick(selectorSeasonLoadDelay, func(time.Time) tea.Msg {
+		return seasonSelectionSettledMsg{seasonKey: seasonKey, seasonURL: url}
+	})
 }
 
 func (m Model) loadCompetitionCmd(url, competitionKey string) tea.Cmd {

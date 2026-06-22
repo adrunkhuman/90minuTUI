@@ -20,7 +20,7 @@ go run ./cmd/90minutui
 - `h/l` previous/next round; in selector, switch season/competition pane
 - `enter` open selected season, competition, league, or match
 - `esc` close match view, back out of submenus, or toggle the selector
-- `tab` switch selector focus
+- `tab` open selector, or switch selector focus when already open
 - `pgup`/`pgdn`, `ctrl+u`/`ctrl+d` scroll match details
 - `r` reload
 - `q` quit

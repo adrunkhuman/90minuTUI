@@ -822,6 +822,30 @@ func TestSelectorLeftRightSwitchesSeasonAndCompetitionFocus(t *testing.T) {
 	}
 }
 
+func TestTabOpensSelectorFromFixturesAndMatchViews(t *testing.T) {
+	loader := newRecordingLoader()
+	m := bootstrapLeagueLoadedModel(t, loader)
+
+	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyTab))
+	if cmd != nil {
+		t.Fatalf("expected tab to open selector without command")
+	}
+	if !m.selectorVisible || m.focus != focusCompetitions {
+		t.Fatalf("expected tab to open selector from fixtures, focus=%v selector=%v", m.focus, m.selectorVisible)
+	}
+
+	m.closeSelector()
+	m.matchView = true
+	m.match = loader.match
+	m, cmd = updateModelWithMsg(t, m, testKey(tea.KeyTab))
+	if cmd != nil {
+		t.Fatalf("expected tab to open selector from match view without command")
+	}
+	if !m.selectorVisible || m.focus != focusCompetitions || !m.matchView {
+		t.Fatalf("expected tab to overlay selector on match view, focus=%v selector=%v match=%v", m.focus, m.selectorVisible, m.matchView)
+	}
+}
+
 func TestSelectorSeasonMoveRefreshesCompetitionsInPlace(t *testing.T) {
 	loader := newRecordingLoader()
 	season2024 := site.Season{Label: "2024/2025", URL: "http://www.90minut.pl/archsezon.php?id_sezon=105", SeasonID: "105"}
@@ -838,10 +862,18 @@ func TestSelectorSeasonMoveRefreshesCompetitionsInPlace(t *testing.T) {
 
 	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyDown))
 	if cmd == nil {
-		t.Fatalf("expected season cursor move to load competitions")
+		t.Fatalf("expected season cursor move to schedule delayed competition load")
 	}
-	if !m.loading || m.focus != focusSeasons || !m.selectorVisible {
-		t.Fatalf("expected in-place selector loading state, loading=%v focus=%v selector=%v", m.loading, m.focus, m.selectorVisible)
+	if m.loading || m.focus != focusSeasons || !m.selectorVisible || len(m.competitions) != 1 {
+		t.Fatalf("expected delayed selector refresh without immediate load, loading=%v focus=%v selector=%v competitions=%+v", m.loading, m.focus, m.selectorVisible, m.competitions)
+	}
+
+	m, cmd = updateModelWithMsg(t, m, seasonSelectionSettledMsg{seasonKey: seasonRequestKey(season2025), seasonURL: season2025.URL})
+	if cmd == nil {
+		t.Fatalf("expected settled season to load competitions")
+	}
+	if !m.loading || len(m.competitions) != 0 {
+		t.Fatalf("expected settled season to enter loading state and clear stale competitions, loading=%v competitions=%+v", m.loading, m.competitions)
 	}
 
 	m, cmd = updateModelWithMsg(t, m, cmd())
@@ -871,11 +903,22 @@ func TestStaleSeasonCompetitionResultsDoNotOverwriteCurrentSelectorLoad(t *testi
 
 	m, cmd := updateModelWithMsg(t, m, testKey(tea.KeyDown))
 	if cmd == nil {
-		t.Fatalf("expected selected season load command")
+		t.Fatalf("expected selected season settle command")
+	}
+	m, staleCmd := updateModelWithMsg(t, m, seasonSelectionSettledMsg{seasonKey: seasonRequestKey(season2024), seasonURL: season2024.URL})
+	if staleCmd != nil {
+		t.Fatalf("expected stale settle message to be ignored without command")
+	}
+	if m.loading || len(m.competitions) != 1 {
+		t.Fatalf("stale settle changed selector before current load: loading=%v competitions=%+v", m.loading, m.competitions)
+	}
+	m, cmd = updateModelWithMsg(t, m, seasonSelectionSettledMsg{seasonKey: seasonRequestKey(season2025), seasonURL: season2025.URL})
+	if cmd == nil {
+		t.Fatalf("expected current settle message to start load")
 	}
 
 	staleKey := seasonRequestKey(season2024)
-	m, staleCmd := updateModelWithMsg(t, m, competitionsLoadedMsg{
+	m, staleCmd = updateModelWithMsg(t, m, competitionsLoadedMsg{
 		seasonKey:    staleKey,
 		competitions: []site.Competition{{Name: "Stale league"}},
 		selectorOnly: true,

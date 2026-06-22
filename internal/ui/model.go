@@ -43,6 +43,11 @@ type competitionsLoadedMsg struct {
 	err          error
 }
 
+type seasonSelectionSettledMsg struct {
+	seasonKey string
+	seasonURL string
+}
+
 type competitionMenuLoadedMsg struct {
 	competitionKey string
 	menu           *site.CompetitionMenu

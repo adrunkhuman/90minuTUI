@@ -32,6 +32,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "tab":
+			if !m.selectorActive() {
+				m.openSelector()
+				return m, nil
+			}
 			m.toggleFocus()
 			return m, nil
 		case "pgup", "ctrl+u":
@@ -220,6 +224,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.match = msg.match
 		m.matchScroll = 0
 		return m, nil
+
+	case seasonSelectionSettledMsg:
+		season := m.currentSeason()
+		if season == nil || msg.seasonKey != seasonRequestKey(*season) {
+			return m, nil
+		}
+		m.loading = true
+		m.err = ""
+		m.competitionTitle = "Competitions"
+		m.competitions = nil
+		m.competitionCursor = 0
+		m.competitionStack = nil
+		return m, m.loadSeasonCompetitionsCmd(msg.seasonURL, msg.seasonKey, true)
 	}
 
 	return m, nil
@@ -261,18 +278,12 @@ func (m *Model) moveCursor(delta int) tea.Cmd {
 			return nil
 		}
 		m.seasonCursor = next
-		m.loading = true
 		m.err = ""
-		m.competitionTitle = "Competitions"
-		m.competitions = nil
-		m.competitionCursor = 0
-		m.competitionStack = nil
 		season := m.currentSeason()
 		if season == nil {
-			m.loading = false
 			return nil
 		}
-		return m.loadSeasonCompetitionsCmd(season.URL, seasonRequestKey(*season), true)
+		return m.settleSeasonSelectionCmd(season.URL, seasonRequestKey(*season))
 	case focusCompetitions:
 		m.competitionCursor = clamp(m.competitionCursor+delta, 0, len(m.competitions)-1)
 	}
