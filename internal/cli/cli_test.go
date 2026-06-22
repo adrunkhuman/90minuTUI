@@ -230,6 +230,16 @@ func TestRunRequiresSeasonForCompetitions(t *testing.T) {
 	}
 }
 
+func TestRunHelpLinksFullAPIReference(t *testing.T) {
+	stdout, stderr, code := runTestCLI([]string{"--help"}, &fakeService{})
+	if code != 0 || stderr != "" {
+		t.Fatalf("expected help success, code=%d stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stdout, "https://github.com/adrunkhuman/90minuTUI/blob/master/docs/cli.md") {
+		t.Fatalf("expected help to link API reference, got %q", stdout)
+	}
+}
+
 func runTestCLI(args []string, svc Service) (string, string, int) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

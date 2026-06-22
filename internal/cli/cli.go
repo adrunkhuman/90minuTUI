@@ -214,6 +214,9 @@ func printUsage(w io.Writer) {
   90minutui league <league-key-or-url>
   90minutui fixtures <league-key-or-url>
   90minutui match <match-id-or-url>
+
+Full API reference:
+  https://github.com/adrunkhuman/90minuTUI/blob/master/docs/cli.md
 `)
 }
 
