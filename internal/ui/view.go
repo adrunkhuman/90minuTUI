@@ -86,12 +86,29 @@ func barLine(left, right string, width int) string {
 }
 
 func topBarRoundMeta(round site.Round, roundIdx, total int, leagueTitle string) string {
-	label := displayRoundLabelWithFixtures(round.Name, roundIdx, round.Fixtures, leagueTitle)
+	label := displayRoundLabelForRound(round, roundIdx, leagueTitle)
 	roundPart, datePart, ok := strings.Cut(label, " - ")
 	if !ok || strings.TrimSpace(datePart) == "" {
 		return fmt.Sprintf("%s / %d", label, total)
 	}
 	return fmt.Sprintf("%s · %s / %d", roundPart, strings.TrimSpace(datePart), total)
+}
+
+func displayRoundLabelForRound(round site.Round, fallback int, leagueTitle string) string {
+	label := displayRoundLabelWithFixtures(round.Name, fallback, round.Fixtures, leagueTitle)
+	section := displayRoundSection(round.Section)
+	if section == "" {
+		return label
+	}
+	return section + " · " + label
+}
+
+func displayRoundSection(section string) string {
+	cleaned := normalizeDisplayText(section)
+	if cleaned == "" {
+		return ""
+	}
+	return translatePolishDateText(cleaned)
 }
 
 func (m Model) statusBarView() string {

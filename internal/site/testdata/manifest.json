@@ -1,5 +1,5 @@
 {
-  "generated_at": "sha256:cf427f8e4a0a8553cecbad69de680de5bcc35ecec270990c8e53b193171e2f3b",
+  "generated_at": "sha256:74405c99489c4b38bd7d6f1513c14db73b9ff36759e01bdd6f70924b0f1c756b",
   "source": "http://www.90minut.pl/archsezon.php",
   "fixtures": [
     {
@@ -60,6 +60,62 @@
       "season": "2025/26",
       "file": "fixtures/league_14141.html",
       "note": "current women league page without match links; fixtures stay valid with empty MatchURL and MatchID"
+    },
+    {
+      "name": "league_14077",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga14077.html",
+      "season": "2025/26",
+      "file": "fixtures/league_14077.html",
+      "note": "Champions League league-phase format: qualifiers, league phase, knockouts"
+    },
+    {
+      "name": "league_12909",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga12909.html",
+      "season": "2023/24",
+      "file": "fixtures/league_12909.html",
+      "note": "Champions League group-stage format with repeated matchdays per group"
+    },
+    {
+      "name": "league_14152",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga14152.html",
+      "season": "2025/26",
+      "file": "fixtures/league_14152.html",
+      "note": "Futsal Champions League multi-group format with repeated matchdays and source-order group sections"
+    },
+    {
+      "name": "league_13459",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga13459.html",
+      "season": "2023/24",
+      "file": "fixtures/league_13459.html",
+      "note": "Euro tournament groups with fixture-row dates rather than heading dates"
+    },
+    {
+      "name": "league_14042",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga14042.html",
+      "season": "2025/26",
+      "file": "fixtures/league_14042.html",
+      "note": "World Cup qualifying page with unsectioned and grouped matchdays"
+    },
+    {
+      "name": "league_10529",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/1/liga10529.html",
+      "season": "2018/19",
+      "file": "fixtures/league_10529.html",
+      "note": "Futsal cup with underlined fixture/team labels inside knockout rounds; team labels must not become sections"
+    },
+    {
+      "name": "league_8694",
+      "kind": "league",
+      "url": "http://www.90minut.pl/liga/0/liga8694.html",
+      "season": "2016/17",
+      "file": "fixtures/league_8694.html",
+      "note": "Older Ekstraklasa continuous split-season matchdays"
     },
     {
       "name": "league_liga11233",
