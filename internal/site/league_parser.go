@@ -24,7 +24,25 @@ func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	}
 
 	page.Rounds = normalizeLeagueOrder(rounds, page.Title)
+	assignFixtureClubIDs(page.Rounds, page.Standings)
 	return page
+}
+
+func assignFixtureClubIDs(rounds []Round, standings []StandingRow) {
+	clubIDs := make(map[string]string, len(standings))
+	for _, row := range standings {
+		if row.ClubID != "" {
+			clubIDs[normalizeWhitespace(row.Team)] = row.ClubID
+		}
+	}
+
+	for i := range rounds {
+		for j := range rounds[i].Fixtures {
+			fixture := &rounds[i].Fixtures[j]
+			fixture.HomeClubID = clubIDs[normalizeWhitespace(fixture.Home)]
+			fixture.AwayClubID = clubIDs[normalizeWhitespace(fixture.Away)]
+		}
+	}
 }
 
 func parseRounds(doc *goquery.Document) []Round {
@@ -397,7 +415,9 @@ func parseStandingRow(row *goquery.Selection) (StandingRow, bool) {
 	}
 
 	position := parseIntCell(strings.TrimSuffix(normalizeWhitespace(tds.Eq(0).Text()), "."))
-	team := normalizeWhitespace(tds.Eq(1).Text())
+	teamCell := tds.Eq(1)
+	team := normalizeWhitespace(teamCell.Text())
+	clubID := extractQueryParam(teamCell.Find("a[href*='id_klub=']").First().AttrOr("href", ""), "id_klub")
 	played := parseIntCell(tds.Eq(2).Text())
 	points := parseIntCell(tds.Eq(3).Text())
 	won := parseIntCell(tds.Eq(4).Text())
@@ -411,6 +431,7 @@ func parseStandingRow(row *goquery.Selection) (StandingRow, bool) {
 	return StandingRow{
 		Position: position,
 		Team:     team,
+		ClubID:   clubID,
 		Played:   played,
 		Won:      won,
 		Drawn:    drawn,

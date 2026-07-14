@@ -23,9 +23,11 @@ type CompetitionMenu struct {
 }
 
 type Fixture struct {
-	Home  string
-	Away  string
-	Score string
+	Home       string
+	HomeClubID string
+	Away       string
+	AwayClubID string
+	Score      string
 	// WhenInfo keeps date/time text and any trailing source metadata that does not belong in the score cell.
 	WhenInfo string
 	// MatchURL stays empty when 90minut publishes a fixture row without a drillable match page.
@@ -61,6 +63,7 @@ type Round struct {
 type StandingRow struct {
 	Position int
 	Team     string
+	ClubID   string
 	Played   int
 	Won      int
 	Drawn    int
@@ -85,6 +88,8 @@ type MatchPage struct {
 	Competition string
 	Meta        string
 	Weather     string
+	Referee     string
+	RefereeID   string
 	HomeTeam    string
 	AwayTeam    string
 	Score       string
@@ -135,7 +140,8 @@ const (
 )
 
 type PlayerLine struct {
-	Name string
+	Name     string
+	PlayerID string
 	// Events stores raw lineup-cell markers until parser normalization emits MatchEvent values.
 	Events  []string
 	RawText string

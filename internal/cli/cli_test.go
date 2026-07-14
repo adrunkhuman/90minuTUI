@@ -52,8 +52,8 @@ func (s *fakeService) LoadLeague(_ context.Context, leagueURL string) (*site.Lea
 		Title:     "Ekstraklasa",
 		URL:       site.BaseURL + "/liga/1/liga14072.html",
 		LeagueKey: "liga14072",
-		Standings: []site.StandingRow{{Position: 1, Team: "Team A", Played: 1, Won: 1, Points: 3}},
-		Rounds:    []site.Round{{Name: "1. kolejka", Fixtures: []site.Fixture{{Home: "Team A", Away: "Team B", Score: "1-0", WhenInfo: "18 lipca, 18:00", MatchURL: site.BaseURL + "/mecz.php?id_mecz=1930640", MatchID: "1930640"}}}},
+		Standings: []site.StandingRow{{Position: 1, Team: "Team A", ClubID: "10", Played: 1, Won: 1, Points: 3}},
+		Rounds:    []site.Round{{Name: "1. kolejka", Fixtures: []site.Fixture{{Home: "Team A", HomeClubID: "10", Away: "Team B", AwayClubID: "20", Score: "1-0", WhenInfo: "18 lipca, 18:00", MatchURL: site.BaseURL + "/mecz.php?id_mecz=1930640", MatchID: "1930640"}}}},
 	}, nil
 }
 
@@ -67,9 +67,11 @@ func (s *fakeService) LoadMatch(_ context.Context, matchURL string) (*site.Match
 		MatchID:    "1930640",
 		HomeTeam:   "Team A",
 		AwayTeam:   "Team B",
+		Referee:    "Referee",
+		RefereeID:  "30",
 		Score:      "1-0",
 		Events:     []site.MatchEvent{{MinuteText: "35", Minute: 35, HasMinute: true, Kind: site.EventKindGoal, TeamSide: site.TeamSideHome, Text: "Player 35"}},
-		HomeLineup: []site.PlayerLine{{Name: "Player"}},
+		HomeLineup: []site.PlayerLine{{Name: "Player", PlayerID: "40"}},
 	}, nil
 }
 
@@ -135,6 +137,9 @@ func TestRunLeagueNormalizesLeagueKey(t *testing.T) {
 	if got.LeagueKey != "liga14072" || len(got.Standings) != 1 || len(got.Rounds) != 1 {
 		t.Fatalf("unexpected league output: %+v", got)
 	}
+	if got.Standings[0].ClubID != "10" || got.Rounds[0].Fixtures[0].HomeClubID != "10" || got.Rounds[0].Fixtures[0].AwayClubID != "20" {
+		t.Fatalf("expected club ids in league output: %+v", got)
+	}
 	if svc.leagueURL != site.BaseURL+"/liga/1/liga14072.html" {
 		t.Fatalf("unexpected league URL: %q", svc.leagueURL)
 	}
@@ -174,6 +179,9 @@ func TestRunMatchNormalizesMatchID(t *testing.T) {
 	decodeJSON(t, stdout, &got)
 	if got.MatchID != "1930640" || got.Events[0].Kind != site.EventKindGoal || got.HomeLineup[0].Name != "Player" {
 		t.Fatalf("unexpected match output: %+v", got)
+	}
+	if got.RefereeID != "30" || got.Referee != "Referee" || got.HomeLineup[0].PlayerID != "40" {
+		t.Fatalf("expected referee and player ids in match output: %+v", got)
 	}
 	if svc.matchURL != site.BaseURL+"/mecz.php?id_mecz=1930640" {
 		t.Fatalf("unexpected match URL: %q", svc.matchURL)

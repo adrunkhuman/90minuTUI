@@ -178,10 +178,18 @@ func TestParseLeagueStandingsFromCorpus(t *testing.T) {
 	}
 
 	first := page.Standings[0]
-	if first.Position != 1 || first.Team != "Legia Warszawa" {
+	if first.Position != 1 || first.Team != "Legia Warszawa" || first.ClubID != "171" {
 		t.Fatalf("unexpected first standings row: %+v", first)
 	}
 	if first.Played != 30 || first.Won != 19 || first.Drawn != 7 || first.Lost != 4 || first.Points != 64 {
 		t.Fatalf("unexpected first standings stats: %+v", first)
+	}
+
+	for _, round := range page.Rounds {
+		for _, fixture := range round.Fixtures {
+			if fixture.HomeClubID == "" || fixture.AwayClubID == "" {
+				t.Fatalf("expected fixture club ids for %q vs %q: %+v", fixture.Home, fixture.Away, fixture)
+			}
+		}
 	}
 }

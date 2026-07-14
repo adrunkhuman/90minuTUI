@@ -15,7 +15,7 @@ Data goes to stdout. Errors go to stderr. Fetch or parse failure exits non-zero.
 90minutui match 1930640
 ```
 
-Use exported `url` values for exact follow-up fetches. `league_key` is stable for joins and is accepted as a convenience when the league URL uses a known `90minut.pl` league path.
+Use exported `url` values for exact follow-up fetches. `league_key` identifies one competition page and is accepted as a convenience when the league URL uses a known `90minut.pl` league path. League keys change between seasons.
 
 ## Exports
 
@@ -62,6 +62,7 @@ Use exported `url` values for exact follow-up fetches. `league_key` is stable fo
     {
       "position": 1,
       "team": "Team",
+      "club_id": "423",
       "played": 1,
       "won": 1,
       "drawn": 0,
@@ -87,7 +88,9 @@ Use exported `url` values for exact follow-up fetches. `league_key` is stable fo
       "fixtures": [
         {
           "home": "Team A",
+          "home_club_id": "423",
           "away": "Team B",
+          "away_club_id": "424",
           "score": "1-0",
           "when": "18 lipca, 18:00",
           "match_id": "1930640",
@@ -109,6 +112,8 @@ Use exported `url` values for exact follow-up fetches. `league_key` is stable fo
   "competition": "League or cup name",
   "meta": "stadium, attendance, referee",
   "weather": "weather text",
+  "referee": "Referee Name (City)",
+  "referee_id": "1125",
   "home_team": "Team A",
   "away_team": "Team B",
   "score": "1-0",
@@ -127,6 +132,7 @@ Use exported `url` values for exact follow-up fetches. `league_key` is stable fo
   ],
   "home_lineup": [
     {
+      "player_id": "22468",
       "name": "Player A",
       "events": [],
       "raw_text": "Player A"
@@ -143,6 +149,10 @@ Use exported `url` values for exact follow-up fetches. `league_key` is stable fo
 - Subcommands write JSON.
 - Missing lists are `[]`.
 - Missing source values are `""`.
-- `season_id`, `league_key`, and `match_id` are stable keys for joining exports.
+- `season_id` identifies a season, `league_key` identifies a season-specific competition page, and `match_id` identifies a match.
+- `club_id`, `player_id`, and `referee_id` preserve the corresponding source identities across seasons when `90minut.pl` provides an entity link.
+- `club_id` is exported on standings rows. Fixture `home_club_id` and `away_club_id` are resolved from that league page's standings.
+- `player_id` identifies the primary player represented by a lineup entry. Substitution names embedded in that entry do not currently have separate exported IDs.
+- Entity ID fields are `""` when the source page does not provide enough information; names are display labels, not identity keys.
 - `url` is the exact fetch identifier for follow-up commands.
 - The app uses a per-process cache only. Each new process fetches fresh data.

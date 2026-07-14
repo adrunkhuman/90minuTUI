@@ -28,6 +28,7 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 	page.Competition = normalizeWhitespace(table.Find("tr").First().Find("b").First().Text())
 	page.Meta = firstMetaLine(table)
 	page.Weather = normalizeWhitespace(table.Find("img[src*='pog_termo']").Parent().Text())
+	page.Referee, page.RefereeID = parseReferee(table)
 
 	table.Find("tr").Each(func(_ int, row *goquery.Selection) {
 		tds := row.Find("td")
@@ -115,6 +116,15 @@ func parseMatchPage(doc *goquery.Document, url string) *MatchPage {
 	})
 
 	return page
+}
+
+func parseReferee(table *goquery.Selection) (string, string) {
+	link := table.Find("a[href*='sedzia.php']").First()
+	if link.Length() == 0 {
+		return "", ""
+	}
+
+	return normalizeWhitespace(link.Text()), extractQueryParam(link.AttrOr("href", ""), "id")
 }
 
 func scoreRowEventKind(row *goquery.Selection) (MatchEventKind, bool) {
@@ -330,7 +340,11 @@ func parsePlayerCell(cell *goquery.Selection, side TeamSide) *parsedPlayerCell {
 	}
 
 	name := raw
-	anchors := make([]string, 0, 3)
+	type playerAnchor struct {
+		name string
+		id   string
+	}
+	anchors := make([]playerAnchor, 0, 3)
 	markersByPlayer := make(map[string][]string, 2)
 	currentPlayer := ""
 
@@ -339,11 +353,15 @@ func parsePlayerCell(cell *goquery.Selection, side TeamSide) *parsedPlayerCell {
 		case html.ElementNode:
 			switch strings.ToLower(node.Data) {
 			case "a":
-				playerName := normalizeWhitespace(goquery.NewDocumentFromNode(node).Text())
+				anchor := goquery.NewDocumentFromNode(node)
+				playerName := normalizeWhitespace(anchor.Text())
 				if playerName == "" {
 					continue
 				}
-				anchors = append(anchors, playerName)
+				anchors = append(anchors, playerAnchor{
+					name: playerName,
+					id:   extractQueryParam(anchor.AttrOr("href", ""), "id"),
+				})
 				if len(anchors) == 1 {
 					name = playerName
 				}
@@ -374,7 +392,7 @@ func parsePlayerCell(cell *goquery.Selection, side TeamSide) *parsedPlayerCell {
 
 	if cell.Find("img[src*='sub.gif']").Length() > 0 && len(anchors) > 1 {
 		// A single lineup cell can contain a chain: starter -> entrant -> next entrant.
-		replacement := anchors[1]
+		replacement := anchors[1].name
 		minute := substitutionMinute(raw, replacement)
 		if minute != "" {
 			events = append(events, fmt.Sprintf("%s' -> %s", minute, replacement))
@@ -385,17 +403,17 @@ func parsePlayerCell(cell *goquery.Selection, side TeamSide) *parsedPlayerCell {
 
 	extraEvents := make([]MatchEvent, 0, 2)
 	for i := 1; i < len(anchors); i++ {
-		for _, marker := range markersByPlayer[anchors[i]] {
+		for _, marker := range markersByPlayer[anchors[i].name] {
 			extraEvents = append(extraEvents, MatchEvent{
 				Kind:     MatchEventKind(marker),
 				TeamSide: side,
-				Text:     anchors[i],
+				Text:     anchors[i].name,
 			})
 		}
 	}
 	if cell.Find("img[src*='sub.gif']").Length() > 0 {
 		for i := 2; i < len(anchors); i++ {
-			minute := substitutionMinute(raw, anchors[i])
+			minute := substitutionMinute(raw, anchors[i].name)
 			m, s, ok := parseMinute(minute)
 			extraEvents = append(extraEvents, MatchEvent{
 				MinuteText:      minute,
@@ -404,15 +422,20 @@ func parsePlayerCell(cell *goquery.Selection, side TeamSide) *parsedPlayerCell {
 				HasMinute:       ok,
 				Kind:            "SUB",
 				TeamSide:        side,
-				Text:            substitutionEventText(anchors[i-1], anchors[i], ""),
-				SubstitutionOut: anchors[i-1],
-				SubstitutionIn:  anchors[i],
+				Text:            substitutionEventText(anchors[i-1].name, anchors[i].name, ""),
+				SubstitutionOut: anchors[i-1].name,
+				SubstitutionIn:  anchors[i].name,
 			})
 		}
 	}
 
+	playerID := ""
+	if len(anchors) > 0 {
+		playerID = anchors[0].id
+	}
+
 	return &parsedPlayerCell{
-		Player:      &PlayerLine{Name: name, Events: events, RawText: raw},
+		Player:      &PlayerLine{Name: name, PlayerID: playerID, Events: events, RawText: raw},
 		ExtraEvents: extraEvents,
 	}
 }

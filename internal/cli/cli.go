@@ -313,6 +313,7 @@ type fixturesOutput struct {
 type standingJSON struct {
 	Position int    `json:"position"`
 	Team     string `json:"team"`
+	ClubID   string `json:"club_id"`
 	Played   int    `json:"played"`
 	Won      int    `json:"won"`
 	Drawn    int    `json:"drawn"`
@@ -328,12 +329,14 @@ type roundJSON struct {
 }
 
 type fixtureJSON struct {
-	Home     string `json:"home"`
-	Away     string `json:"away"`
-	Score    string `json:"score"`
-	When     string `json:"when"`
-	MatchID  string `json:"match_id"`
-	MatchURL string `json:"match_url"`
+	Home       string `json:"home"`
+	HomeClubID string `json:"home_club_id"`
+	Away       string `json:"away"`
+	AwayClubID string `json:"away_club_id"`
+	Score      string `json:"score"`
+	When       string `json:"when"`
+	MatchID    string `json:"match_id"`
+	MatchURL   string `json:"match_url"`
 }
 
 type matchJSON struct {
@@ -343,6 +346,8 @@ type matchJSON struct {
 	Competition string           `json:"competition"`
 	Meta        string           `json:"meta"`
 	Weather     string           `json:"weather"`
+	Referee     string           `json:"referee"`
+	RefereeID   string           `json:"referee_id"`
 	HomeTeam    string           `json:"home_team"`
 	AwayTeam    string           `json:"away_team"`
 	Score       string           `json:"score"`
@@ -366,9 +371,10 @@ type matchEventJSON struct {
 }
 
 type playerLineJSON struct {
-	Name    string   `json:"name"`
-	Events  []string `json:"events"`
-	RawText string   `json:"raw_text"`
+	Name     string   `json:"name"`
+	PlayerID string   `json:"player_id"`
+	Events   []string `json:"events"`
+	RawText  string   `json:"raw_text"`
 }
 
 func mapSeasons(seasons []site.Season) []seasonJSON {
@@ -398,7 +404,7 @@ func mapLeague(league *site.LeaguePage, includeRounds bool) leagueJSON {
 func mapStandings(rows []site.StandingRow) []standingJSON {
 	out := make([]standingJSON, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, standingJSON{Position: row.Position, Team: row.Team, Played: row.Played, Won: row.Won, Drawn: row.Drawn, Lost: row.Lost, Points: row.Points})
+		out = append(out, standingJSON{Position: row.Position, Team: row.Team, ClubID: row.ClubID, Played: row.Played, Won: row.Won, Drawn: row.Drawn, Lost: row.Lost, Points: row.Points})
 	}
 	return out
 }
@@ -414,7 +420,7 @@ func mapRounds(rounds []site.Round) []roundJSON {
 func mapFixtures(fixtures []site.Fixture) []fixtureJSON {
 	out := make([]fixtureJSON, 0, len(fixtures))
 	for _, fixture := range fixtures {
-		out = append(out, fixtureJSON{Home: fixture.Home, Away: fixture.Away, Score: fixture.Score, When: fixture.WhenInfo, MatchID: fixture.MatchID, MatchURL: fixture.MatchURL})
+		out = append(out, fixtureJSON{Home: fixture.Home, HomeClubID: fixture.HomeClubID, Away: fixture.Away, AwayClubID: fixture.AwayClubID, Score: fixture.Score, When: fixture.WhenInfo, MatchID: fixture.MatchID, MatchURL: fixture.MatchURL})
 	}
 	return out
 }
@@ -427,6 +433,8 @@ func mapMatch(match *site.MatchPage) matchJSON {
 		Competition: match.Competition,
 		Meta:        match.Meta,
 		Weather:     match.Weather,
+		Referee:     match.Referee,
+		RefereeID:   match.RefereeID,
 		HomeTeam:    match.HomeTeam,
 		AwayTeam:    match.AwayTeam,
 		Score:       match.Score,
@@ -462,7 +470,7 @@ func mapPlayerLines(lines []site.PlayerLine) []playerLineJSON {
 		// Keep the JSON contract at [] instead of null for players without events.
 		events := make([]string, 0, len(line.Events))
 		events = append(events, line.Events...)
-		out = append(out, playerLineJSON{Name: line.Name, Events: events, RawText: line.RawText})
+		out = append(out, playerLineJSON{Name: line.Name, PlayerID: line.PlayerID, Events: events, RawText: line.RawText})
 	}
 	return out
 }
