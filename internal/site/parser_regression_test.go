@@ -64,7 +64,7 @@ func TestParseMatchPageWithout480Width(t *testing.T) {
 	<tr><td colspan="3">1 marca 2026, 18:00</td></tr>
 	<tr><td>GKS Tychy</td><td>2-1</td><td>Odra Opole</td></tr>
 	<tr><td>(12) Jan Kowalski</td><td>-</td><td></td></tr>
-	<tr bgcolor="#f4f4f4"><td><a href="/wystepy.php?id=1">Jan Kowalski</a></td><td></td><td><a href="/wystepy.php?id=2">Piotr Nowak</a></td></tr>
+	<tr bgcolor="#f4f4f4"><td><a href="/wystepy.php">Jan Kowalski</a></td><td></td><td><a href="/wystepy.php?id=2">Piotr Nowak</a></td></tr>
 	</table>
 	</body></html>`
 
@@ -88,6 +88,15 @@ func TestParseMatchPageWithout480Width(t *testing.T) {
 	}
 	if len(page.HomeLineup) != 1 || len(page.AwayLineup) != 1 {
 		t.Fatalf("expected lineup extraction, home=%d away=%d", len(page.HomeLineup), len(page.AwayLineup))
+	}
+	if page.HomeLineup[0].Name != "Jan Kowalski" || page.HomeLineup[0].PlayerID != "" {
+		t.Fatalf("expected unlinked home player name with empty id, got %+v", page.HomeLineup[0])
+	}
+	if page.AwayLineup[0].Name != "Piotr Nowak" || page.AwayLineup[0].PlayerID != "2" {
+		t.Fatalf("unexpected linked away player identity: %+v", page.AwayLineup[0])
+	}
+	if page.Referee != "" || page.RefereeID != "" {
+		t.Fatalf("expected empty referee identity, got name=%q id=%q", page.Referee, page.RefereeID)
 	}
 }
 

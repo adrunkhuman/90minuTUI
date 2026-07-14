@@ -17,6 +17,7 @@ type fakeService struct {
 	leagueURL  string
 	matchURL   string
 	leagueErrs map[string]error
+	emptyIDs   bool
 
 	archiveErr error
 	leagueErr  error
@@ -48,12 +49,16 @@ func (s *fakeService) LoadLeague(_ context.Context, leagueURL string) (*site.Lea
 	if s.leagueErr != nil {
 		return nil, s.leagueErr
 	}
+	homeClubID, awayClubID := "10", "20"
+	if s.emptyIDs {
+		homeClubID, awayClubID = "", ""
+	}
 	return &site.LeaguePage{
 		Title:     "Ekstraklasa",
 		URL:       site.BaseURL + "/liga/1/liga14072.html",
 		LeagueKey: "liga14072",
-		Standings: []site.StandingRow{{Position: 1, Team: "Team A", ClubID: "10", Played: 1, Won: 1, Points: 3}},
-		Rounds:    []site.Round{{Name: "1. kolejka", Fixtures: []site.Fixture{{Home: "Team A", HomeClubID: "10", Away: "Team B", AwayClubID: "20", Score: "1-0", WhenInfo: "18 lipca, 18:00", MatchURL: site.BaseURL + "/mecz.php?id_mecz=1930640", MatchID: "1930640"}}}},
+		Standings: []site.StandingRow{{Position: 1, Team: "Team A", ClubID: homeClubID, Played: 1, Won: 1, Points: 3}},
+		Rounds:    []site.Round{{Name: "1. kolejka", Fixtures: []site.Fixture{{Home: "Team A", HomeClubID: homeClubID, Away: "Team B", AwayClubID: awayClubID, Score: "1-0", WhenInfo: "18 lipca, 18:00", MatchURL: site.BaseURL + "/mecz.php?id_mecz=1930640", MatchID: "1930640"}}}},
 	}, nil
 }
 
@@ -62,16 +67,20 @@ func (s *fakeService) LoadMatch(_ context.Context, matchURL string) (*site.Match
 	if s.matchErr != nil {
 		return nil, s.matchErr
 	}
+	refereeID, playerID := "30", "40"
+	if s.emptyIDs {
+		refereeID, playerID = "", ""
+	}
 	return &site.MatchPage{
 		URL:        site.BaseURL + "/mecz.php?id_mecz=1930640",
 		MatchID:    "1930640",
 		HomeTeam:   "Team A",
 		AwayTeam:   "Team B",
 		Referee:    "Referee",
-		RefereeID:  "30",
+		RefereeID:  refereeID,
 		Score:      "1-0",
 		Events:     []site.MatchEvent{{MinuteText: "35", Minute: 35, HasMinute: true, Kind: site.EventKindGoal, TeamSide: site.TeamSideHome, Text: "Player 35"}},
-		HomeLineup: []site.PlayerLine{{Name: "Player", PlayerID: "40"}},
+		HomeLineup: []site.PlayerLine{{Name: "Player", PlayerID: playerID}},
 	}, nil
 }
 
@@ -221,6 +230,37 @@ func TestRunFixturesContractFields(t *testing.T) {
 			t.Fatalf("expected round key %q in %#v", key, round)
 		}
 	}
+	fixture := round["fixtures"].([]any)[0].(map[string]any)
+	for _, key := range []string{"home_club_id", "away_club_id"} {
+		if _, ok := fixture[key]; !ok {
+			t.Fatalf("expected fixture key %q in %#v", key, fixture)
+		}
+	}
+}
+
+func TestRunEntityIDFieldsUseEmptyStringsWhenUnavailable(t *testing.T) {
+	svc := &fakeService{emptyIDs: true}
+	leagueStdout, stderr, code := runTestCLI([]string{"league", "liga14072"}, svc)
+	if code != 0 || stderr != "" {
+		t.Fatalf("expected league success, code=%d stderr=%q", code, stderr)
+	}
+	var league map[string]any
+	decodeJSON(t, leagueStdout, &league)
+	standing := league["standings"].([]any)[0].(map[string]any)
+	assertEmptyStringField(t, standing, "club_id")
+	fixture := league["rounds"].([]any)[0].(map[string]any)["fixtures"].([]any)[0].(map[string]any)
+	assertEmptyStringField(t, fixture, "home_club_id")
+	assertEmptyStringField(t, fixture, "away_club_id")
+
+	matchStdout, stderr, code := runTestCLI([]string{"match", "1930640"}, svc)
+	if code != 0 || stderr != "" {
+		t.Fatalf("expected match success, code=%d stderr=%q", code, stderr)
+	}
+	var match map[string]any
+	decodeJSON(t, matchStdout, &match)
+	assertEmptyStringField(t, match, "referee_id")
+	player := match["home_lineup"].([]any)[0].(map[string]any)
+	assertEmptyStringField(t, player, "player_id")
 }
 
 func TestRunReportsErrorsOnStderr(t *testing.T) {
@@ -259,5 +299,13 @@ func decodeJSON(t *testing.T, value string, target any) {
 	t.Helper()
 	if err := json.Unmarshal([]byte(value), target); err != nil {
 		t.Fatalf("decode JSON %q: %v", value, err)
+	}
+}
+
+func assertEmptyStringField(t *testing.T, object map[string]any, key string) {
+	t.Helper()
+	value, ok := object[key]
+	if !ok || value != "" {
+		t.Fatalf("expected %q to be present as an empty string in %#v", key, object)
 	}
 }
