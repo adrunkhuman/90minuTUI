@@ -216,10 +216,58 @@ func TestParseLeagueStandingsFromCorpus(t *testing.T) {
 
 func TestAssignFixtureClubIDsLeavesUnmatchedTeamEmpty(t *testing.T) {
 	rounds := []Round{{Fixtures: []Fixture{{Home: "Known Team", Away: "Unmatched Team"}}}}
-	assignFixtureClubIDs(rounds, []StandingRow{{Team: "Known Team", ClubID: "10"}})
+	assignFixtureClubIDs(rounds, map[string]string{"Known Team": "10"})
 
 	fixture := rounds[0].Fixtures[0]
 	if fixture.HomeClubID != "10" || fixture.AwayClubID != "" {
 		t.Fatalf("unexpected fixture club ids: %+v", fixture)
+	}
+}
+
+func TestFixtureClubIDsIncludeAllSplitLeagueStandingsSections(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_8694.html")
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/0/liga8694.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+
+	for _, round := range page.Rounds {
+		for _, fixture := range round.Fixtures {
+			if fixture.HomeClubID == "" || fixture.AwayClubID == "" {
+				t.Fatalf("expected fixture club ids for %q vs %q: %+v", fixture.Home, fixture.Away, fixture)
+			}
+		}
+	}
+}
+
+func TestFixtureClubIDsIncludeTiedRowsWithoutPosition(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/league_13459.html")
+	page := parseLeaguePage(doc, "http://www.90minut.pl/liga/1/liga13459.html")
+	if page == nil {
+		t.Fatalf("expected league page")
+	}
+
+	sloveniaSides := 0
+	for _, round := range page.Rounds {
+		for _, fixture := range round.Fixtures {
+			if fixture.HomeClubID == "" || fixture.AwayClubID == "" {
+				t.Fatalf("expected fixture club ids for %q vs %q: %+v", fixture.Home, fixture.Away, fixture)
+			}
+			if fixture.Home == "Słowenia" {
+				sloveniaSides++
+				if fixture.HomeClubID != "4200" {
+					t.Fatalf("unexpected Słowenia home club id: %+v", fixture)
+				}
+			}
+			if fixture.Away == "Słowenia" {
+				sloveniaSides++
+				if fixture.AwayClubID != "4200" {
+					t.Fatalf("unexpected Słowenia away club id: %+v", fixture)
+				}
+			}
+		}
+	}
+	if sloveniaSides == 0 {
+		t.Fatalf("expected Słowenia fixtures")
 	}
 }

@@ -24,18 +24,11 @@ func parseLeaguePage(doc *goquery.Document, url string) *LeaguePage {
 	}
 
 	page.Rounds = normalizeLeagueOrder(rounds, page.Title)
-	assignFixtureClubIDs(page.Rounds, page.Standings)
+	assignFixtureClubIDs(page.Rounds, parseStandingClubIDs(doc))
 	return page
 }
 
-func assignFixtureClubIDs(rounds []Round, standings []StandingRow) {
-	clubIDs := make(map[string]string, len(standings))
-	for _, row := range standings {
-		if row.ClubID != "" {
-			clubIDs[normalizeWhitespace(row.Team)] = row.ClubID
-		}
-	}
-
+func assignFixtureClubIDs(rounds []Round, clubIDs map[string]string) {
 	for i := range rounds {
 		for j := range rounds[i].Fixtures {
 			fixture := &rounds[i].Fixtures[j]
@@ -43,6 +36,33 @@ func assignFixtureClubIDs(rounds []Round, standings []StandingRow) {
 			fixture.AwayClubID = clubIDs[normalizeWhitespace(fixture.Away)]
 		}
 	}
+}
+
+func parseStandingClubIDs(doc *goquery.Document) map[string]string {
+	clubIDs := make(map[string]string)
+	leagueTables(doc).Each(func(_ int, table *goquery.Selection) {
+		header := table.Find("tr").FilterFunction(func(_ int, row *goquery.Selection) bool {
+			text := normalizeWhitespace(row.Text())
+			return strings.Contains(text, "Nazwa") && strings.Contains(text, "Pkt.")
+		}).First()
+		if header.Length() == 0 {
+			return
+		}
+
+		table.Find("tr").Each(func(_ int, row *goquery.Selection) {
+			tds := row.Find("td")
+			if tds.Length() < 7 {
+				return
+			}
+			link := tds.Eq(1).Find("a[href*='id_klub=']").First()
+			team := normalizeWhitespace(link.Text())
+			clubID := extractQueryParam(link.AttrOr("href", ""), "id_klub")
+			if team != "" && clubID != "" {
+				clubIDs[team] = clubID
+			}
+		})
+	})
+	return clubIDs
 }
 
 func parseRounds(doc *goquery.Document) []Round {

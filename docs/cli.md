@@ -151,8 +151,8 @@ Use exported `url` values for exact follow-up fetches. `league_key` identifies o
 - Missing source values are `""`.
 - `season_id` identifies a season, `league_key` identifies a season-specific competition page, and `match_id` identifies a match.
 - `club_id`, `player_id`, and `referee_id` preserve the corresponding source identities across seasons when `90minut.pl` provides an entity link.
-- `club_id` is exported on standings rows. Fixture `home_club_id` and `away_club_id` are resolved from that league page's standings.
+- `club_id` is exported on standings rows. Fixture `home_club_id` and `away_club_id` are resolved from all standings sections on that league page.
 - `player_id` identifies the primary player represented by a lineup entry. Substitution names embedded in that entry do not currently have separate exported IDs.
-- Entity ID fields are `""` when the source page does not provide enough information; names are display labels, not identity keys.
+- Entity ID fields are `""` when the source page does not provide enough information. In particular, fixture club IDs can be empty for qualifying or knockout-only teams absent from every standings section; names are display labels, not identity keys.
 - `url` is the exact fetch identifier for follow-up commands.
 - The app uses a per-process cache only. Each new process fetches fresh data.
