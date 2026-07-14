@@ -178,10 +178,48 @@ func TestParseLeagueStandingsFromCorpus(t *testing.T) {
 	}
 
 	first := page.Standings[0]
-	if first.Position != 1 || first.Team != "Legia Warszawa" {
+	if first.Position != 1 || first.Team != "Legia Warszawa" || first.ClubID != "171" {
 		t.Fatalf("unexpected first standings row: %+v", first)
 	}
 	if first.Played != 30 || first.Won != 19 || first.Drawn != 7 || first.Lost != 4 || first.Points != 64 {
 		t.Fatalf("unexpected first standings stats: %+v", first)
+	}
+
+	for _, round := range page.Rounds {
+		for _, fixture := range round.Fixtures {
+			if fixture.HomeClubID == "" || fixture.AwayClubID == "" {
+				t.Fatalf("expected fixture club ids for %q vs %q: %+v", fixture.Home, fixture.Away, fixture)
+			}
+		}
+	}
+
+	wantFixtureClubIDs := map[string][2]string{
+		"1659715": {"132", "423"},
+		"1659716": {"330", "171"},
+	}
+	for _, round := range page.Rounds {
+		for _, fixture := range round.Fixtures {
+			want, ok := wantFixtureClubIDs[fixture.MatchID]
+			if !ok {
+				continue
+			}
+			if fixture.HomeClubID != want[0] || fixture.AwayClubID != want[1] {
+				t.Fatalf("unexpected club ids for match %s: got %q vs %q, want %q vs %q", fixture.MatchID, fixture.HomeClubID, fixture.AwayClubID, want[0], want[1])
+			}
+			delete(wantFixtureClubIDs, fixture.MatchID)
+		}
+	}
+	if len(wantFixtureClubIDs) != 0 {
+		t.Fatalf("expected fixture mappings were not found: %#v", wantFixtureClubIDs)
+	}
+}
+
+func TestAssignFixtureClubIDsLeavesUnmatchedTeamEmpty(t *testing.T) {
+	rounds := []Round{{Fixtures: []Fixture{{Home: "Known Team", Away: "Unmatched Team"}}}}
+	assignFixtureClubIDs(rounds, []StandingRow{{Team: "Known Team", ClubID: "10"}})
+
+	fixture := rounds[0].Fixtures[0]
+	if fixture.HomeClubID != "10" || fixture.AwayClubID != "" {
+		t.Fatalf("unexpected fixture club ids: %+v", fixture)
 	}
 }

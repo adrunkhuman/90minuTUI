@@ -163,3 +163,20 @@ func TestParseMatchFixtureKeepsChainedSubstitutions(t *testing.T) {
 		t.Fatalf("expected both chained substitution events, got %#v", page.Events)
 	}
 }
+
+func TestParseMatchFixtureExtractsPlayerAndRefereeIDs(t *testing.T) {
+	doc, _ := fixtureDoc(t, "fixtures/match_2022810.html")
+	page := parseMatchPage(doc, "http://www.90minut.pl/mecz.php?id_mecz=2022810")
+	if page == nil {
+		t.Fatalf("expected match page")
+	}
+	if page.Referee != "Łukasz Karski (Słupsk)" || page.RefereeID != "1125" {
+		t.Fatalf("unexpected referee identity: name=%q id=%q", page.Referee, page.RefereeID)
+	}
+	if len(page.HomeLineup) == 0 || page.HomeLineup[0].Name != "(30) Dominik Hładun" || page.HomeLineup[0].PlayerID != "22468" {
+		t.Fatalf("unexpected home lineup identity: %+v", page.HomeLineup)
+	}
+	if len(page.AwayLineup) == 0 || page.AwayLineup[0].Name != "(1) Ivan Brkić" || page.AwayLineup[0].PlayerID != "49041" {
+		t.Fatalf("unexpected away lineup identity: %+v", page.AwayLineup)
+	}
+}

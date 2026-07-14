@@ -17,6 +17,7 @@ type fakeService struct {
 	leagueURL  string
 	matchURL   string
 	leagueErrs map[string]error
+	emptyIDs   bool
 
 	archiveErr error
 	leagueErr  error
@@ -48,12 +49,16 @@ func (s *fakeService) LoadLeague(_ context.Context, leagueURL string) (*site.Lea
 	if s.leagueErr != nil {
 		return nil, s.leagueErr
 	}
+	homeClubID, awayClubID := "10", "20"
+	if s.emptyIDs {
+		homeClubID, awayClubID = "", ""
+	}
 	return &site.LeaguePage{
 		Title:     "Ekstraklasa",
 		URL:       site.BaseURL + "/liga/1/liga14072.html",
 		LeagueKey: "liga14072",
-		Standings: []site.StandingRow{{Position: 1, Team: "Team A", Played: 1, Won: 1, Points: 3}},
-		Rounds:    []site.Round{{Name: "1. kolejka", Fixtures: []site.Fixture{{Home: "Team A", Away: "Team B", Score: "1-0", WhenInfo: "18 lipca, 18:00", MatchURL: site.BaseURL + "/mecz.php?id_mecz=1930640", MatchID: "1930640"}}}},
+		Standings: []site.StandingRow{{Position: 1, Team: "Team A", ClubID: homeClubID, Played: 1, Won: 1, Points: 3}},
+		Rounds:    []site.Round{{Name: "1. kolejka", Fixtures: []site.Fixture{{Home: "Team A", HomeClubID: homeClubID, Away: "Team B", AwayClubID: awayClubID, Score: "1-0", WhenInfo: "18 lipca, 18:00", MatchURL: site.BaseURL + "/mecz.php?id_mecz=1930640", MatchID: "1930640"}}}},
 	}, nil
 }
 
@@ -62,14 +67,20 @@ func (s *fakeService) LoadMatch(_ context.Context, matchURL string) (*site.Match
 	if s.matchErr != nil {
 		return nil, s.matchErr
 	}
+	refereeID, playerID := "30", "40"
+	if s.emptyIDs {
+		refereeID, playerID = "", ""
+	}
 	return &site.MatchPage{
 		URL:        site.BaseURL + "/mecz.php?id_mecz=1930640",
 		MatchID:    "1930640",
 		HomeTeam:   "Team A",
 		AwayTeam:   "Team B",
+		Referee:    "Referee",
+		RefereeID:  refereeID,
 		Score:      "1-0",
 		Events:     []site.MatchEvent{{MinuteText: "35", Minute: 35, HasMinute: true, Kind: site.EventKindGoal, TeamSide: site.TeamSideHome, Text: "Player 35"}},
-		HomeLineup: []site.PlayerLine{{Name: "Player"}},
+		HomeLineup: []site.PlayerLine{{Name: "Player", PlayerID: playerID}},
 	}, nil
 }
 
@@ -135,6 +146,9 @@ func TestRunLeagueNormalizesLeagueKey(t *testing.T) {
 	if got.LeagueKey != "liga14072" || len(got.Standings) != 1 || len(got.Rounds) != 1 {
 		t.Fatalf("unexpected league output: %+v", got)
 	}
+	if got.Standings[0].ClubID != "10" || got.Rounds[0].Fixtures[0].HomeClubID != "10" || got.Rounds[0].Fixtures[0].AwayClubID != "20" {
+		t.Fatalf("expected club ids in league output: %+v", got)
+	}
 	if svc.leagueURL != site.BaseURL+"/liga/1/liga14072.html" {
 		t.Fatalf("unexpected league URL: %q", svc.leagueURL)
 	}
@@ -175,6 +189,9 @@ func TestRunMatchNormalizesMatchID(t *testing.T) {
 	if got.MatchID != "1930640" || got.Events[0].Kind != site.EventKindGoal || got.HomeLineup[0].Name != "Player" {
 		t.Fatalf("unexpected match output: %+v", got)
 	}
+	if got.RefereeID != "30" || got.Referee != "Referee" || got.HomeLineup[0].PlayerID != "40" {
+		t.Fatalf("expected referee and player ids in match output: %+v", got)
+	}
 	if svc.matchURL != site.BaseURL+"/mecz.php?id_mecz=1930640" {
 		t.Fatalf("unexpected match URL: %q", svc.matchURL)
 	}
@@ -213,6 +230,37 @@ func TestRunFixturesContractFields(t *testing.T) {
 			t.Fatalf("expected round key %q in %#v", key, round)
 		}
 	}
+	fixture := round["fixtures"].([]any)[0].(map[string]any)
+	for _, key := range []string{"home_club_id", "away_club_id"} {
+		if _, ok := fixture[key]; !ok {
+			t.Fatalf("expected fixture key %q in %#v", key, fixture)
+		}
+	}
+}
+
+func TestRunEntityIDFieldsUseEmptyStringsWhenUnavailable(t *testing.T) {
+	svc := &fakeService{emptyIDs: true}
+	leagueStdout, stderr, code := runTestCLI([]string{"league", "liga14072"}, svc)
+	if code != 0 || stderr != "" {
+		t.Fatalf("expected league success, code=%d stderr=%q", code, stderr)
+	}
+	var league map[string]any
+	decodeJSON(t, leagueStdout, &league)
+	standing := league["standings"].([]any)[0].(map[string]any)
+	assertEmptyStringField(t, standing, "club_id")
+	fixture := league["rounds"].([]any)[0].(map[string]any)["fixtures"].([]any)[0].(map[string]any)
+	assertEmptyStringField(t, fixture, "home_club_id")
+	assertEmptyStringField(t, fixture, "away_club_id")
+
+	matchStdout, stderr, code := runTestCLI([]string{"match", "1930640"}, svc)
+	if code != 0 || stderr != "" {
+		t.Fatalf("expected match success, code=%d stderr=%q", code, stderr)
+	}
+	var match map[string]any
+	decodeJSON(t, matchStdout, &match)
+	assertEmptyStringField(t, match, "referee_id")
+	player := match["home_lineup"].([]any)[0].(map[string]any)
+	assertEmptyStringField(t, player, "player_id")
 }
 
 func TestRunReportsErrorsOnStderr(t *testing.T) {
@@ -251,5 +299,13 @@ func decodeJSON(t *testing.T, value string, target any) {
 	t.Helper()
 	if err := json.Unmarshal([]byte(value), target); err != nil {
 		t.Fatalf("decode JSON %q: %v", value, err)
+	}
+}
+
+func assertEmptyStringField(t *testing.T, object map[string]any, key string) {
+	t.Helper()
+	value, ok := object[key]
+	if !ok || value != "" {
+		t.Fatalf("expected %q to be present as an empty string in %#v", key, object)
 	}
 }
