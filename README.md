@@ -1,12 +1,8 @@
 # 90minuTUI
 
-![90minuTUI screenshot](pic.png)
+Browse `90minut.pl` from your terminal. A read-only Go TUI for Polish football: seasons, competitions, fixtures, tables, and full match details, rendered from the site's public HTML.
 
-Small Go TUI for browsing `90minut.pl`.
-
-It is read-only. It fetches public HTML, decodes it, parses it into typed models,
-and renders a terminal view for seasons, competitions, fixtures, tables, and match
-details.
+![90minuTUI showing a league table and match detail view in the terminal.](pic.png)
 
 ## Run
 
@@ -14,50 +10,30 @@ details.
 go run ./cmd/90minutui
 ```
 
-## Controls
+## Keys
 
-- `j/k` move selection; in season selector, updates competitions for that season
-- `h/l` previous/next round; in selector, switch season/competition pane
-- `enter` open selected season, competition, league, or match
-- `esc` close match view, back out of submenus, or toggle the selector
-- `tab` open selector, or switch selector focus when already open
-- `pgup`/`pgdn`, `ctrl+u`/`ctrl+d` scroll match details
-- `r` fresh reload current page or match from the network
-- `q` quit
+| Key | Action |
+| --- | --- |
+| `j`/`k` | Move selection; in the season selector, updates competitions for that season |
+| `h`/`l` | Previous/next round; in the selector, switch season/competition pane |
+| `enter` | Open selected season, competition, league, or match |
+| `esc` | Close match view, back out of submenus, or toggle the selector |
+| `tab` | Open the selector, or switch its focus when already open |
+| `pgup`/`pgdn`, `ctrl+u`/`ctrl+d` | Scroll match details |
+| `r` | Fresh reload of the current page or match from the network |
+| `q` | Quit |
 
-## What Works
+## What you can browse
 
-- Season and competition selection from `archsezon.php`
-- League tables and round fixtures
-- Competition submenus for III liga, regional leagues/cups, women, and futsal
-- Linkless fixtures that have scores but no match page
-- Match score, timeline, metadata, lineups, substitutions, and cards
-- CLI/query API for scripts and non-interactive use: see [CLI Data Export](docs/cli.md)
+Season and competition selection, league tables and round fixtures, competition submenus for III liga, regional leagues and cups, women's and futsal football — including linkless fixtures that have scores but no match page. Match view shows score, timeline, metadata, lineups, substitutions, and cards.
 
-## Boundaries
+For scripts and non-interactive use, there is a JSON CLI/query API: see [CLI Data Export](docs/cli.md).
 
-- `cmd/90minutui`: program entrypoint
-- `internal/site`: fetch, charset decode, parse, classify, normalize
-- `internal/ui`: Bubble Tea state and presentation from `site` models
+## How it works
 
-Pipeline: `fetch/decode -> parse/classify -> render/present`.
+`internal/site` fetches public HTML, decodes it (the site may use `iso-8859-2`), parses it into typed models, and classifies pages. `internal/ui` is Bubble Tea state and presentation built on those models — UI code derives display state but never parses raw HTML. Parser tests use saved HTML fixtures under `internal/site/testdata`; refresh them with `go run ./cmd/fetchfixtures` when upstream HTML changes.
 
-Keep source-shape logic in `internal/site`. UI code may derive display state from
-typed models, but should not parse raw HTML.
-
-## Parser Notes
-
-- 90minut may use `iso-8859-2`; decode before parsing.
-- Prefer semantic selectors and stable URLs/IDs over table offsets.
-- Parser tests use saved HTML fixtures under `internal/site/testdata`.
-- Add or refresh fixtures when upstream HTML changes.
-
-```bash
-go run ./cmd/fetchfixtures
-go test ./...
-```
-
-## Checks
+## Development
 
 ```bash
 go test ./...
